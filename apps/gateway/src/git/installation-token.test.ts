@@ -22,7 +22,9 @@ function fakeGitHost(options: { readonly lifetimeMs?: number; readonly status?: 
   let now = Date.UTC(2026, 7, 9, 12, 0, 0);
 
   const fetchImpl = ((url: string | URL | Request, init?: RequestInit) => {
-    const authorization = String((init?.headers as Record<string, string> | undefined)?.['authorization']);
+    const authorization = String(
+      (init?.headers as Record<string, string> | undefined)?.['authorization'],
+    );
     calls.push({ url: requestUrl(url), appJwt: authorization.replace(/^Bearer /, '') });
 
     if (options.status !== undefined) {

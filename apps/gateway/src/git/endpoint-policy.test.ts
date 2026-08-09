@@ -70,13 +70,48 @@ describe('checkEndpoint', () => {
     }
 
     const cases: readonly RefusalCase[] = [
-      { what: 'a method the rule does not name', method: 'DELETE', path: `${REPO}/git/blobs`, reason: 'not-allowlisted' },
-      { what: 'deleting a tag rather than a branch', method: 'DELETE', path: `${REPO}/git/refs/tags/v1`, reason: 'not-allowlisted' },
-      { what: 'a pull request number that is not one', method: 'GET', path: `${REPO}/pulls/../secrets`, reason: 'not-allowlisted' },
-      { what: 'another repository', method: 'POST', path: '/repos/acme/payroll/git/blobs', reason: 'other-repository' },
-      { what: 'another owner', method: 'POST', path: '/repos/evil/handbook/git/blobs', reason: 'other-repository' },
-      { what: 'a path outside any repository', method: 'GET', path: '/user', reason: 'not-a-repository-path' },
-      { what: 'the organisation API', method: 'GET', path: '/orgs/acme/members', reason: 'not-a-repository-path' },
+      {
+        what: 'a method the rule does not name',
+        method: 'DELETE',
+        path: `${REPO}/git/blobs`,
+        reason: 'not-allowlisted',
+      },
+      {
+        what: 'deleting a tag rather than a branch',
+        method: 'DELETE',
+        path: `${REPO}/git/refs/tags/v1`,
+        reason: 'not-allowlisted',
+      },
+      {
+        what: 'a pull request number that is not one',
+        method: 'GET',
+        path: `${REPO}/pulls/../secrets`,
+        reason: 'not-allowlisted',
+      },
+      {
+        what: 'another repository',
+        method: 'POST',
+        path: '/repos/acme/payroll/git/blobs',
+        reason: 'other-repository',
+      },
+      {
+        what: 'another owner',
+        method: 'POST',
+        path: '/repos/evil/handbook/git/blobs',
+        reason: 'other-repository',
+      },
+      {
+        what: 'a path outside any repository',
+        method: 'GET',
+        path: '/user',
+        reason: 'not-a-repository-path',
+      },
+      {
+        what: 'the organisation API',
+        method: 'GET',
+        path: '/orgs/acme/members',
+        reason: 'not-a-repository-path',
+      },
       { what: 'an empty path', method: 'GET', path: '', reason: 'not-a-repository-path' },
     ];
 
@@ -105,7 +140,9 @@ describe('checkEndpoint', () => {
       const result = checkEndpoint('PUT', `${REPO}/pulls/42/merge`, OPTIONS);
 
       expect(result.ok).toBe(false);
-      expect(result).toMatchObject({ message: expect.stringContaining('POLICY_ALLOW_MERGE_FROM_CMS') as unknown });
+      expect(result).toMatchObject({
+        message: expect.stringContaining('POLICY_ALLOW_MERGE_FROM_CMS') as unknown,
+      });
     });
 
     it('is allowed once the policy flag is set', () => {

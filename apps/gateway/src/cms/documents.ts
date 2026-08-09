@@ -122,11 +122,12 @@ export class DocumentReader {
   }
 
   async #readBlob(sha: string): Promise<string> {
-    const blob = await this.#client.request<BlobResponse>('GET', this.#client.path(`/git/blobs/${sha}`));
+    const blob = await this.#client.request<BlobResponse>(
+      'GET',
+      this.#client.path(`/git/blobs/${sha}`),
+    );
     const { content = '', encoding } = blob.body;
 
-    return encoding === 'base64'
-      ? Buffer.from(content, 'base64').toString('utf8')
-      : content;
+    return encoding === 'base64' ? Buffer.from(content, 'base64').toString('utf8') : content;
   }
 }

@@ -62,5 +62,21 @@ export function readGithubConfig(): GithubConfig | undefined {
     githubOidcProviderArn: config.get('githubOidcProviderArn'),
     cmsGitHubAppId: config.get('cmsGitHubAppId'),
     cmsGitHubAppInstallationId: config.get('cmsGitHubAppInstallationId'),
+    cmsAuthMode: config.get('cmsAuthMode'),
+    cmsAuthIssuerUrl: config.get('cmsAuthIssuerUrl'),
+    cmsAuthAudience: config.get('cmsAuthAudience'),
+    cmsAuthEmailClaim: config.get('cmsAuthEmailClaim'),
+    cmsAuthNameClaim: config.get('cmsAuthNameClaim'),
+    cmsBranchPrefix: config.get('cmsBranchPrefix'),
+    cmsPathPrefixes: config.getObject<string[]>('cmsPathPrefixes'),
+    cmsAllowMerge: config.getBoolean('cmsAllowMerge'),
+    cmsOidcIssuer: config.get('cmsOidcIssuer'),
+    cmsOidcAuthorizationEndpoint: config.get('cmsOidcAuthorizationEndpoint'),
+    cmsOidcTokenEndpoint: config.get('cmsOidcTokenEndpoint'),
+    cmsOidcUserInfoEndpoint: config.get('cmsOidcUserInfoEndpoint'),
+    cmsOidcClientId: config.get('cmsOidcClientId'),
+    // Read from the AWS half so `cmsAuthMode: alb` can be refused without a certificate. Both
+    // readers see the same `pulumi.Config`, so they cannot disagree about its value.
+    certificateArn: config.get('certificateArn'),
   });
 }

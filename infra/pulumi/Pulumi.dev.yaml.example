@@ -104,3 +104,43 @@ config:
   # PEM out of band with `aws secretsmanager put-secret-value`.
   # lugem-kb:cmsGitHubAppId: "123456"
   # lugem-kb:cmsGitHubAppInstallationId: "78901234"
+
+  # ---------------------------------------------------------------------------
+  # The authoring gateway — see docs/authoring-gateway.md
+  # ---------------------------------------------------------------------------
+  # Everything below applies only once the two app ids above are set. With them set, cmsAuthMode is
+  # required: the gateway will not guess how to identify an author.
+
+  # How identity reaches the gateway (requirements.md R1, ADR 0013).
+  #   bearer — the editor holds an OIDC access token; the gateway verifies it against the issuer.
+  #   alb    — the load balancer runs authenticate-oidc and signs a JWT the gateway verifies.
+  # lugem-kb:cmsAuthMode: bearer
+
+  # Required for cmsAuthMode: bearer. The issuer's discovery document names the key set, so no key
+  # is configured by hand.
+  # lugem-kb:cmsAuthIssuerUrl: https://login.microsoftonline.com/<tenant>/v2.0
+  # lugem-kb:cmsAuthAudience: api://lugem-cms
+
+  # Which claims carry the author's email and display name. Defaults to `email` and `name`.
+  # Several providers omit email under that name — confirm against a real token (requirements Q4).
+  # lugem-kb:cmsAuthEmailClaim: upn
+  # lugem-kb:cmsAuthNameClaim: given_name
+
+  # Required for cmsAuthMode: alb, along with certificateArn — ALB authentication is an HTTPS
+  # listener action, so the preview fails without a certificate. Set the client secret with
+  # `pulumi config set --secret cmsOidcClientSecret ...`; it is never written to this file.
+  # lugem-kb:cmsOidcIssuer: https://login.microsoftonline.com/<tenant>/v2.0
+  # lugem-kb:cmsOidcAuthorizationEndpoint: https://login.microsoftonline.com/<tenant>/oauth2/v2.0/authorize
+  # lugem-kb:cmsOidcTokenEndpoint: https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token
+  # lugem-kb:cmsOidcUserInfoEndpoint: https://graph.microsoft.com/oidc/userinfo
+  # lugem-kb:cmsOidcClientId: 00000000-0000-0000-0000-000000000000
+
+  # What the CMS may touch (requirements.md R3, R4). The defaults match this repository.
+  # An empty entry in cmsPathPrefixes would match every path, so a blank one fails the preview.
+  # lugem-kb:cmsBranchPrefix: cms/
+  # lugem-kb:cmsPathPrefixes:
+  #   - docs/
+
+  # requirements.md R7: by default the gateway refuses merges from the CMS, so approval happens in
+  # the git host where branch protection can require an owner. R16 is the reason this flag exists.
+  # lugem-kb:cmsAllowMerge: "false"

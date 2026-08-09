@@ -122,15 +122,18 @@ async function checkAuthentication(gateway: Gateway): Promise<CheckResult[]> {
   const identity = await gateway.call('GET', '/v1/cms/identity');
 
   return [
-    check('R1', 'an unauthenticated request is refused', expectStatus(anonymous.status, UNAUTHORIZED)),
+    check(
+      'R1',
+      'an unauthenticated request is refused',
+      expectStatus(anonymous.status, UNAUTHORIZED),
+    ),
     check('R1', 'a request with no bearer token never reaches an upstream', {
       passed: garbage.status === UNAUTHORIZED,
       detail: JSON.stringify(garbage.body),
     }),
     check('R1', 'an authenticated caller is named from their token', {
       passed:
-        identity.status === OK &&
-        typeof (identity.body as { email?: unknown }).email === 'string',
+        identity.status === OK && typeof (identity.body as { email?: unknown }).email === 'string',
       detail: JSON.stringify(identity.body),
     }),
   ];
@@ -163,7 +166,11 @@ async function checkWriteConfinement(gateway: Gateway, branch: string): Promise<
     },
   });
   results.push(
-    check('R3', 'refuses a change set where one entry is bad', expectStatus(mixed.status, FORBIDDEN)),
+    check(
+      'R3',
+      'refuses a change set where one entry is bad',
+      expectStatus(mixed.status, FORBIDDEN),
+    ),
   );
 
   return results;
@@ -181,7 +188,11 @@ async function checkBranchConfinement(gateway: Gateway): Promise<CheckResult[]> 
 
   return [
     check('R4', 'refuses writing the default branch', expectStatus(onDefault.status, FORBIDDEN)),
-    check('R4', 'refuses deleting the default branch', expectStatus(deleteDefault.status, FORBIDDEN)),
+    check(
+      'R4',
+      'refuses deleting the default branch',
+      expectStatus(deleteDefault.status, FORBIDDEN),
+    ),
     check('R4', 'refuses a branch outside the prefix', expectStatus(outside.status, FORBIDDEN)),
   ];
 }
@@ -201,8 +212,7 @@ async function checkEndpointAllowlist(gateway: Gateway): Promise<CheckResult[]> 
     // catch-all, or a typo reads as a rendering bug and R5's "refused and logged" is not true.
     check('R5', 'an unmatched CMS path answers JSON, not the site', {
       passed:
-        unknown.status === NOT_FOUND &&
-        (unknown.body as { error?: unknown }).error === 'not_found',
+        unknown.status === NOT_FOUND && (unknown.body as { error?: unknown }).error === 'not_found',
       detail: `${String(unknown.status)} ${JSON.stringify(unknown.body)}`,
     }),
     check('R5', 'an unmatched API path answers JSON, not the site', {
@@ -218,7 +228,9 @@ async function checkEndpointAllowlist(gateway: Gateway): Promise<CheckResult[]> 
 async function checkAttribution(gateway: Gateway, branch: string): Promise<CheckResult[]> {
   const saved = await gateway.call('PUT', `/v1/cms/drafts/${branch}`, {
     body: {
-      files: [{ path: 'docs/verify.md', content: `# Verification\n\nWritten by the phase 2 check.\n` }],
+      files: [
+        { path: 'docs/verify.md', content: `# Verification\n\nWritten by the phase 2 check.\n` },
+      ],
       message: 'docs: verify the authoring gateway',
     },
   });
@@ -243,7 +255,10 @@ async function checkAttribution(gateway: Gateway, branch: string): Promise<Check
   );
 
   if (typeof submission.number === 'number') {
-    const merge = await gateway.call('POST', `/v1/cms/submissions/${String(submission.number)}/merge`);
+    const merge = await gateway.call(
+      'POST',
+      `/v1/cms/submissions/${String(submission.number)}/merge`,
+    );
     results.push(
       check('R7', 'refuses to merge from the CMS', expectStatus(merge.status, FORBIDDEN)),
     );

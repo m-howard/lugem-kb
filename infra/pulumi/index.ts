@@ -88,7 +88,38 @@ if (githubConfig !== undefined) {
 }
 
 const image = new GatewayImage(NAME, onAws);
-const ingress = new GatewayIngress(NAME, { config, network }, onAws);
+
+// The client secret is read here rather than in `github-config.ts` so it stays a Pulumi secret,
+// encrypted in state. `requireSecret` fails the preview naming the key when it is absent, which is
+// the same fail-closed behaviour the rest of the CMS configuration has.
+const cmsOidc = githubConfig?.cmsGateway?.oidcListener;
+const cmsAuth =
+  cmsOidc === undefined
+    ? undefined
+    : { oidc: cmsOidc, clientSecret: new pulumi.Config().requireSecret('cmsOidcClientSecret') };
+
+const ingress = new GatewayIngress(
+  NAME,
+  { config, network, ...(cmsAuth === undefined ? {} : { cmsAuth }) },
+  onAws,
+);
+
+// The editorial routes are mounted only when all three are present: the App ids, the gateway
+// settings, and the secret the private key lives in. Passing a partial set would produce a task
+// that boots and refuses the first author — see `resolveCmsConfig` in apps/gateway/src/config.ts.
+const cms =
+  githubConfig?.cmsApp === undefined ||
+  githubConfig.cmsGateway === undefined ||
+  corpusRepository === undefined ||
+  cmsCredential === undefined
+    ? undefined
+    : {
+        app: githubConfig.cmsApp,
+        gateway: githubConfig.cmsGateway,
+        repository: corpusRepository.fullName,
+        defaultBranch: githubConfig.defaultBranch,
+        loadBalancerArn: ingress.loadBalancerArn,
+      };
 
 const service = new GatewayService(
   NAME,
@@ -104,7 +135,7 @@ const service = new GatewayService(
     knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
     accountId,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
-    ...(githubConfig?.cmsApp === undefined ? {} : { cmsAppId: githubConfig.cmsApp.appId }),
+    ...(cms === undefined ? {} : { cms }),
   },
   onAws,
 );

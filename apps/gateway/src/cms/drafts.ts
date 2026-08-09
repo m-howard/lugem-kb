@@ -78,10 +78,9 @@ export class DraftService {
   async save(request: SaveDraftRequest, identity: Identity): Promise<SavedDraft> {
     const deletions = request.deletions ?? [];
     const branch = this.#resolveBranch(request.branch, 'update');
-    const paths = resolveWritePaths(
-      [...request.files.map((file) => file.path), ...deletions],
-      { prefixes: this.#settings.pathPrefixes },
-    );
+    const paths = resolveWritePaths([...request.files.map((file) => file.path), ...deletions], {
+      prefixes: this.#settings.pathPrefixes,
+    });
     if (!paths.ok) {
       throw new CmsPolicyError(paths.reason, paths.message);
     }
@@ -105,7 +104,10 @@ export class DraftService {
    */
   async discard(branch: string): Promise<void> {
     const resolved = this.#resolveBranch(branch, 'delete');
-    await this.#client.request('DELETE', this.#client.path(`/git/refs/heads/${encodeURI(resolved)}`));
+    await this.#client.request(
+      'DELETE',
+      this.#client.path(`/git/refs/heads/${encodeURI(resolved)}`),
+    );
   }
 
   #resolveBranch(branch: string, operation: BranchOperation): string {
@@ -183,11 +185,10 @@ export class DraftService {
       return;
     }
 
-    await this.#client.request(
-      'PATCH',
-      this.#client.path(`/git/refs/heads/${encodeURI(branch)}`),
-      { sha, force: false },
-    );
+    await this.#client.request('PATCH', this.#client.path(`/git/refs/heads/${encodeURI(branch)}`), {
+      sha,
+      force: false,
+    });
   }
 }
 

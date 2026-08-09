@@ -56,10 +56,14 @@ export function fakeGitHub(
     const url = new URL(requestUrl(input));
     const method = (init?.method ?? 'GET').toUpperCase();
     const headers = (init?.headers ?? {}) as Record<string, string>;
-    const body: unknown =
-      typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
 
-    calls.push({ method, path: `${url.pathname}${url.search}`, authorization: headers['authorization'], body });
+    calls.push({
+      method,
+      path: `${url.pathname}${url.search}`,
+      authorization: headers['authorization'],
+      body,
+    });
 
     if (url.pathname.startsWith('/app/installations/')) {
       if (options.mintStatus !== undefined) {

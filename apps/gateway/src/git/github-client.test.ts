@@ -81,13 +81,15 @@ describe('GitHubClient', () => {
   it('carries the refusal reason, so the route can log and answer with it', async () => {
     const client = await clientOver(fakeGitHub());
 
-    await expect(
-      client.request('POST', '/repos/acme/payroll/git/blobs'),
-    ).rejects.toMatchObject({ reason: 'other-repository' });
+    await expect(client.request('POST', '/repos/acme/payroll/git/blobs')).rejects.toMatchObject({
+      reason: 'other-repository',
+    });
   });
 
   it('sends a JSON body for the calls that take one', async () => {
-    const host = fakeGitHub([{ method: 'POST', path: `${REPO_PATH}/git/blobs`, respond: { sha: 'new' } }]);
+    const host = fakeGitHub([
+      { method: 'POST', path: `${REPO_PATH}/git/blobs`, respond: { sha: 'new' } },
+    ]);
     const client = await clientOver(host);
 
     await client.request('POST', `${REPO_PATH}/git/blobs`, { content: 'hi', encoding: 'utf-8' });
@@ -98,7 +100,12 @@ describe('GitHubClient', () => {
   describe('when the git host refuses', () => {
     it('throws with the upstream status and message', async () => {
       const host = fakeGitHub([
-        { method: 'POST', path: `${REPO_PATH}/git/refs`, status: 422, respond: { message: 'Reference already exists' } },
+        {
+          method: 'POST',
+          path: `${REPO_PATH}/git/refs`,
+          status: 422,
+          respond: { message: 'Reference already exists' },
+        },
       ]);
       const client = await clientOver(host);
 
@@ -139,7 +146,12 @@ describe('GitHubClient', () => {
 
     it('surfaces a persistent 401 rather than retrying forever', async () => {
       const host = fakeGitHub([
-        { method: 'GET', path: `${REPO_PATH}/git/blobs/abc123`, status: UNAUTHORIZED, respond: { message: 'Bad credentials' } },
+        {
+          method: 'GET',
+          path: `${REPO_PATH}/git/blobs/abc123`,
+          status: UNAUTHORIZED,
+          respond: { message: 'Bad credentials' },
+        },
       ]);
       const client = await clientOver(host);
 
@@ -163,22 +175,34 @@ describe('GitHubClient', () => {
     // A draft branch that does not exist yet is the normal first step of creating one.
     it('returns undefined for a 404', async () => {
       const host = fakeGitHub([
-        { method: 'GET', path: `${REPO_PATH}/git/ref/heads/cms/new`, status: NOT_FOUND, respond: { message: 'Not Found' } },
+        {
+          method: 'GET',
+          path: `${REPO_PATH}/git/ref/heads/cms/new`,
+          status: NOT_FOUND,
+          respond: { message: 'Not Found' },
+        },
       ]);
       const client = await clientOver(host);
 
-      await expect(client.getOrUndefined(`${REPO_PATH}/git/ref/heads/cms/new`)).resolves.toBeUndefined();
+      await expect(
+        client.getOrUndefined(`${REPO_PATH}/git/ref/heads/cms/new`),
+      ).resolves.toBeUndefined();
     });
 
     it('still throws for a refusal that is not absence', async () => {
       const host = fakeGitHub([
-        { method: 'GET', path: `${REPO_PATH}/git/ref/heads/cms/new`, status: 403, respond: { message: 'Forbidden' } },
+        {
+          method: 'GET',
+          path: `${REPO_PATH}/git/ref/heads/cms/new`,
+          status: 403,
+          respond: { message: 'Forbidden' },
+        },
       ]);
       const client = await clientOver(host);
 
-      await expect(client.getOrUndefined(`${REPO_PATH}/git/ref/heads/cms/new`)).rejects.toBeInstanceOf(
-        GitHubError,
-      );
+      await expect(
+        client.getOrUndefined(`${REPO_PATH}/git/ref/heads/cms/new`),
+      ).rejects.toBeInstanceOf(GitHubError);
     });
   });
 });

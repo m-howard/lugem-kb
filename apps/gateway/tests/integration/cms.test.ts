@@ -10,12 +10,21 @@ const BASE_TREE = 'tree-main';
 /** The reads every write path starts with: where `main` points, and what tree that commit has. */
 const BASE_BRANCH_ROUTES: readonly FakeGitHubRoute[] = [
   { method: 'GET', path: `${REPO}/git/ref/heads/main`, respond: { object: { sha: BASE_COMMIT } } },
-  { method: 'GET', path: `${REPO}/git/commits/${BASE_COMMIT}`, respond: { tree: { sha: BASE_TREE } } },
+  {
+    method: 'GET',
+    path: `${REPO}/git/commits/${BASE_COMMIT}`,
+    respond: { tree: { sha: BASE_TREE } },
+  },
 ];
 
 const WRITE_ROUTES: readonly FakeGitHubRoute[] = [
   ...BASE_BRANCH_ROUTES,
-  { method: 'GET', path: /\/git\/ref\/heads\/cms\//, status: 404, respond: { message: 'Not Found' } },
+  {
+    method: 'GET',
+    path: /\/git\/ref\/heads\/cms\//,
+    status: 404,
+    respond: { message: 'Not Found' },
+  },
   { method: 'POST', path: `${REPO}/git/blobs`, respond: { sha: 'blob-1' } },
   { method: 'POST', path: `${REPO}/git/trees`, respond: { sha: 'tree-2' } },
   { method: 'POST', path: `${REPO}/git/commits`, respond: { sha: 'commit-2' } },
@@ -45,7 +54,10 @@ describe('the editorial API', () => {
       const response = await cms.app.request('/v1/cms/config');
 
       expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: 'unauthorized', reason: 'missing-credential' });
+      expect(await response.json()).toEqual({
+        error: 'unauthorized',
+        reason: 'missing-credential',
+      });
       expect(cms.host.calls).toEqual([]);
     });
 
@@ -122,19 +134,22 @@ describe('the editorial API', () => {
       ['a null byte', 'docs/index\0.md', 'null-byte'],
     ];
 
-    it.each(cases)('refuses %s with 403 and makes no upstream call', async (_case, path, reason) => {
-      const cms = await buildCmsTestApp();
+    it.each(cases)(
+      'refuses %s with 403 and makes no upstream call',
+      async (_case, path, reason) => {
+        const cms = await buildCmsTestApp();
 
-      const response = await cms.app.request('/v1/cms/drafts/cms/pricing', {
-        method: 'PUT',
-        headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
-        body: JSON.stringify({ files: [{ path, content: 'x' }] }),
-      });
+        const response = await cms.app.request('/v1/cms/drafts/cms/pricing', {
+          method: 'PUT',
+          headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
+          body: JSON.stringify({ files: [{ path, content: 'x' }] }),
+        });
 
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ error: 'forbidden', reason });
-      expect(cms.host.calls).toEqual([]);
-    });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ error: 'forbidden', reason });
+        expect(cms.host.calls).toEqual([]);
+      },
+    );
 
     // R3: "Multi-file tree writes are refused if any entry violates policy."
     it('refuses the whole change set when one entry is bad', async () => {
@@ -212,7 +227,11 @@ describe('the editorial API', () => {
       await cms.app.request('/v1/cms/submissions', {
         method: 'POST',
         headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
-        body: JSON.stringify({ branch: 'cms/pricing', title: 'Update pricing', base: 'production' }),
+        body: JSON.stringify({
+          branch: 'cms/pricing',
+          title: 'Update pricing',
+          base: 'production',
+        }),
       });
 
       expect(cms.host.calls.at(-1)?.body).toMatchObject({ base: 'main', head: 'cms/pricing' });
@@ -297,8 +316,16 @@ describe('the editorial API', () => {
     it('moves an existing draft branch rather than recreating it', async () => {
       const cms = await buildCmsTestApp({
         routes: [
-          { method: 'GET', path: `${REPO}/git/ref/heads/cms/pricing`, respond: { object: { sha: 'commit-draft' } } },
-          { method: 'GET', path: `${REPO}/git/commits/commit-draft`, respond: { tree: { sha: 'tree-draft' } } },
+          {
+            method: 'GET',
+            path: `${REPO}/git/ref/heads/cms/pricing`,
+            respond: { object: { sha: 'commit-draft' } },
+          },
+          {
+            method: 'GET',
+            path: `${REPO}/git/commits/commit-draft`,
+            respond: { tree: { sha: 'tree-draft' } },
+          },
           { method: 'POST', path: `${REPO}/git/blobs`, respond: { sha: 'blob-1' } },
           { method: 'POST', path: `${REPO}/git/trees`, respond: { sha: 'tree-2' } },
           { method: 'POST', path: `${REPO}/git/commits`, respond: { sha: 'commit-2' } },
@@ -323,7 +350,14 @@ describe('the editorial API', () => {
 
     it('discards a draft by deleting its branch', async () => {
       const cms = await buildCmsTestApp({
-        routes: [{ method: 'DELETE', path: `${REPO}/git/refs/heads/cms/pricing`, status: 204, respond: {} }],
+        routes: [
+          {
+            method: 'DELETE',
+            path: `${REPO}/git/refs/heads/cms/pricing`,
+            status: 204,
+            respond: {},
+          },
+        ],
       });
 
       const response = await cms.app.request('/v1/cms/drafts/cms/pricing', {
@@ -341,7 +375,9 @@ describe('the editorial API', () => {
           {
             method: 'GET',
             path: `${REPO}/pulls`,
-            respond: [{ number: 7, state: 'open', title: 'Update pricing', head: { ref: 'cms/pricing' } }],
+            respond: [
+              { number: 7, state: 'open', title: 'Update pricing', head: { ref: 'cms/pricing' } },
+            ],
           },
         ],
       });
@@ -361,7 +397,13 @@ describe('the editorial API', () => {
           {
             method: 'GET',
             path: `${REPO}/pulls/7`,
-            respond: { number: 7, state: 'open', title: 'Update pricing', head: { ref: 'cms/pricing' }, html_url: 'https://github.test/pulls/7' },
+            respond: {
+              number: 7,
+              state: 'open',
+              title: 'Update pricing',
+              head: { ref: 'cms/pricing' },
+              html_url: 'https://github.test/pulls/7',
+            },
           },
         ],
       });
@@ -493,7 +535,12 @@ describe('the editorial API', () => {
           { method: 'POST', path: `${REPO}/git/blobs`, respond: { sha: 'blob-1' } },
           { method: 'POST', path: `${REPO}/git/trees`, respond: { sha: 'tree-2' } },
           { method: 'POST', path: `${REPO}/git/commits`, respond: { sha: 'commit-2' } },
-          { method: 'POST', path: `${REPO}/git/refs`, status: 422, respond: { message: 'Reference already exists' } },
+          {
+            method: 'POST',
+            path: `${REPO}/git/refs`,
+            status: 422,
+            respond: { message: 'Reference already exists' },
+          },
         ],
       });
 
@@ -510,7 +557,12 @@ describe('the editorial API', () => {
     it('turns an upstream server error into a bad gateway, which the CMS may retry', async () => {
       const cms = await buildCmsTestApp({
         routes: [
-          { method: 'GET', path: `${REPO}/git/ref/heads/main`, status: 500, respond: { message: 'boom' } },
+          {
+            method: 'GET',
+            path: `${REPO}/git/ref/heads/main`,
+            status: 500,
+            respond: { message: 'boom' },
+          },
         ],
       });
 

@@ -1,11 +1,6 @@
 import { type CryptoKey, decodeProtectedHeader, importSPKI, jwtVerify } from 'jose';
 
-import {
-  type ClaimNames,
-  identityFromClaims,
-  type IdentityResult,
-  refuseIdentity,
-} from './claims';
+import { type ClaimNames, identityFromClaims, type IdentityResult, refuseIdentity } from './claims';
 import { type HeaderLookup, type IdentityVerifier } from './verifier';
 
 /** The header an ALB running `authenticate-oidc` adds. Signed, so it is a credential — see `logging.ts`. */
@@ -105,7 +100,10 @@ export function createAlbVerifier(options: AlbVerifierOptions): IdentityVerifier
 
       const header = readTokenHeader(token);
       if (header === undefined) {
-        return refuseIdentity('malformed-credential', `The ${OIDC_DATA_HEADER} header is not a JWT.`);
+        return refuseIdentity(
+          'malformed-credential',
+          `The ${OIDC_DATA_HEADER} header is not a JWT.`,
+        );
       }
       if (header.signer !== options.loadBalancerArn) {
         return refuseIdentity(

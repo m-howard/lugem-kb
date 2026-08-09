@@ -83,17 +83,13 @@ export class SubmissionService {
       throw new CmsPolicyError('empty-title', 'A submission needs a title for its reviewer.');
     }
 
-    const response = await this.#client.request<PullResponse>(
-      'POST',
-      this.#client.path('/pulls'),
-      {
-        title,
-        head: branch,
-        base: this.#settings.defaultBranch,
-        body: buildSubmissionBody({ branch, summary: request.summary }, identity),
-        maintainer_can_modify: true,
-      },
-    );
+    const response = await this.#client.request<PullResponse>('POST', this.#client.path('/pulls'), {
+      title,
+      head: branch,
+      base: this.#settings.defaultBranch,
+      body: buildSubmissionBody({ branch, summary: request.summary }, identity),
+      maintainer_can_modify: true,
+    });
 
     return toSubmission(response.body);
   }
@@ -106,7 +102,10 @@ export class SubmissionService {
    */
   async list(branch?: string): Promise<readonly Submission[]> {
     const owner = this.#settings.repository.split('/')[0] ?? '';
-    const head = branch === undefined ? '' : `&head=${encodeURIComponent(`${owner}:${this.#resolveDraftBranch(branch)}`)}`;
+    const head =
+      branch === undefined
+        ? ''
+        : `&head=${encodeURIComponent(`${owner}:${this.#resolveDraftBranch(branch)}`)}`;
 
     const response = await this.#client.request<readonly PullResponse[]>(
       'GET',

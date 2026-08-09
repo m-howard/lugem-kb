@@ -26,9 +26,17 @@ describe('resolveWritePath', () => {
   describe('refuses', () => {
     const cases: readonly [string, string, PathPolicyViolation][] = [
       ['a workflow file', '.github/workflows/ci.yml', 'extension'],
-      ['a markdown file in the workflows directory', '.github/workflows/evil.md', 'outside-prefixes'],
+      [
+        'a markdown file in the workflows directory',
+        '.github/workflows/evil.md',
+        'outside-prefixes',
+      ],
       ['the repository root', 'README.md', 'outside-prefixes'],
-      ['a sibling directory that starts the same way', 'docs-internal/secret.md', 'outside-prefixes'],
+      [
+        'a sibling directory that starts the same way',
+        'docs-internal/secret.md',
+        'outside-prefixes',
+      ],
       ['traversal out of the docs tree', 'docs/../.github/workflows/ci.md', 'traversal'],
       ['a leading traversal', '../secrets.md', 'traversal'],
       ['an absolute path', '/etc/passwd.md', 'absolute-path'],

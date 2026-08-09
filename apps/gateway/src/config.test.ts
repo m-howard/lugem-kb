@@ -161,7 +161,11 @@ describe('loadConfig', () => {
     });
 
     it('trims a trailing slash from the API base URL, so paths do not double up', () => {
-      const config = loadConfig({ ...VALID_ENV, ...CMS_ENV, GITHUB_API_BASE_URL: 'https://ghe.acme.com/api/v3/' });
+      const config = loadConfig({
+        ...VALID_ENV,
+        ...CMS_ENV,
+        GITHUB_API_BASE_URL: 'https://ghe.acme.com/api/v3/',
+      });
 
       expect(config.cms?.apiBaseUrl).toBe('https://ghe.acme.com/api/v3');
     });
@@ -250,7 +254,8 @@ describe('loadConfig', () => {
 
         expect(config.cms?.auth).toMatchObject({
           mode: 'alb',
-          loadBalancerArn: 'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/l/1',
+          loadBalancerArn:
+            'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/l/1',
         });
       });
 

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  type BranchOperation,
-  type BranchPolicyViolation,
-  resolveBranch,
-} from './branch-policy';
+import { type BranchOperation, type BranchPolicyViolation, resolveBranch } from './branch-policy';
 
 const OPTIONS = { prefix: 'cms/', defaultBranch: 'main' } as const;
 const WRITES: readonly BranchOperation[] = ['create', 'update', 'delete'];

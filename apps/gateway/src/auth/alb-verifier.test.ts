@@ -53,9 +53,9 @@ describe('createAlbVerifier', () => {
     it('a header that is not a JWT', async () => {
       const alb = await fakeAlbSigner();
 
-      expect(await verifierFor(alb).verify(headers({ 'x-amzn-oidc-data': 'garbage' }))).toMatchObject(
-        { ok: false, reason: 'malformed-credential' },
-      );
+      expect(
+        await verifierFor(alb).verify(headers({ 'x-amzn-oidc-data': 'garbage' })),
+      ).toMatchObject({ ok: false, reason: 'malformed-credential' });
     });
 
     // The header alone is not a credential: anything that can reach the task can set it. A token
@@ -87,9 +87,9 @@ describe('createAlbVerifier', () => {
       const token = await alb.sign(SUBJECT);
       const tampered = `${token.slice(0, -4)}AAAA`;
 
-      expect(await verifierFor(alb).verify(headers({ 'x-amzn-oidc-data': tampered }))).toMatchObject(
-        { ok: false, reason: 'invalid-signature' },
-      );
+      expect(
+        await verifierFor(alb).verify(headers({ 'x-amzn-oidc-data': tampered })),
+      ).toMatchObject({ ok: false, reason: 'invalid-signature' });
     });
 
     it('a token whose key id the endpoint does not serve', async () => {
@@ -132,7 +132,9 @@ describe('createAlbVerifier', () => {
     });
 
     await verifier.verify(
-      headers({ 'x-amzn-oidc-data': craftToken({ alg: 'ES256', kid: '../../etc', signer: 'other' }) }),
+      headers({
+        'x-amzn-oidc-data': craftToken({ alg: 'ES256', kid: '../../etc', signer: 'other' }),
+      }),
     );
 
     expect(requested).toEqual([]);

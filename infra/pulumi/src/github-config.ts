@@ -12,6 +12,29 @@ const DEFAULT_BRANCH = 'main';
 
 const CMS_APP_KEYS = ['cmsGitHubAppId', 'cmsGitHubAppInstallationId'] as const;
 
+/** How the gateway is told who is calling — requirements.md R1; ADR 0013. */
+export const CMS_AUTH_MODES = ['bearer', 'alb'] as const;
+
+export type CmsAuthMode = (typeof CMS_AUTH_MODES)[number];
+
+const DEFAULT_CMS_BRANCH_PREFIX = 'cms/';
+const DEFAULT_CMS_PATH_PREFIXES: readonly string[] = ['docs/'];
+
+/**
+ * The endpoints `authenticate-oidc` needs. AWS rejects a partial block, so all of them or none.
+ *
+ * `cmsOidcClientSecret` is deliberately absent: it is read as a Pulumi secret in the composition
+ * root and never passes through this module, so a plaintext credential cannot end up in a config
+ * object that gets logged, serialised or asserted on in a test.
+ */
+const OIDC_LISTENER_KEYS = [
+  'cmsOidcIssuer',
+  'cmsOidcAuthorizationEndpoint',
+  'cmsOidcTokenEndpoint',
+  'cmsOidcUserInfoEndpoint',
+  'cmsOidcClientId',
+] as const;
+
 /**
  * Checks that run on every pull request, and are therefore safe to require for merge.
  *
@@ -40,12 +63,60 @@ export interface GithubConfigInput {
   readonly githubOidcProviderArn?: string | undefined;
   readonly cmsGitHubAppId?: string | undefined;
   readonly cmsGitHubAppInstallationId?: string | undefined;
+  readonly cmsAuthMode?: string | undefined;
+  readonly cmsAuthIssuerUrl?: string | undefined;
+  readonly cmsAuthAudience?: string | undefined;
+  readonly cmsAuthEmailClaim?: string | undefined;
+  readonly cmsAuthNameClaim?: string | undefined;
+  readonly cmsBranchPrefix?: string | undefined;
+  readonly cmsPathPrefixes?: readonly string[] | undefined;
+  readonly cmsAllowMerge?: boolean | undefined;
+  readonly cmsOidcIssuer?: string | undefined;
+  readonly cmsOidcAuthorizationEndpoint?: string | undefined;
+  readonly cmsOidcTokenEndpoint?: string | undefined;
+  readonly cmsOidcUserInfoEndpoint?: string | undefined;
+  readonly cmsOidcClientId?: string | undefined;
+  /**
+   * Read from the AWS half of the configuration, not a key of its own.
+   *
+   * It is here because `cmsAuthMode: alb` is unusable without HTTPS, and that cross-cutting rule
+   * belongs with the other pure validation rather than in the composition root where no test can
+   * reach it.
+   */
+  readonly certificateArn?: string | undefined;
 }
 
 /** The GitHub App the gateway authenticates as — requirements.md R2. */
 export interface CmsAppConfig {
   readonly appId: string;
   readonly installationId: string;
+}
+
+/**
+ * What an ALB running `authenticate-oidc` needs to reach the identity provider.
+ *
+ * The client secret is not here — see {@link OIDC_LISTENER_KEYS}.
+ */
+export interface CmsOidcListenerConfig {
+  readonly issuer: string;
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly userInfoEndpoint: string;
+  readonly clientId: string;
+}
+
+/** How the gateway establishes identity, and what the CMS may touch — R1, R3, R4, R7. */
+export interface CmsGatewayConfig {
+  readonly authMode: CmsAuthMode;
+  readonly issuerUrl: string | undefined;
+  readonly audience: string | undefined;
+  readonly emailClaim: string | undefined;
+  readonly nameClaim: string | undefined;
+  readonly branchPrefix: string;
+  readonly pathPrefixes: readonly string[];
+  readonly allowMerge: boolean;
+  /** Present only in `alb` mode, where the load balancer runs the OIDC exchange. */
+  readonly oidcListener: CmsOidcListenerConfig | undefined;
 }
 
 export interface GithubConfig {
@@ -65,6 +136,8 @@ export interface GithubConfig {
   readonly requiredStatusChecks: readonly string[];
   readonly oidcProviderArn: string | undefined;
   readonly cmsApp: CmsAppConfig | undefined;
+  /** Present exactly when `cmsApp` is: the gateway can do nothing editorial without the App. */
+  readonly cmsGateway: CmsGatewayConfig | undefined;
 }
 
 function emptyToUndefined(value: string | undefined): string | undefined {
@@ -148,6 +221,117 @@ function resolveCmsApp(input: GithubConfigInput): CmsAppConfig | undefined {
 }
 
 /**
+ * The six values `authenticate-oidc` needs, or a refusal naming every one that is missing.
+ *
+ * AWS rejects a listener rule with a partial OIDC block, so there is no useful halfway state to
+ * accept. Reporting all of them at once means one round trip to the identity team rather than six.
+ */
+function resolveOidcListener(input: GithubConfigInput): CmsOidcListenerConfig {
+  const values = OIDC_LISTENER_KEYS.map((key) => emptyToUndefined(input[key]));
+  const missing = OIDC_LISTENER_KEYS.filter((_key, index) => values[index] === undefined);
+
+  if (missing.length > 0) {
+    throw new StackConfigError(
+      [...missing],
+      'are required when cmsAuthMode is "alb": the load balancer performs the OIDC exchange, so it ' +
+        'needs the provider endpoints and a client credential',
+    );
+  }
+
+  const [issuer, authorizationEndpoint, tokenEndpoint, userInfoEndpoint, clientId] = values as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+
+  return { issuer, authorizationEndpoint, tokenEndpoint, userInfoEndpoint, clientId };
+}
+
+/**
+ * Resolves how the gateway establishes identity — requirements.md R1, and ADR 0013.
+ *
+ * Both modes are supported because requirements Q3 ("which IdP fronts this") is still open. What
+ * is not supported is guessing: with the App configured and `cmsAuthMode` unset, the stack fails
+ * at preview rather than deploying a task that will refuse every author.
+ */
+function resolveCmsGateway(input: GithubConfigInput): CmsGatewayConfig {
+  const mode = emptyToUndefined(input.cmsAuthMode);
+  if (mode === undefined || !CMS_AUTH_MODES.includes(mode as CmsAuthMode)) {
+    throw new StackConfigError(
+      ['cmsAuthMode'],
+      `must be one of: ${CMS_AUTH_MODES.join(', ')}. "bearer" verifies a token the editor holds; ` +
+        '"alb" verifies the JWT a load balancer running authenticate-oidc signs',
+    );
+  }
+
+  const common = {
+    emailClaim: emptyToUndefined(input.cmsAuthEmailClaim),
+    nameClaim: emptyToUndefined(input.cmsAuthNameClaim),
+    branchPrefix: emptyToUndefined(input.cmsBranchPrefix) ?? DEFAULT_CMS_BRANCH_PREFIX,
+    pathPrefixes: resolvePathPrefixes(input.cmsPathPrefixes),
+    allowMerge: input.cmsAllowMerge ?? false,
+  };
+
+  if (mode === 'alb') {
+    if (emptyToUndefined(input.certificateArn) === undefined) {
+      throw new StackConfigError(
+        ['cmsAuthMode', 'certificateArn'],
+        'ALB authentication requires an HTTPS listener, so a certificate must be configured. Use ' +
+          'cmsAuthMode "bearer" for a deployment without one',
+      );
+    }
+    return {
+      ...common,
+      authMode: 'alb',
+      issuerUrl: undefined,
+      audience: undefined,
+      oidcListener: resolveOidcListener(input),
+    };
+  }
+
+  const issuerUrl = emptyToUndefined(input.cmsAuthIssuerUrl);
+  const audience = emptyToUndefined(input.cmsAuthAudience);
+  const missing = [
+    ...(issuerUrl === undefined ? ['cmsAuthIssuerUrl'] : []),
+    ...(audience === undefined ? ['cmsAuthAudience'] : []),
+  ];
+  if (missing.length > 0) {
+    throw new StackConfigError(
+      missing,
+      'are required when cmsAuthMode is "bearer": the gateway verifies the editor\'s token against ' +
+        'that issuer, for that audience',
+    );
+  }
+
+  return { ...common, authMode: 'bearer', issuerUrl, audience, oidcListener: undefined };
+}
+
+/**
+ * Prefixes the CMS may write under — requirements.md R3.
+ *
+ * A blank entry is rejected rather than dropped. In the gateway an empty prefix matches every
+ * path, so a stray comma in this list is the difference between "the docs tree" and "the whole
+ * repository"; that is worth failing a preview over.
+ */
+function resolvePathPrefixes(value: readonly string[] | undefined): readonly string[] {
+  if (value === undefined) {
+    return DEFAULT_CMS_PATH_PREFIXES;
+  }
+
+  const prefixes = value.map((prefix) => prefix.trim());
+  if (prefixes.length === 0 || prefixes.some((prefix) => prefix === '')) {
+    throw new StackConfigError(
+      ['cmsPathPrefixes'],
+      'must be a non-empty list of repository prefixes such as ["docs/"]. An empty entry would ' +
+        'match every path in the repository',
+    );
+  }
+  return prefixes;
+}
+
+/**
  * Validates the configuration describing the repository that backs the knowledge base, or throws.
  *
  * Pure and I/O-free for the same reason {@link import('./config').validateStackConfig} is: the
@@ -190,6 +374,8 @@ export function validateGithubConfig(input: GithubConfigInput): GithubConfig | u
     );
   }
 
+  const cmsApp = resolveCmsApp(input);
+
   return {
     owner: fullName.slice(0, separator),
     repository: fullName.slice(separator + 1),
@@ -201,6 +387,7 @@ export function validateGithubConfig(input: GithubConfigInput): GithubConfig | u
     importId,
     requiredStatusChecks: resolveStatusChecks(input.requiredStatusChecks),
     oidcProviderArn: resolveOidcProviderArn(input.githubOidcProviderArn),
-    cmsApp: resolveCmsApp(input),
+    cmsApp,
+    cmsGateway: cmsApp === undefined ? undefined : resolveCmsGateway(input),
   };
 }

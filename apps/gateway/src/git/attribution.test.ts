@@ -31,7 +31,10 @@ describe('withCoAuthorTrailer', () => {
   });
 
   it('does not mistake a mention of the author for the trailer', () => {
-    const result = withCoAuthorTrailer('docs: thank Sam Okoro <sam@example.com> for the review', SAM);
+    const result = withCoAuthorTrailer(
+      'docs: thank Sam Okoro <sam@example.com> for the review',
+      SAM,
+    );
 
     expect(result.split('\n').filter((line) => line.startsWith('Co-authored-by:'))).toHaveLength(1);
   });

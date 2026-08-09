@@ -48,10 +48,7 @@ function writablePrefixes(prefixes: readonly string[]): readonly string[] {
  * // → { ok: false, reason: 'extension', ... }
  * ```
  */
-export function resolveWritePath(
-  requestedPath: string,
-  options: PathPolicyOptions,
-): ResolvedPath {
+export function resolveWritePath(requestedPath: string, options: PathPolicyOptions): ResolvedPath {
   const resolved = resolveDocumentKey(requestedPath, { prefix: '' });
   if (!resolved.ok) {
     return resolved;
