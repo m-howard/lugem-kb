@@ -87,6 +87,7 @@ jobs:
             -e CORPUS_BUCKET=ci-placeholder \
             -e CORPUS_PREFIX=docs/ \
             -e KNOWLEDGE_BASE_ID=ci-placeholder \
+            -e ANSWER_MODEL_ID=ci-placeholder \
             lugem-gateway:ci
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/healthz; then
