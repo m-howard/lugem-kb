@@ -7,6 +7,15 @@ const VALID = {
   corpusRepository: 'm-howard/lugem-kb',
 } as const;
 
+const CMS_APP = {
+  cmsGitHubAppId: '123456',
+  cmsGitHubAppInstallationId: '78901234',
+} as const;
+
+const ISSUER = 'https://idp.example.com/realm';
+const AUDIENCE = 'lugem-cms';
+const CERTIFICATE_ARN = 'arn:aws:acm:us-east-1:111122223333:certificate/abc-123';
+
 function expectKeys(input: Parameters<typeof validateGithubConfig>[0], ...keys: string[]): void {
   expect(() => validateGithubConfig(input)).toThrow(StackConfigError);
   try {
@@ -181,8 +190,10 @@ describe('validateGithubConfig', () => {
     it('accepts both ids together', () => {
       const config = validateGithubConfig({
         ...VALID,
-        cmsGitHubAppId: '123456',
-        cmsGitHubAppInstallationId: '78901234',
+        ...CMS_APP,
+        cmsAuthMode: 'bearer',
+        cmsAuthIssuerUrl: ISSUER,
+        cmsAuthAudience: AUDIENCE,
       });
       expect(config?.cmsApp).toEqual({ appId: '123456', installationId: '78901234' });
     });
@@ -202,6 +213,114 @@ describe('validateGithubConfig', () => {
       ],
     ])('rejects %s', (_case, override) => {
       expect(() => validateGithubConfig({ ...VALID, ...override })).toThrow(StackConfigError);
+    });
+  });
+
+  // R1, and ADR 0013. The gateway supports two ways of establishing identity because
+  // requirements.md Q3 — which identity provider fronts this — is still open. What it does not do
+  // is guess: with the App configured and no mode chosen, the preview fails.
+  describe('the CMS gateway', () => {
+    const BEARER = {
+      ...CMS_APP,
+      cmsAuthMode: 'bearer',
+      cmsAuthIssuerUrl: ISSUER,
+      cmsAuthAudience: AUDIENCE,
+    };
+
+    const ALB = {
+      ...CMS_APP,
+      cmsAuthMode: 'alb',
+      certificateArn: CERTIFICATE_ARN,
+      cmsOidcIssuer: ISSUER,
+      cmsOidcAuthorizationEndpoint: `${ISSUER}/authorize`,
+      cmsOidcTokenEndpoint: `${ISSUER}/token`,
+      cmsOidcUserInfoEndpoint: `${ISSUER}/userinfo`,
+      cmsOidcClientId: 'lugem-cms',
+    };
+
+    it('is absent when no CMS app is configured', () => {
+      expect(validateGithubConfig(VALID)?.cmsGateway).toBeUndefined();
+    });
+
+    it('applies defaults for everything that is only tuning', () => {
+      expect(validateGithubConfig({ ...VALID, ...BEARER })?.cmsGateway).toMatchObject({
+        authMode: 'bearer',
+        issuerUrl: ISSUER,
+        audience: AUDIENCE,
+        branchPrefix: 'cms/',
+        pathPrefixes: ['docs/'],
+        allowMerge: false,
+        oidcListener: undefined,
+      });
+    });
+
+    it('carries the OIDC endpoints in alb mode', () => {
+      expect(validateGithubConfig({ ...VALID, ...ALB })?.cmsGateway).toMatchObject({
+        authMode: 'alb',
+        oidcListener: { issuer: ISSUER, clientId: 'lugem-cms' },
+      });
+    });
+
+    it('takes overrides for the prefixes and the merge policy', () => {
+      const config = validateGithubConfig({
+        ...VALID,
+        ...BEARER,
+        cmsBranchPrefix: 'drafts/',
+        cmsPathPrefixes: ['docs/', ' handbook/ '],
+        cmsAllowMerge: true,
+      });
+
+      expect(config?.cmsGateway).toMatchObject({
+        branchPrefix: 'drafts/',
+        pathPrefixes: ['docs/', 'handbook/'],
+        allowMerge: true,
+      });
+    });
+
+    describe('fails closed', () => {
+      it('refuses an app with no auth mode chosen', () => {
+        expectKeys({ ...VALID, ...CMS_APP }, 'cmsAuthMode');
+      });
+
+      it('refuses an auth mode it does not implement', () => {
+        expectKeys({ ...VALID, ...CMS_APP, cmsAuthMode: 'basic' }, 'cmsAuthMode');
+      });
+
+      it('names both bearer keys when neither is set', () => {
+        expectKeys(
+          { ...VALID, ...CMS_APP, cmsAuthMode: 'bearer' },
+          'cmsAuthIssuerUrl',
+          'cmsAuthAudience',
+        );
+      });
+
+      // ALB authentication is an HTTPS listener action. Without a certificate the stack would
+      // deploy an ALB that cannot authenticate anyone, and every author would be refused.
+      it('refuses alb mode without a certificate', () => {
+        const { certificateArn: _certificate, ...withoutCertificate } = ALB;
+
+        expectKeys({ ...VALID, ...withoutCertificate }, 'cmsAuthMode', 'certificateArn');
+      });
+
+      it('names every missing OIDC endpoint at once', () => {
+        expectKeys(
+          { ...VALID, ...CMS_APP, cmsAuthMode: 'alb', certificateArn: CERTIFICATE_ARN },
+          'cmsOidcIssuer',
+          'cmsOidcAuthorizationEndpoint',
+          'cmsOidcTokenEndpoint',
+          'cmsOidcUserInfoEndpoint',
+          'cmsOidcClientId',
+        );
+      });
+
+      // In the gateway an empty prefix matches every path, so a stray comma here is the
+      // difference between the docs tree and the whole repository.
+      it.each([[[]], [['docs/', '']], [[' ']]])(
+        'refuses path prefixes %j',
+        (cmsPathPrefixes: string[]) => {
+          expectKeys({ ...VALID, ...BEARER, cmsPathPrefixes }, 'cmsPathPrefixes');
+        },
+      );
     });
   });
 });

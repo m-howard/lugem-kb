@@ -84,10 +84,13 @@ cp Pulumi.dev.yaml.example Pulumi.dev.yaml   # then edit it
 | `allowUnverifiedRegion`   | no       | Escape hatch for a newly added S3 Vectors region.                              |
 | `corpusRepository`        | no       | Master switch for the GitHub half. Unset, no GitHub resources are managed.     |
 | `cmsGitHubAppId`          | no       | With `cmsGitHubAppInstallationId`, the CMS app the gateway authenticates as.   |
+| `cmsAuthMode`             | no       | Required once the app ids are set. `bearer` or `alb` — see below.              |
 
 The GitHub half has several more keys of its own; they live in
 [the corpus repository guide](./corpus-repository.md) rather than here, because setting any of them
-also means supplying an admin token this stack otherwise never needs.
+also means supplying an admin token this stack otherwise never needs. The keys that configure the
+authoring gateway itself — how authors authenticate, and what the CMS may write — are in
+[the authoring gateway guide](./authoring-gateway.md#configure-it).
 
 `retrievalScoreThreshold` is the one worth understanding before you change it. It decides whether a
 question is answerable at all: below it the API says nothing covers the question, and the answer
@@ -99,6 +102,12 @@ Pulumi's control — its branch rules, its publish pipeline and the CMS app cred
 and the GitHub token they need, are documented in
 [the corpus repository guide](./corpus-repository.md). Leave the key unset and the stack manages no
 GitHub resources at all.
+
+Setting `cmsGitHubAppId` goes one step further and switches the authoring gateway on. `cmsAuthMode`
+then becomes required, because the gateway will not guess how to identify an author, and
+`cmsAuthMode: alb` additionally requires `certificateArn` — ALB authentication is an HTTPS listener
+action, so the preview fails rather than deploying a load balancer that cannot authenticate
+anyone.
 
 ### Networking your VPC must already provide
 
@@ -156,8 +165,22 @@ publishes — see [the corpus repository guide](./corpus-repository.md).
 
 ## Verify
 
+With the authoring gateway configured, do this first, before anything else:
+
 ```bash
 SITE=$(pulumi -C infra/pulumi stack output siteUrl)
+bun run scripts/check/verify-gateway.ts --base-url "$SITE" --token "$ACCESS_TOKEN" --wait-ready 300
+```
+
+A task whose GitHub App key is missing or wrong never becomes healthy in the **editorial** target
+group, so `pulumi up` does not stabilise and ECS rolls the deployment back; and if one is running,
+the gateway answers `503` on `/v1/cms/*` rather than failing halfway through a save. This script
+tells you which has happened, and why, rather than leaving you to read target group health in the
+console. See [the authoring gateway](./authoring-gateway.md#verify-a-deployment).
+
+Then the read paths, which need no credential:
+
+```bash
 curl -fsS "$SITE/healthz"
 curl -fsS "$SITE/v1/documents" | head
 curl -fsS -X POST "$SITE/v1/search" \
@@ -242,10 +265,17 @@ private subnets have a route to ECR and CloudWatch Logs.
 The policy is scoped to one bucket and one prefix — confirm `corpusPrefix` matches where the sync
 script actually uploaded.
 
-**Readiness never passes and the logs mention the GitHub App.** With `cmsGitHubAppId` set, the stack
-creates the App's secret but leaves it empty on purpose — the private key is written out of band.
-Until it is, no installation token can be minted and the task correctly refuses to accept traffic.
-See [the corpus repository guide](./corpus-repository.md).
+**`/readyz` returns `cms-credential-unusable`.** With `cmsGitHubAppId` set, the stack creates the
+App's secret but leaves it empty on purpose — the private key is written out of band. Until it is,
+no installation token can be minted. Liveness stays green, so the task is not restarted into the
+same problem — but note that the target group probes `/healthz`, so the task _does_ still take
+traffic and fails only the editorial routes. See
+[the corpus repository guide](./corpus-repository.md).
+
+**The task exits with code 78 naming a `CMS_` or `AUTH_` variable.** Fail-closed configuration
+working as intended: `CMS_REPOSITORY` makes the whole CMS block required, and every offender is
+named at once. Check the stack keys against
+[the authoring gateway guide](./authoring-gateway.md#configure-it), then `pulumi up`.
 
 **Ingestion completes but `/v1/search` finds nothing.** Check the model access from prerequisite 1,
 and confirm `embeddingModelId` matches the dimension the index was created with. Changing the

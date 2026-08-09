@@ -2,6 +2,7 @@ import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 
 import { answerModelArns, type StackConfig } from '../config';
+import { type CmsAppConfig, type CmsGatewayConfig } from '../github-config';
 import { type Network } from '../network';
 import { reparentedChild } from './child-options';
 
@@ -24,6 +25,15 @@ export interface GatewayServiceArgs {
   readonly network: Network;
   readonly albSecurityGroupId: pulumi.Output<string>;
   readonly targetGroupArn: pulumi.Output<string>;
+  /**
+   * Editorial target group, present when the CMS is configured.
+   *
+   * Registering with both is what makes requirements.md R10 true: this one probes `/readyz`, so a
+   * task that cannot mint an installation token is removed from it while staying in the public
+   * group and continuing to serve readers. It also gates the deploy — ECS waits for health in
+   * every attached group, so a rollout with a bad credential never stabilises.
+   */
+  readonly cmsTargetGroupArn?: pulumi.Output<string> | undefined;
   readonly imageUri: pulumi.Output<string>;
   readonly corpusBucketName: pulumi.Output<string>;
   readonly corpusBucketArn: pulumi.Output<string>;
@@ -39,7 +49,18 @@ export interface GatewayServiceArgs {
   readonly accountId: pulumi.Output<string>;
   /** ARN of the Secrets Manager secret holding the CMS GitHub App private key — requirements.md R2. */
   readonly cmsSecretArn?: pulumi.Output<string> | undefined;
-  readonly cmsAppId?: string | undefined;
+  /** The GitHub App and what it may touch. Absent means the editorial routes are never mounted. */
+  readonly cms?: GatewayCmsArgs | undefined;
+}
+
+/** Everything `apps/gateway/src/config.ts` needs to switch its CMS block on — requirements.md R10. */
+export interface GatewayCmsArgs {
+  readonly app: CmsAppConfig;
+  readonly gateway: CmsGatewayConfig;
+  readonly repository: pulumi.Output<string>;
+  readonly defaultBranch: string;
+  /** ARN of this stack's load balancer, which `alb` mode checks every token's signer against. */
+  readonly loadBalancerArn?: pulumi.Output<string> | undefined;
 }
 
 /**
@@ -126,13 +147,7 @@ export class GatewayService extends pulumi.ComponentResource {
           securityGroups: [serviceSecurityGroup.id],
           assignPublicIp: false,
         },
-        loadBalancers: [
-          {
-            targetGroupArn: args.targetGroupArn,
-            containerName: CONTAINER_NAME,
-            containerPort: config.containerPort,
-          },
-        ],
+        loadBalancers: loadBalancerRegistrations(args),
         healthCheckGracePeriodSeconds: HEALTH_CHECK_GRACE_PERIOD_SECONDS,
         deploymentCircuitBreaker: { enable: true, rollback: true },
         waitForSteadyState: true,
@@ -224,46 +239,44 @@ export class GatewayService extends pulumi.ComponentResource {
         args.knowledgeBaseId,
         logGroupName,
         args.cmsSecretArn ?? pulumi.output(''),
+        args.cms?.repository ?? pulumi.output(''),
+        args.cms?.loadBalancerArn ?? pulumi.output(''),
       ])
-      .apply(([imageUri, corpusBucket, knowledgeBaseId, logGroup, cmsSecretArn]) => {
-        const environment: ContainerEnvironmentEntry[] = [
-          { name: 'PORT', value: String(config.containerPort) },
-          { name: 'AWS_REGION', value: config.region },
-          { name: 'CORPUS_BUCKET', value: corpusBucket },
-          { name: 'CORPUS_PREFIX', value: config.corpusPrefix },
-          { name: 'KNOWLEDGE_BASE_ID', value: knowledgeBaseId },
-          { name: 'SITE_ROOT', value: '/app/site' },
-          { name: 'ANSWER_MODEL_ID', value: config.answerModelId },
-          { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
-          { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
-          { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
-        ];
+      .apply(
+        ([imageUri, corpusBucket, knowledgeBaseId, logGroup, cmsSecretArn, repository, albArn]) => {
+          const environment: ContainerEnvironmentEntry[] = [
+            { name: 'PORT', value: String(config.containerPort) },
+            { name: 'AWS_REGION', value: config.region },
+            { name: 'CORPUS_BUCKET', value: corpusBucket },
+            { name: 'CORPUS_PREFIX', value: config.corpusPrefix },
+            { name: 'KNOWLEDGE_BASE_ID', value: knowledgeBaseId },
+            { name: 'SITE_ROOT', value: '/app/site' },
+            { name: 'ANSWER_MODEL_ID', value: config.answerModelId },
+            { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
+            { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
+            { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
+            ...cmsEnvironment(args.cms, { cmsSecretArn, repository, albArn }),
+          ];
 
-        if (cmsSecretArn !== '') {
-          environment.push({ name: 'CMS_APP_SECRET_ARN', value: cmsSecretArn });
-        }
-        if (args.cmsAppId !== undefined) {
-          environment.push({ name: 'GITHUB_APP_ID', value: args.cmsAppId });
-        }
-
-        return JSON.stringify([
-          {
-            name: CONTAINER_NAME,
-            image: imageUri,
-            essential: true,
-            portMappings: [{ containerPort: config.containerPort, protocol: 'tcp' }],
-            environment,
-            logConfiguration: {
-              logDriver: 'awslogs',
-              options: {
-                'awslogs-group': logGroup,
-                'awslogs-region': config.region,
-                'awslogs-stream-prefix': CONTAINER_NAME,
+          return JSON.stringify([
+            {
+              name: CONTAINER_NAME,
+              image: imageUri,
+              essential: true,
+              portMappings: [{ containerPort: config.containerPort, protocol: 'tcp' }],
+              environment,
+              logConfiguration: {
+                logDriver: 'awslogs',
+                options: {
+                  'awslogs-group': logGroup,
+                  'awslogs-region': config.region,
+                  'awslogs-stream-prefix': CONTAINER_NAME,
+                },
               },
             },
-          },
-        ]);
-      });
+          ]);
+        },
+      );
   }
 }
 
@@ -347,4 +360,75 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
 
       return JSON.stringify({ Version: '2012-10-17', Statement: statements });
     });
+}
+
+/**
+ * The CMS half of the container contract.
+ *
+ * Every name is read by `resolveCmsConfig` in `apps/gateway/src/config.ts`, which treats
+ * `CMS_REPOSITORY` as a master switch and then requires the rest — so this function emits the
+ * whole block or none of it. Emitting half would produce a task that boots, passes `/healthz` and
+ * refuses the first author, which is the failure ADR 0009 exists to move to start-up.
+ */
+function cmsEnvironment(
+  cms: GatewayCmsArgs | undefined,
+  resolved: { readonly cmsSecretArn: string; readonly repository: string; readonly albArn: string },
+): ContainerEnvironmentEntry[] {
+  if (cms === undefined || resolved.repository === '' || resolved.cmsSecretArn === '') {
+    return [];
+  }
+
+  const { gateway } = cms;
+  const entries: ContainerEnvironmentEntry[] = [
+    { name: 'CMS_REPOSITORY', value: resolved.repository },
+    { name: 'CMS_DEFAULT_BRANCH', value: cms.defaultBranch },
+    { name: 'CMS_BRANCH_PREFIX', value: gateway.branchPrefix },
+    { name: 'CMS_PATH_PREFIXES', value: gateway.pathPrefixes.join(',') },
+    { name: 'CMS_APP_SECRET_ARN', value: resolved.cmsSecretArn },
+    { name: 'GITHUB_APP_ID', value: cms.app.appId },
+    { name: 'GITHUB_APP_INSTALLATION_ID', value: cms.app.installationId },
+    { name: 'AUTH_MODE', value: gateway.authMode },
+    { name: 'POLICY_ALLOW_MERGE_FROM_CMS', value: String(gateway.allowMerge) },
+  ];
+
+  if (gateway.authMode === 'alb') {
+    entries.push({ name: 'AUTH_ALB_ARN', value: resolved.albArn });
+  } else {
+    entries.push(
+      { name: 'AUTH_ISSUER_URL', value: gateway.issuerUrl ?? '' },
+      { name: 'AUTH_AUDIENCE', value: gateway.audience ?? '' },
+    );
+  }
+
+  if (gateway.emailClaim !== undefined) {
+    entries.push({ name: 'AUTH_EMAIL_CLAIM', value: gateway.emailClaim });
+  }
+  if (gateway.nameClaim !== undefined) {
+    entries.push({ name: 'AUTH_NAME_CLAIM', value: gateway.nameClaim });
+  }
+
+  return entries;
+}
+
+/**
+ * Which target groups this service registers with.
+ *
+ * Two when the CMS is configured: the public group probing `/healthz`, and the editorial group
+ * probing `/readyz`. ECS keeps a task in each group independently, so an unusable GitHub App
+ * credential removes it from the editorial group alone — readers are unaffected — and a deploy
+ * carrying one never reaches a stable state, which is what makes requirements.md R10 enforced
+ * rather than merely documented.
+ */
+function loadBalancerRegistrations(args: GatewayServiceArgs) {
+  const registration = {
+    containerName: CONTAINER_NAME,
+    containerPort: args.config.containerPort,
+  };
+
+  return [
+    { ...registration, targetGroupArn: args.targetGroupArn },
+    ...(args.cmsTargetGroupArn === undefined
+      ? []
+      : [{ ...registration, targetGroupArn: args.cmsTargetGroupArn }]),
+  ];
 }

@@ -86,8 +86,9 @@ for all principals including the app" actually requires. An administrator who ne
 has to change infrastructure code and have it reviewed. That is the intent.
 
 **R4 and R5 are not enforced here.** Branch confinement (`cms/*` only) and endpoint allowlisting are
-the gateway's job. GitHub rulesets cannot express "this app may create refs only under `cms/`", and
-one that pretended to would be worse than none.
+the gateway's job — see [The authoring gateway](./authoring-gateway.md). GitHub rulesets cannot
+express "this app may create refs only under `cms/`", and one that pretended to would be worse than
+none.
 
 ## The publish pipeline
 
@@ -137,9 +138,17 @@ Pulumi cannot create a GitHub App. Create it once by hand, then hand Pulumi its 
      --secret-string "file://cms-app.private-key.pem"
    ```
 
-Until step 4 the gateway's readiness probe fails, because no installation token can be minted. That
-is [ADR 0009](./adr/0009-fail-closed-configuration.md) working: a miscredentialed task never joins
-the target group. The task role can read that one secret and nothing else.
+Until step 4 the gateway's readiness probe fails with `cms-credential-unusable`, because no
+installation token can be minted. Liveness stays green throughout, so the task is not killed and
+restarted into the same problem. The task role can read that one secret and nothing else.
+
+Authors get `503 {"error":"not_ready"}` from the gateway itself while that is true, and a deploy in
+that state never stabilises, so ECS rolls it back. Readers are unaffected throughout — see
+[The authoring gateway](./authoring-gateway.md#verify-a-deployment).
+
+Both ids reach the container, along with the repository and the branch and path prefixes, so the
+gateway can mint a token and confine what it does with one. Choosing how authors authenticate is the
+remaining step — see **[The authoring gateway](./authoring-gateway.md)**.
 
 ## Troubleshooting
 

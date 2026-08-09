@@ -18,6 +18,10 @@ sqlite.db*
 
 # Infra/IaC and CI (not needed in the app image).
 infra
+# ...except this one manifest. The image runs `bun install --frozen-lockfile` from the repo root,
+# and bun.lock describes infra/pulumi as a workspace. Without its package.json the install resolves
+# a different tree than the lockfile pins, and a frozen install refuses rather than drifting.
+!infra/pulumi/package.json
 .github
 
 # VCS, editor, OS, logs.

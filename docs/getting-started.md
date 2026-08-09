@@ -65,11 +65,32 @@ Without AWS credentials the site and `/healthz` work; `/readyz`, `/v1/documents`
 | `GET`  | `/v1/documents/:path` | Fetch one document.                                                |
 | `POST` | `/v1/search`          | Retrieve passages with citations. Body: `{"question": "..."}`.     |
 | `POST` | `/v1/ask`             | Grounded answer, streamed as SSE. Body: `{"question", "history"}`. |
+| `*`    | `/v1/cms/*`           | The authoring gateway. Only mounted when `CMS_REPOSITORY` is set.  |
 | `GET`  | `/*`                  | The built documentation site.                                      |
 
 `/v1/ask` answers in one of two shapes. A question the corpus covers gets `text/event-stream`: a
 `citations` frame, then `token` frames, then `done`. A question it does not gets ordinary JSON —
 `{"covered": false, ...}` — and no model is called to produce it.
+
+Any other `/v1/...` path answers JSON `404`. The site is a catch-all mounted last, so without that
+terminator a mistyped API path would return the site's HTML with a `200`.
+
+### Running the authoring gateway locally
+
+The editorial routes stay unmounted unless you configure them. To work on them you need a GitHub App
+and its private key, which can come from a file rather than Secrets Manager in development:
+
+```bash
+CMS_REPOSITORY=acme/handbook \
+GITHUB_APP_ID=123456 GITHUB_APP_INSTALLATION_ID=78901234 \
+CMS_APP_PRIVATE_KEY_PATH=./cms-app.private-key.pem \
+AUTH_MODE=bearer AUTH_ISSUER_URL=https://idp.example.com/realm AUTH_AUDIENCE=lugem-cms \
+bun run dev
+```
+
+Keep the PEM out of the repository. See
+**[The authoring gateway](./authoring-gateway.md#run-it-locally)** for the full variable list and
+what each refusal means.
 
 ## Working on the ask widget
 
@@ -115,6 +136,13 @@ bun run test:e2e       # Playwright against a real server and a real build
 ```
 
 `test:e2e` builds the site and boots the gateway itself, with AWS stubbed — no credentials needed.
+
+To check a _running_ gateway rather than the code, drive it through the authoring gateway's
+acceptance list:
+
+```bash
+bun run scripts/check/verify-gateway.ts --base-url http://127.0.0.1:3000 --token "$ACCESS_TOKEN"
+```
 
 ## Adding a page
 

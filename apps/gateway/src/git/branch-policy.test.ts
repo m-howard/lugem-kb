@@ -1,0 +1,141 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  type BranchOperation,
+  type BranchPolicyViolation,
+  encodeRefPath,
+  resolveBranch,
+} from './branch-policy';
+
+const OPTIONS = { prefix: 'cms/', defaultBranch: 'main' } as const;
+const WRITES: readonly BranchOperation[] = ['create', 'update', 'delete'];
+
+describe('resolveBranch', () => {
+  // R4: "Creating cms/<name> succeeds."
+  it.each(WRITES)('allows %s under the configured prefix', (operation) => {
+    expect(resolveBranch('cms/pricing', { ...OPTIONS, operation })).toEqual({
+      ok: true,
+      branch: 'cms/pricing',
+      ref: 'refs/heads/cms/pricing',
+    });
+  });
+
+  // The git data API accepts both spellings for the same branch. A policy that understood only
+  // one of them would be a policy in name only.
+  it('resolves a qualified ref and a bare name identically', () => {
+    const bare = resolveBranch('cms/pricing', { ...OPTIONS, operation: 'update' });
+    const qualified = resolveBranch('refs/heads/cms/pricing', { ...OPTIONS, operation: 'update' });
+
+    expect(qualified).toEqual(bare);
+  });
+
+  it('reads the default branch, which is where a draft is based from', () => {
+    expect(resolveBranch('main', { ...OPTIONS, operation: 'read' })).toMatchObject({
+      ok: true,
+      ref: 'refs/heads/main',
+    });
+  });
+
+  // R4: "Creating, updating or deleting the default branch is refused with 403." The repository
+  // ruleset blocks it too (bypassActors: []), but a gateway that relied on that would be one
+  // misconfigured ruleset away from writing to published content.
+  it.each(WRITES)('refuses %s on the default branch', (operation) => {
+    const result = resolveBranch('main', { ...OPTIONS, operation });
+
+    expect(result.ok).toBe(false);
+    expect(result).toMatchObject({ reason: 'default-branch' });
+  });
+
+  it('refuses the default branch by its qualified ref too', () => {
+    expect(resolveBranch('refs/heads/main', { ...OPTIONS, operation: 'delete' })).toMatchObject({
+      ok: false,
+      reason: 'default-branch',
+    });
+  });
+
+  // R4: "Updating or deleting a branch outside the prefix is refused."
+  describe('refuses', () => {
+    const cases: readonly [string, string, BranchPolicyViolation][] = [
+      ['a branch outside the prefix', 'feature/pricing', 'outside-prefix'],
+      ['a prefix lookalike', 'cmsx/pricing', 'outside-prefix'],
+      ['a release branch', 'release/2026-08', 'outside-prefix'],
+      ['an empty name', '', 'empty'],
+      ['a bare qualified prefix', 'refs/heads/', 'empty'],
+      ['traversal', 'cms/../main', 'malformed'],
+      ['a glob', 'cms/*', 'malformed'],
+      ['a ref-log expression', 'cms/pricing@{1}', 'malformed'],
+      ['a caret', 'cms/pricing^', 'malformed'],
+      ['a colon', 'cms/a:b', 'malformed'],
+      ['a backslash', 'cms\\pricing', 'malformed'],
+      ['a space', 'cms/my branch', 'malformed'],
+      ['a null byte', 'cms/pricing\0', 'malformed'],
+      ['a trailing slash', 'cms/pricing/', 'malformed'],
+      ['an empty segment', 'cms//pricing', 'malformed'],
+      ['a .lock suffix', 'cms/pricing.lock', 'malformed'],
+      ['a dot segment', 'cms/.hidden', 'malformed'],
+    ];
+
+    it.each(cases)('%s', (_case, input, reason) => {
+      const result = resolveBranch(input, { ...OPTIONS, operation: 'update' });
+
+      expect(result.ok).toBe(false);
+      expect(result).toMatchObject({ reason });
+    });
+  });
+
+  // Stricter than R4 asks. The editorial workflow only ever reads the default branch or one of
+  // its own drafts, so forbidding the rest costs nothing and removes a way to enumerate the repo.
+  it('refuses reads of a branch that is neither the default nor its own', () => {
+    expect(resolveBranch('feature/secret', { ...OPTIONS, operation: 'read' })).toMatchObject({
+      ok: false,
+      reason: 'outside-prefix',
+    });
+  });
+
+  // An unset prefix would make `startsWith('')` true for every branch. Fail closed instead.
+  it('refuses every branch when no prefix is configured', () => {
+    expect(
+      resolveBranch('cms/pricing', { prefix: '', defaultBranch: 'main', operation: 'create' }),
+    ).toMatchObject({ ok: false, reason: 'outside-prefix' });
+  });
+
+  it('honours a different default branch', () => {
+    const options = { prefix: 'cms/', defaultBranch: 'trunk', operation: 'delete' } as const;
+
+    expect(resolveBranch('trunk', options)).toMatchObject({ reason: 'default-branch' });
+    expect(resolveBranch('main', options)).toMatchObject({ reason: 'outside-prefix' });
+  });
+});
+
+describe('encodeRefPath', () => {
+  it('keeps the path structure the git host expects', () => {
+    expect(encodeRefPath('cms/pricing')).toBe('cms/pricing');
+    expect(encodeRefPath('cms/2026/q1-pricing')).toBe('cms/2026/q1-pricing');
+  });
+
+  // The bug this exists for. `encodeURI` leaves `#` alone because in a whole URL it opens the
+  // fragment — so `cms/review#1` addressed `cms/review`, a different and quite possibly real
+  // branch. Deleting a draft would have deleted somebody else's.
+  it('escapes a hash, which would otherwise truncate the ref', () => {
+    expect(encodeRefPath('cms/review#1')).toBe('cms/review%231');
+    expect(encodeURI('cms/review#1')).toBe('cms/review#1');
+  });
+
+  it.each([
+    ['a space', 'cms/my draft', 'cms/my%20draft'],
+    ['a percent, which would read as an escape', 'cms/50%', 'cms/50%25'],
+    ['a question mark', 'cms/why?', 'cms/why%3F'],
+    ['an ampersand', 'cms/a&b', 'cms/a%26b'],
+  ])('escapes %s', (_case, branch, expected) => {
+    expect(encodeRefPath(branch)).toBe(expected);
+  });
+
+  it('produces a URL whose path still contains the whole branch', () => {
+    const url = new URL(
+      `https://api.github.test/repos/o/r/git/refs/heads/${encodeRefPath('cms/review#1')}`,
+    );
+
+    expect(url.pathname).toBe('/repos/o/r/git/refs/heads/cms/review%231');
+    expect(url.hash).toBe('');
+  });
+});

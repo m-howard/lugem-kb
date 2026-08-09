@@ -9,6 +9,44 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The authoring gateway** — Phase 2 of [the requirements](docs/requirements.md), so that someone
+  without a git host account can publish. Off unless `CMS_REPOSITORY` is set; with it set, every
+  companion variable is required.
+  - Authors are authenticated in one of two modes, chosen by `AUTH_MODE`: an OIDC bearer token
+    verified against the issuer's key set, or the JWT an ALB running `authenticate-oidc` signs. The
+    issuer, audience and claim names are configuration, because requirements Q3 and Q4 are still
+    open. See [ADR 0013](docs/adr/0013-two-authentication-modes.md).
+  - One GitHub App credential, minted on demand and cached, refreshed five minutes before expiry,
+    single-flighted across concurrent callers, and invalidated once on an upstream 401. The private
+    key comes from Secrets Manager and never reaches the image.
+  - Editorial endpoints under `/v1/cms`: read the corpus on a branch, save and discard drafts,
+    submit for review, and watch a submission's state. Saving creates or moves a branch and does not
+    open a pull request. See [ADR 0014](docs/adr/0014-purpose-built-editorial-api.md).
+  - Writes are confined to configured documentation prefixes and markdown extensions, reusing
+    `kb/key-policy.ts` rather than restating its rules; branches are confined to `cms/*`, and the
+    default branch is refused for every write. A change set with one bad entry is refused whole,
+    before the first upstream call.
+  - Commits carry the human as author and the App as committer, with a `Co-authored-by` trailer
+    added exactly once even on retry. The pull request body names the submitter and their email.
+  - One typed audit record per request, refusals at `warn` so alarms key on level. Request and
+    response bodies are never logged.
+  - A task that cannot authenticate to the git host refuses `/v1/cms/*` with `503 not_ready` from
+    the gateway itself, and never becomes healthy in the new **editorial target group** — so a
+    deploy in that state does not stabilise and ECS rolls it back. Readers are unaffected either
+    way: the public target group still probes `/healthz`. The refusal is in the application rather
+    than the load balancer because an ALB fails open when every target in a group is unhealthy,
+    which is exactly the state a missing credential produces.
+- **[The authoring gateway](docs/authoring-gateway.md)** — configuration, what is refused and why,
+  and how to verify a deployment.
+- `scripts/check/verify-gateway.ts` — drives a running gateway through the R1–R6, R9 and R10
+  acceptance criteria and prints a pass/fail table. Phase 2's stated exit condition.
+- New gateway variables: `CMS_REPOSITORY` (the master switch), `GITHUB_APP_ID`,
+  `GITHUB_APP_INSTALLATION_ID`, `CMS_APP_SECRET_ARN` or `CMS_APP_PRIVATE_KEY_PATH`, `AUTH_MODE`,
+  `AUTH_ISSUER_URL`, `AUTH_AUDIENCE`, `AUTH_ALB_ARN`, `AUTH_EMAIL_CLAIM`, `AUTH_NAME_CLAIM`,
+  `CMS_DEFAULT_BRANCH`, `CMS_BRANCH_PREFIX`, `CMS_PATH_PREFIXES`, `POLICY_ALLOW_MERGE_FROM_CMS`,
+  `GITHUB_API_BASE_URL`. New stack keys: `cmsAuthMode`, `cmsAuthIssuerUrl`, `cmsAuthAudience`,
+  `cmsAuthEmailClaim`, `cmsAuthNameClaim`, `cmsBranchPrefix`, `cmsPathPrefixes`, `cmsAllowMerge`,
+  and five `cmsOidc*` keys plus the secret `cmsOidcClientSecret` for `alb` mode.
 - **Grounded answering.** `POST /v1/ask` retrieves first and generates only from the passages that
   cleared the relevance threshold, streaming the answer over server-sent events. The citations
   frame is emitted before the first token, so every answer carries at least one source. A question
@@ -49,6 +87,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`/v1` is terminated before the static site.** An unknown API path answered 200 with the site's
+  HTML, because the site is a catch-all mounted last. It now answers JSON 404. This is a behaviour
+  change for any client that was relying on the old response, and the reason it matters is
+  [requirements R5](docs/requirements.md): "an unmatched method/path combination is refused and
+  logged" is not true if the answer is a page.
 - **Answer generation is no longer out of scope.** The retrieval-only stance in the README and in
   `kb/retrieve.ts` is superseded by [ADR 0012](docs/adr/0012-grounded-generation-behind-retrieval.md).
   `RetrieveAndGenerate` is still not used: retrieval and generation are composed here, so the

@@ -5,13 +5,17 @@ import { Hono } from 'hono';
 import { type Logger } from 'pino';
 
 import { type AppEnv } from './app-env';
+import { createAuthMiddleware } from './auth/middleware';
+import { type CmsDependencies, createCmsDependencies } from './cms/dependencies';
 import { type Config } from './config';
 import { Answerer } from './kb/answer';
 import { CitationViewer } from './kb/citation-view';
 import { CorpusClient } from './kb/corpus-client';
 import { Retriever } from './kb/retrieve';
 import { createRateLimit } from './rate-limit';
+import { createApiNotFoundRoutes } from './routes/api-not-found';
 import { createAskRoutes } from './routes/ask';
+import { createCmsRoutes } from './routes/cms';
 import { createDocumentRoutes } from './routes/documents';
 import { createHealthRoutes } from './routes/health';
 import { createSearchRoutes } from './routes/search';
@@ -28,6 +32,8 @@ export interface AppDependencies {
   readonly siteRoot: string;
   /** Requests per client per minute on `/v1/ask`, the one route that bills per call. */
   readonly askRateLimitPerMinute: number;
+  /** Absent when `CMS_REPOSITORY` is unset: the editorial routes are then never mounted. */
+  readonly cms?: CmsDependencies | undefined;
 }
 
 /**
@@ -73,6 +79,9 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
     logger,
     siteRoot: config.siteRoot,
     askRateLimitPerMinute: config.askRateLimitPerMinute,
+    ...(config.cms === undefined
+      ? {}
+      : { cms: createCmsDependencies(config.cms, config.awsRegion) }),
   };
 }
 
@@ -91,6 +100,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
 
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+    c.set('startedAt', Date.now());
     c.set('requestId', requestId);
     c.set('logger', dependencies.logger.child({ requestId }));
     await next();
@@ -101,7 +111,13 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     return c.json({ error: 'internal_error' }, INTERNAL_SERVER_ERROR);
   });
 
-  app.route('/', createHealthRoutes({ corpus: dependencies.corpus }));
+  app.route(
+    '/',
+    createHealthRoutes({
+      corpus: dependencies.corpus,
+      ...(dependencies.cms === undefined ? {} : { tokens: dependencies.cms.tokens }),
+    }),
+  );
   app.route('/v1/documents', createDocumentRoutes({ corpus: dependencies.corpus }));
   app.route(
     '/v1/search',
@@ -112,6 +128,27 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
   // spends money per request, and it is unauthenticated (requirements.md R22 is not met yet).
   app.use('/v1/ask', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
   app.route('/v1/ask', createAskRoutes({ answerer: dependencies.answerer }));
+
+  // Mounted only when CMS_REPOSITORY is set. An unconfigured deployment has no editorial surface
+  // at all, rather than one that answers 500 — see resolveCmsConfig in config.ts.
+  if (dependencies.cms !== undefined) {
+    const cms = dependencies.cms;
+    app.route(
+      '/v1/cms',
+      createCmsRoutes({
+        reader: cms.reader,
+        drafts: cms.drafts,
+        submissions: cms.submissions,
+        settings: cms.settings,
+        allowMergeFromCms: cms.allowMergeFromCms,
+        tokens: cms.tokens,
+        auth: createAuthMiddleware({ verifier: cms.verifier }),
+      }),
+    );
+  }
+
+  // Terminates `/v1` before the site can answer for it. Must stay after every API route.
+  app.route('/v1', createApiNotFoundRoutes());
 
   // Catch-all. Must stay last.
   app.route('/', createSiteRoutes({ root: dependencies.siteRoot }));
