@@ -1,4 +1,5 @@
 import { type Hono } from 'hono';
+import { generateKeyPair } from 'jose';
 import { pino } from 'pino';
 
 import {
@@ -8,8 +9,18 @@ import {
   type FakeRetrievalResult,
   fakeS3Client,
 } from './fake-aws';
+import { type FakeGitHub, type FakeGitHubRoute, fakeGitHub } from './fake-github';
+import { type FakeIdp, fakeIdp } from './fake-idp';
 import { createApp } from '../../src/app';
 import { type AppEnv } from '../../src/app-env';
+import { createBearerVerifier } from '../../src/auth/bearer-verifier';
+import { type CmsDependencies } from '../../src/cms/dependencies';
+import { DocumentReader } from '../../src/cms/documents';
+import { DraftService } from '../../src/cms/drafts';
+import { type CmsSettings } from '../../src/cms/settings';
+import { SubmissionService } from '../../src/cms/submissions';
+import { GitHubClient } from '../../src/git/github-client';
+import { InstallationTokenSource } from '../../src/git/installation-token';
 import { Answerer } from '../../src/kb/answer';
 import { CitationViewer } from '../../src/kb/citation-view';
 import { CorpusClient } from '../../src/kb/corpus-client';
@@ -18,6 +29,16 @@ import { Retriever } from '../../src/kb/retrieve';
 export const TEST_BUCKET = 'test-corpus';
 export const TEST_PREFIX = 'docs/';
 export const TEST_SITE_ROOT = 'apps/gateway/tests/fixtures/site';
+
+export const TEST_REPOSITORY = 'acme/handbook';
+export const TEST_GITHUB_API = 'https://api.github.test';
+
+export const TEST_CMS_SETTINGS: CmsSettings = {
+  repository: TEST_REPOSITORY,
+  defaultBranch: 'main',
+  branchPrefix: 'cms/',
+  pathPrefixes: ['docs/'],
+};
 
 const TEST_SCORE_THRESHOLD = 0.4;
 const TEST_ANSWER_MAX_TOKENS = 700;
@@ -32,6 +53,85 @@ export interface TestAppOptions {
   readonly answer?: FakeAnswerOptions;
   /** Requests per client per minute on `/v1/ask`. High by default so tests do not trip it. */
   readonly askRateLimitPerMinute?: number;
+  /** Present only when a test switches the CMS on, mirroring the CMS_REPOSITORY master switch. */
+  readonly cms?: CmsDependencies | undefined;
+}
+
+export interface TestCms {
+  readonly app: Hono<AppEnv>;
+  readonly idp: FakeIdp;
+  readonly host: FakeGitHub;
+  readonly dependencies: CmsDependencies;
+  /** `Authorization` header for the given claims, defaulting to a valid author. */
+  authorize(claims?: Record<string, unknown>): Promise<Record<string, string>>;
+}
+
+export interface TestCmsOptions {
+  readonly routes?: readonly FakeGitHubRoute[];
+  readonly settings?: Partial<CmsSettings>;
+  readonly allowMergeFromCms?: boolean;
+  /** Status the token mint answers with. 401 is what an unwritten credential secret looks like. */
+  readonly mintStatus?: number;
+}
+
+/**
+ * Builds the real app with the CMS switched on, over a fake git host and a real key pair.
+ *
+ * Every collaborator is the production one: the same `createApp`, the same policies, real JWT
+ * verification against a generated key. Only the network is faked — and the fake refuses any call
+ * a test did not declare, so an unexpected upstream request fails rather than passing quietly.
+ *
+ * @param options - Upstream routes the test expects, settings overrides, and the merge flag.
+ * @returns The app, the issuer, the git host, and a helper that mints an Authorization header.
+ */
+export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<TestCms> {
+  const idp = await fakeIdp();
+  const host = fakeGitHub(
+    options.routes ?? [],
+    options.mintStatus === undefined ? {} : { mintStatus: options.mintStatus },
+  );
+  const settings: CmsSettings = { ...TEST_CMS_SETTINGS, ...options.settings };
+  const { privateKey } = await generateKeyPair('RS256', { extractable: true });
+
+  const tokens = new InstallationTokenSource({
+    appId: '123456',
+    installationId: '78901234',
+    loadPrivateKey: () => Promise.resolve(privateKey),
+    apiBaseUrl: TEST_GITHUB_API,
+    fetch: host.fetch,
+  });
+  const client = new GitHubClient({
+    tokens,
+    repository: settings.repository,
+    apiBaseUrl: TEST_GITHUB_API,
+    allowMergeFromCms: options.allowMergeFromCms ?? false,
+    fetch: host.fetch,
+  });
+
+  const dependencies: CmsDependencies = {
+    settings,
+    tokens,
+    reader: new DocumentReader({ client, settings }),
+    drafts: new DraftService({ client, settings }),
+    submissions: new SubmissionService({ client, settings }),
+    verifier: createBearerVerifier({
+      issuer: idp.issuer,
+      audience: idp.audience,
+      claimNames: { email: 'email', name: 'name' },
+      keyResolver: idp.keyResolver,
+    }),
+    allowMergeFromCms: options.allowMergeFromCms ?? false,
+  };
+
+  return {
+    app: buildTestApp({ cms: dependencies }),
+    idp,
+    host,
+    dependencies,
+    async authorize(claims = { sub: 'a1b2', email: 'sam@example.com', name: 'Sam Okoro' }) {
+      return { authorization: `Bearer ${await idp.sign(claims)}` };
+    },
+  };
 }
 
 /**
@@ -75,5 +175,6 @@ export function buildTestApp(options: TestAppOptions = {}): Hono<AppEnv> {
     logger: pino({ level: 'silent' }),
     siteRoot: options.siteRoot ?? TEST_SITE_ROOT,
     askRateLimitPerMinute: options.askRateLimitPerMinute ?? TEST_ASK_RATE_LIMIT,
+    ...(options.cms === undefined ? {} : { cms: options.cms }),
   });
 }

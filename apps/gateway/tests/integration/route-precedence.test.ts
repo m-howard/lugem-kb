@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildTestApp } from '../helpers/build-test-app';
+import { buildCmsTestApp, buildTestApp } from '../helpers/build-test-app';
 
 /**
  * The static site is a catch-all, so it is mounted last in `createApp`. Getting that order
@@ -101,5 +101,41 @@ describe('route precedence', () => {
     const response = await buildTestApp({ objects: CORPUS }).request('/no-such-page');
 
     expect(response.status).toBe(404);
+  });
+
+  // Without a terminator on `/v1`, an unknown API path falls through to the catch-all and answers
+  // 200 with HTML — a JSON client sees a success it cannot parse, and a typo in a route looks
+  // like a rendering bug. It also breaks R5's "an unmatched path is refused and logged".
+  describe('the /v1 namespace is terminated before the site', () => {
+    it.each([
+      ['an unknown API path', '/v1/nonsense'],
+      ['an unknown CMS path when the CMS is off', '/v1/cms/config'],
+      ['a nested unknown path', '/v1/cms/drafts/cms/pricing/extra'],
+    ])('answers %s with JSON 404', async (_case, path) => {
+      const response = await buildTestApp({ objects: CORPUS }).request(path);
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toMatchObject({ error: 'not_found' });
+    });
+  });
+
+  it('keeps the CMS routes ahead of the terminator when it is switched on', async () => {
+    const cms = await buildCmsTestApp();
+
+    const response = await cms.app.request('/v1/cms/config', { headers: await cms.authorize() });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+  });
+
+  // The one route that must not become JSON-only: the site still answers everything else.
+  it('still serves the site when the CMS is mounted', async () => {
+    const cms = await buildCmsTestApp();
+
+    const response = await cms.app.request('/');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
   });
 });
