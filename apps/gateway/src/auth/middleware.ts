@@ -26,7 +26,7 @@ export interface AuthMiddlewareOptions {
  */
 export function createAuthMiddleware(options: AuthMiddlewareOptions): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
-    const startedAt = Date.now();
+    const startedAt = c.get('startedAt');
     const result = await options.verifier.verify((name) => c.req.header(name));
 
     if (!result.ok) {

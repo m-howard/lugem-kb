@@ -14,6 +14,13 @@ export interface SubmitRequest {
 export interface Submission {
   readonly number: number;
   readonly branch: string;
+  /**
+   * `owner/name` the head branch actually lives in.
+   *
+   * Carried because the branch name alone proves nothing: a fork can name a branch `cms/anything`
+   * too, and it would satisfy every other check.
+   */
+  readonly headRepository: string;
   /** Where this submission would land. Carried so a merge can be refused before it is attempted. */
   readonly base: string;
   readonly title: string;
@@ -30,7 +37,7 @@ interface PullResponse {
   readonly merged?: boolean;
   readonly mergeable?: boolean | null;
   readonly html_url?: string;
-  readonly head?: { readonly ref?: string };
+  readonly head?: { readonly ref?: string; readonly repo?: { readonly full_name?: string } | null };
   readonly base?: { readonly ref?: string };
 }
 
@@ -49,6 +56,7 @@ function toSubmission(pull: PullResponse): Submission {
   return {
     number: pull.number ?? 0,
     branch: pull.head?.ref ?? '',
+    headRepository: pull.head?.repo?.full_name ?? '',
     base: pull.base?.ref ?? '',
     title: pull.title ?? '',
     state: pull.merged === true ? 'merged' : (pull.state ?? 'unknown'),
@@ -151,8 +159,10 @@ export class SubmissionService {
    * branch into the default branch, reviewed by nobody. Confinement here has to look at the pull
    * request rather than at the URL, which means reading it first.
    *
-   * Both refs are checked, because either one alone would leave a hole: a CMS head could target a
-   * protected branch that is not the default, and a non-CMS head could target the default branch.
+   * Three things are checked, because any two of them still leave a hole. A CMS-looking head could
+   * target a protected branch that is not the default; a foreign head could target the default
+   * branch; and a **fork** can name its branch `cms/pricing` and target `main`, satisfying both ref
+   * checks while living in a repository this service has nothing to do with.
    *
    * @param number - Pull request number.
    * @returns The submission's state after the merge.
@@ -178,6 +188,17 @@ export class SubmissionService {
   }
 
   #requireOwnSubmission(submission: Submission): void {
+    // The git host is case-insensitive about owner and repository, so this comparison is too —
+    // matching `endpoint-policy.ts`, which would otherwise disagree with this check.
+    if (submission.headRepository.toLowerCase() !== this.#settings.repository.toLowerCase()) {
+      throw new CmsPolicyError(
+        'foreign-repository',
+        `Pull request ${String(submission.number)} comes from ` +
+          `"${submission.headRepository || 'an unknown repository'}", not ${this.#settings.repository}. ` +
+          'A fork can name a branch anything it likes; merge it in the git host.',
+      );
+    }
+
     const head = resolveBranch(submission.branch, {
       prefix: this.#settings.branchPrefix,
       defaultBranch: this.#settings.defaultBranch,

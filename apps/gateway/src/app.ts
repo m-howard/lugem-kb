@@ -100,6 +100,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
 
   app.use('*', async (c, next) => {
     const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+    c.set('startedAt', Date.now());
     c.set('requestId', requestId);
     c.set('logger', dependencies.logger.child({ requestId }));
     await next();

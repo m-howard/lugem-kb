@@ -18,5 +18,12 @@ export interface AppEnv {
     logger: Logger;
     requestId: string;
     identity: Identity;
+    /**
+     * When the request entered the app, for audit durations.
+     *
+     * Set once by the outermost middleware rather than per handler, so every record measures the
+     * same thing — including the authentication work, which is the part most likely to be slow.
+     */
+    startedAt: number;
   };
 }

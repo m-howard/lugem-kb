@@ -146,6 +146,17 @@ describe('the editorial API', () => {
       );
     });
 
+    it('carries a duration on an unmatched route', async () => {
+      const lines: Record<string, unknown>[] = [];
+      const cms = await buildCmsTestApp({ captureLogs: lines });
+
+      await cms.app.request('/v1/cms/nonsense', { headers: await cms.authorize() });
+
+      const record = lines.find((line) => line['reason'] === 'no-such-route');
+      expect(typeof record?.['durationMs']).toBe('number');
+      expect(record?.['durationMs']).toBeGreaterThanOrEqual(0);
+    });
+
     it('records a refused write with the author and the reason', async () => {
       const lines: Record<string, unknown>[] = [];
       const cms = await buildCmsTestApp({ captureLogs: lines });
@@ -509,7 +520,7 @@ describe('the editorial API', () => {
             respond: {
               number: 7,
               state: 'open',
-              head: { ref: 'cms/pricing' },
+              head: { ref: 'cms/pricing', repo: { full_name: TEST_REPOSITORY } },
               base: { ref: 'main' },
             },
           },
@@ -686,6 +697,51 @@ describe('the editorial API', () => {
 
       expect(response.status).toBe(502);
     });
+  });
+
+  it('answers 400 for a body that is not JSON at all, and records who sent it', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const cms = await buildCmsTestApp({ captureLogs: lines });
+
+    const response = await cms.app.request('/v1/cms/drafts/cms/pricing', {
+      method: 'PUT',
+      headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
+      body: '{not json at all',
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'invalid_json' });
+    expect(lines).toContainEqual(
+      expect.objectContaining({ decision: 'refused', reason: 'invalid-json' }) as unknown,
+    );
+    expect(cms.host.calls).toEqual([]);
+  });
+
+  // The failures nobody anticipated are the ones most worth reading about later, and they were
+  // the only ones producing no audit line at all.
+  it('records an unexpected failure before letting it become a 500', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const cms = await buildCmsTestApp({
+      captureLogs: lines,
+      routes: [
+        { method: 'GET', path: `${REPO}/git/ref/heads/main`, respond: { object: { sha: 'c1' } } },
+        { method: 'GET', path: `${REPO}/git/commits/c1`, respond: { tree: { sha: 't1' } } },
+        // Truncated: cms/tree.ts throws a plain Error, which no refusal row maps.
+        { method: 'GET', path: `${REPO}/git/trees/t1`, respond: { truncated: true, tree: [] } },
+      ],
+    });
+
+    const response = await cms.app.request('/v1/cms/documents', { headers: await cms.authorize() });
+
+    expect(response.status).toBe(500);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        decision: 'error',
+        reason: 'unhandled',
+        subject: 'a1b2',
+        path: '/v1/cms/documents',
+      }) as unknown,
+    );
   });
 
   it('rejects a malformed body before doing anything', async () => {

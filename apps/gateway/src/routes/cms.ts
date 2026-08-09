@@ -108,6 +108,17 @@ function refusalFor(error: unknown): Refusal | undefined {
       reason: 'invalid-request',
     };
   }
+  // `c.req.json()` throws this on a body that is not JSON at all, before zod ever sees it. Without
+  // this row it fell through to the rethrow and became a 500 — the client's mistake reported as
+  // ours, and with no audit record naming who sent it.
+  if (error instanceof SyntaxError) {
+    return {
+      status: BAD_REQUEST,
+      body: { error: 'invalid_json', message: 'The request body is not valid JSON.' },
+      decision: 'refused',
+      reason: 'invalid-json',
+    };
+  }
   return undefined;
 }
 
@@ -138,7 +149,7 @@ function routeParam(c: Context<AppEnv>, name: string): string {
  */
 function handle(handler: CmsHandler): CmsHandler {
   return async (c) => {
-    const startedAt = Date.now();
+    const startedAt = c.get('startedAt');
     const identity = c.get('identity');
     const base = {
       subject: identity.subject,
@@ -159,6 +170,16 @@ function handle(handler: CmsHandler): CmsHandler {
     } catch (error) {
       const refusal = refusalFor(error);
       if (refusal === undefined) {
+        // Still a decision about this request, so it still gets a record (R9). Without this, the
+        // failures nobody anticipated — the ones most worth reading about later — were the only
+        // ones that produced no audit line, leaving just the app-level error log with no subject,
+        // path or duration attached.
+        recordAudit(c.get('logger'), {
+          ...base,
+          decision: 'error',
+          reason: 'unhandled',
+          durationMs: Date.now() - startedAt,
+        });
         throw error;
       }
       recordAudit(c.get('logger'), {

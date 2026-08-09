@@ -6,7 +6,7 @@ import { type Logger } from 'pino';
  * A closed set, because an operator aggregating the audit log groups by this field. Free-form
  * strings would make "how many writes did we refuse last week" a question about spelling.
  */
-export type AuditDecision = 'allowed' | 'refused' | 'unauthorized' | 'upstream-error';
+export type AuditDecision = 'allowed' | 'refused' | 'unauthorized' | 'upstream-error' | 'error';
 
 /**
  * One line of the audit log (requirements.md R9).
@@ -29,6 +29,9 @@ export interface AuditRecord {
 
 /** Decisions that must reach an operator's alarm. Keyed on level, never on message text — R9. */
 const WARNING_DECISIONS: readonly AuditDecision[] = ['refused', 'unauthorized'];
+
+/** Something broke rather than being declined. `error` is ours; `upstream-error` is the git host's. */
+const ERROR_DECISIONS: readonly AuditDecision[] = ['upstream-error', 'error'];
 
 /**
  * Writes one audit record.
@@ -53,7 +56,7 @@ const WARNING_DECISIONS: readonly AuditDecision[] = ['refused', 'unauthorized'];
  * ```
  */
 export function recordAudit(logger: Logger, record: AuditRecord): void {
-  if (record.decision === 'upstream-error') {
+  if (ERROR_DECISIONS.includes(record.decision)) {
     logger.error(record, 'gateway request');
     return;
   }

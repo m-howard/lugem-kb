@@ -42,7 +42,7 @@ export function createApiNotFoundRoutes(): Hono<AppEnv> {
       path: c.req.path,
       decision: 'refused',
       reason: 'no-such-route',
-      durationMs: 0,
+      durationMs: Date.now() - c.get('startedAt'),
     });
 
     return c.json({ error: 'not_found', path: c.req.path }, NOT_FOUND);
