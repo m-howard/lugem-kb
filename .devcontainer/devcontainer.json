@@ -7,6 +7,12 @@
       // "VARIANT": "22-bullseye"
     }
   },
+  // The webpack client compile in `docs:build` sizes its default V8 heap off total container
+  // memory, which collides with the IDE/tsserver/extension-host baseline already resident here
+  // and gets OOM-killed rather than erroring cleanly. Cap it to leave that headroom.
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=1536"
+  },
   // Configure tool-specific properties.
   "customizations": {
     "vscode": {
