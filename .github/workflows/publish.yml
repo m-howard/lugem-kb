@@ -1,0 +1,78 @@
+name: Publish
+
+# requirements.md R11: merging to the default branch syncs markdown to the S3 prefix backing the
+# assistant and triggers ingestion. R21 is why this only ever runs on `main` — `cms/*` branches and
+# pull request previews must never reach the index.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/docs/sync-corpus.ts'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+# Ingestion jobs must not overlap: two runs against one data source race, and the loser leaves the
+# index reflecting the older corpus. Queue instead of cancelling — a cancelled sync is a retraction
+# that never happened.
+concurrency:
+  group: publish-corpus
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Every value below is published by `pulumi up` (see infra/pulumi/src/components/publish-pipeline.ts),
+  # so a fork or a clone whose stack has never been deployed skips cleanly instead of failing for a
+  # reason the contributor cannot fix. This job deliberately does not enter the `publish`
+  # environment: it has to read the variables before deciding whether there is anything to do.
+  check-configuration:
+    name: Check publish configuration
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ vars.AWS_PUBLISH_ROLE_ARN }}" ] && [ -n "${{ vars.CORPUS_BUCKET }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping the corpus sync — Pulumi has not published AWS_PUBLISH_ROLE_ARN and CORPUS_BUCKET to this repository."
+          fi
+
+  sync:
+    name: Sync the corpus
+    needs: check-configuration
+    if: needs.check-configuration.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    # The IAM trust policy names this environment in its subject condition, so a job that skips the
+    # deployment gate cannot assume the role at all.
+    environment: publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: bun install --frozen-lockfile
+
+      # Uploads changed pages, deletes remote objects with no local counterpart, then starts and
+      # polls the ingestion job. The delete half is R21: a retracted page must stop being answerable.
+      - name: Sync markdown to S3 and start ingestion
+        run: bun run corpus:sync
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          CORPUS_BUCKET: ${{ vars.CORPUS_BUCKET }}
+          CORPUS_PREFIX: ${{ vars.CORPUS_PREFIX }}
+          KNOWLEDGE_BASE_ID: ${{ vars.KNOWLEDGE_BASE_ID }}
+          DATA_SOURCE_ID: ${{ vars.DATA_SOURCE_ID }}

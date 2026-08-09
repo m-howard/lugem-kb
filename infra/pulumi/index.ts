@@ -1,43 +1,110 @@
+import * as aws from '@pulumi/aws';
+import * as github from '@pulumi/github';
 import * as pulumi from '@pulumi/pulumi';
 
-import { createCorpusBucket } from './src/corpus-bucket';
-import { createServiceImage } from './src/ecr';
-import { createService } from './src/ecs-service';
-import { createTaskRoles } from './src/iam';
-import { createKnowledgeBase } from './src/knowledge-base';
-import { createLoadBalancer } from './src/load-balancer';
+import { CmsCredential } from './src/components/cms-credential';
+import { CorpusBucket } from './src/components/corpus-bucket';
+import { CorpusRepository } from './src/components/corpus-repository';
+import { DocsKnowledgeBase } from './src/components/docs-knowledge-base';
+import { GatewayImage } from './src/components/gateway-image';
+import { GatewayIngress } from './src/components/gateway-ingress';
+import { GatewayService } from './src/components/gateway-service';
+import { PublishPipeline } from './src/components/publish-pipeline';
 import { resolveNetwork } from './src/network';
-import { readStackConfig } from './src/read-config';
+import { readGithubConfig, readStackConfig } from './src/read-config';
 
 const NAME = `lugem-kb-${pulumi.getStack()}`;
 
 const config = readStackConfig();
-const network = resolveNetwork(config);
+const githubConfig = readGithubConfig();
 
-const corpus = createCorpusBucket(NAME);
-const knowledgeBase = createKnowledgeBase(NAME, { config, corpusBucketArn: corpus.arn });
-
-const roles = createTaskRoles(NAME, {
-  config,
-  corpusBucketArn: corpus.arn,
-  knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
+/**
+ * One explicit provider rather than the ambient default: it pins the region to the value the
+ * configuration was validated against, and it is the only place default tags can be set so that
+ * every resource carries them without thirty individual `tags:` blocks.
+ */
+const awsProvider = new aws.Provider('aws', {
+  region: config.region,
+  defaultTags: {
+    tags: { Project: 'lugem-kb', Stack: pulumi.getStack(), ManagedBy: 'pulumi' },
+  },
 });
 
-const image = createServiceImage(NAME);
-const loadBalancer = createLoadBalancer(NAME, { config, network });
+const onAws: pulumi.ComponentResourceOptions = { providers: [awsProvider] };
 
-const service = createService(NAME, {
-  config,
-  network,
-  loadBalancer,
-  roles,
-  imageUri: image.imageUri,
-  corpusBucketName: corpus.name,
-  knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-});
+const network = resolveNetwork(config, { provider: awsProvider });
 
-export const siteUrl = loadBalancer.url;
-export const corpusBucketName = corpus.name;
+const corpus = new CorpusBucket(NAME, onAws);
+
+const knowledgeBase = new DocsKnowledgeBase(
+  NAME,
+  { config, corpusBucketArn: corpus.bucketArn },
+  onAws,
+);
+
+// The GitHub half is opt-in: it needs an admin token the AWS half does not, and a stack that
+// manages no repository is a supported configuration rather than a half-finished one.
+let corpusRepository: CorpusRepository | undefined;
+let publishPipeline: PublishPipeline | undefined;
+let cmsCredential: CmsCredential | undefined;
+
+if (githubConfig !== undefined) {
+  const githubProvider = new github.Provider('github', { owner: githubConfig.owner });
+  const onBoth: pulumi.ComponentResourceOptions = { providers: [awsProvider, githubProvider] };
+
+  corpusRepository = new CorpusRepository(
+    NAME,
+    { config: githubConfig },
+    { providers: [githubProvider] },
+  );
+
+  publishPipeline = new PublishPipeline(
+    NAME,
+    {
+      config,
+      githubConfig,
+      repositoryName: corpusRepository.name,
+      corpusBucketName: corpus.bucketName,
+      corpusBucketArn: corpus.bucketArn,
+      knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
+      knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+      dataSourceId: knowledgeBase.dataSourceId,
+    },
+    onBoth,
+  );
+
+  if (githubConfig.cmsApp !== undefined) {
+    cmsCredential = new CmsCredential(
+      NAME,
+      { app: githubConfig.cmsApp, repositoryName: corpusRepository.name },
+      onBoth,
+    );
+  }
+}
+
+const image = new GatewayImage(NAME, onAws);
+const ingress = new GatewayIngress(NAME, { config, network }, onAws);
+
+const service = new GatewayService(
+  NAME,
+  {
+    config,
+    network,
+    albSecurityGroupId: ingress.albSecurityGroupId,
+    targetGroupArn: ingress.targetGroupArn,
+    imageUri: image.imageUri,
+    corpusBucketName: corpus.bucketName,
+    corpusBucketArn: corpus.bucketArn,
+    knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+    knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
+    ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
+    ...(githubConfig?.cmsApp === undefined ? {} : { cmsAppId: githubConfig.cmsApp.appId }),
+  },
+  onAws,
+);
+
+export const siteUrl = ingress.url;
+export const corpusBucketName = corpus.bucketName;
 export const knowledgeBaseId = knowledgeBase.knowledgeBaseId;
 export const dataSourceId = knowledgeBase.dataSourceId;
 export const vectorBucketName = knowledgeBase.vectorBucketName;
@@ -45,3 +112,8 @@ export const ecrRepositoryUrl = image.repositoryUrl;
 export const clusterName = service.clusterName;
 export const serviceName = service.serviceName;
 export const logGroupName = service.logGroupName;
+
+// Undefined unless the GitHub half is configured. `pulumi stack output` simply omits them.
+export const corpusRepositoryFullName = corpusRepository?.fullName;
+export const publishRoleArn = publishPipeline?.roleArn;
+export const cmsAppSecretArn = cmsCredential?.secretArn;

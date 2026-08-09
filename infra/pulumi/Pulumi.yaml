@@ -21,3 +21,9 @@ template:
       description: Comma-separated private subnet IDs for the ECS tasks. Must belong to vpcId.
     lugem-kb:publicSubnetIds:
       description: Comma-separated subnet IDs for the load balancer. Must belong to vpcId.
+    lugem-kb:corpusRepository:
+      description: >-
+        Optional. owner/name of the repository backing the knowledge base. Setting it puts that
+        repository's branch rules, publish pipeline and CMS credential under Pulumi, and requires a
+        GitHub admin token. See docs/corpus-repository.md.
+      default: ''

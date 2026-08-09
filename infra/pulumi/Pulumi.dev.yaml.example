@@ -42,3 +42,42 @@ config:
 
   # Set true only if AWS has added S3 Vectors to a region newer than src/config.ts knows about.
   # lugem-kb:allowUnverifiedRegion: "true"
+
+  # --- The repository backing the knowledge base ---------------------------------------------
+  # All optional. corpusRepository is the master switch: leave it unset and this stack manages no
+  # GitHub resources at all. Setting it needs a GitHub admin token in GITHUB_TOKEN or github:token.
+  # Full guide: docs/corpus-repository.md.
+
+  # owner/name of the repository holding the markdown corpus.
+  # lugem-kb:corpusRepository: m-howard/lugem-kb
+
+  # Set this when adopting an existing repository — GitHub clears a description the repository
+  # resource does not declare.
+  # lugem-kb:corpusRepositoryDescription: Documentation that publishes itself and answers questions.
+
+  # Default main. A branch name, not a fully qualified ref.
+  # lugem-kb:corpusDefaultBranch: main
+
+  # Create a new private repository, or adopt an existing one. Mutually exclusive. Adoption is a
+  # one-time step: set corpusRepositoryImportId, run `pulumi up`, then remove the key.
+  # lugem-kb:corpusRepositoryCreate: "true"
+  # lugem-kb:corpusRepositoryImportId: lugem-kb
+
+  # Checks that must pass before merge. Defaults to the five that run on every pull request. The
+  # Infrastructure workflow's checks are paths-filtered, so requiring them strands unrelated PRs.
+  # lugem-kb:requiredStatusChecks:
+  #   - Lint
+  #   - Typecheck
+  #   - Test
+  #   - Build
+  #   - Playwright
+
+  # Reuse an account-level GitHub identity provider rather than creating one. An account holds at
+  # most one per URL, so set this if anything else in the account already uses GitHub OIDC.
+  # lugem-kb:githubOidcProviderArn: arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com
+
+  # The GitHub App the gateway authenticates as (requirements.md R2). Both numeric ids, or neither.
+  # Pulumi cannot create the app; it creates the secret its private key goes in, and you write the
+  # PEM out of band with `aws secretsmanager put-secret-value`.
+  # lugem-kb:cmsGitHubAppId: "123456"
+  # lugem-kb:cmsGitHubAppInstallationId: "78901234"

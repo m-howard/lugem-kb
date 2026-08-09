@@ -29,7 +29,11 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
-      include: ['apps/gateway/src/**/*.ts', 'infra/pulumi/src/config.ts'],
+      include: [
+        'apps/gateway/src/**/*.ts',
+        'infra/pulumi/src/config.ts',
+        'infra/pulumi/src/github-config.ts',
+      ],
       exclude: ['**/*.test.ts', 'apps/gateway/src/index.ts'],
       thresholds: {
         statements: COVERAGE_THRESHOLD,

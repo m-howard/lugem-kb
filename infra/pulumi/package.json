@@ -15,6 +15,7 @@
   "dependencies": {
     "@pulumi/aws": "7.41.0",
     "@pulumi/awsx": "3.8.0",
+    "@pulumi/github": "6.14.1",
     "@pulumi/pulumi": "3.256.0"
   }
 }

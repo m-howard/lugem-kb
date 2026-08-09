@@ -22,6 +22,10 @@ This is a Bun workspace monorepo. Every file belongs to exactly one workspace or
   `apps/gateway/src/kb/key-policy.test.ts`). Integration tests live in that workspace's own
   `tests/` folder (e.g. `apps/gateway/tests/integration/`). Only cross-cutting Playwright specs go
   in the repo-root `tests/e2e/`. NEVER create test files in the project root (`/`).
+- **Pulumi components**: every resource group is a `ComponentResource` subclass, one per file, in
+  `infra/pulumi/src/components/`. Pure, testable logic stays out of them — the split is
+  `config.ts` (pure, tested) versus `read-config.ts` (engine-bound, thin). See
+  [ADR 0010](docs/adr/0010-custom-components-for-resource-groups.md).
 - **Scripts and utilities**: ALL maintenance, debugging, generation, or experimental scripts
   (`.cjs`, `.mjs`, `.js`, `.ts`) MUST be placed strictly inside one of the `scripts/` subfolders
   (`build/`, `dev/`, `check/`, `docs/`, `ad-hoc/`). One-shot or experimental code goes under
@@ -59,9 +63,10 @@ Vitest is the only unit/integration runner; Playwright covers e2e.
 | E2E (Playwright)  | `bun run test:e2e`                                                          |
 | Coverage gate     | `bun run test:coverage` (80/80/80/80 — statements/lines/functions/branches) |
 
-The coverage gate measures `apps/gateway/src/**` and `infra/pulumi/src/config.ts` — the code that
-holds logic. Declarative Pulumi resource wiring is excluded from the denominator so the number
-means something; see [ADR 0008](docs/adr/0008-coverage-gate-on-logic-only.md).
+The coverage gate measures `apps/gateway/src/**`, `infra/pulumi/src/config.ts` and
+`infra/pulumi/src/github-config.ts` — the code that holds logic. Declarative Pulumi resource wiring
+is excluded from the denominator so the number means something; see
+[ADR 0008](docs/adr/0008-coverage-gate-on-logic-only.md).
 
 **PR rule**: If you change production code under any `src/`, you must include or update tests in
 the same PR.

@@ -19,12 +19,13 @@ on ECS Fargate, and a Pulumi program that deploys the lot into an **existing** V
 
 ## What is here
 
-| Area           | Path                          | What it does                                                     |
-| -------------- | ----------------------------- | ---------------------------------------------------------------- |
-| Site           | `apps/docs`                   | Docusaurus build. Its content root is this `docs/` tree.         |
-| Service        | `apps/gateway`                | Serves the built site plus a read-only API over the corpus.      |
-| Infrastructure | `infra/pulumi`                | ECR, ECS Fargate, ALB, S3 corpus bucket, Bedrock knowledge base. |
-| Corpus sync    | `scripts/docs/sync-corpus.ts` | Uploads markdown to S3 and triggers ingestion.                   |
+| Area           | Path                            | What it does                                                     |
+| -------------- | ------------------------------- | ---------------------------------------------------------------- |
+| Site           | `apps/docs`                     | Docusaurus build. Its content root is this `docs/` tree.         |
+| Service        | `apps/gateway`                  | Serves the built site plus a read-only API over the corpus.      |
+| Infrastructure | `infra/pulumi`                  | ECR, ECS Fargate, ALB, S3 corpus bucket, Bedrock knowledge base. |
+| Corpus sync    | `scripts/docs/sync-corpus.ts`   | Uploads markdown to S3 and triggers ingestion.                   |
+| Publish        | `.github/workflows/publish.yml` | Runs that sync on every merge, using variables Pulumi sets.      |
 
 ## One corpus, two consumers
 
@@ -37,6 +38,8 @@ actually fix.
 
 - **[Getting started](./getting-started.md)** — run the site and the service locally.
 - **[Deploying to AWS](./deploying-to-aws.md)** — prerequisites, stack config, and teardown.
+- **[The corpus repository](./corpus-repository.md)** — the branch rules and publish pipeline Pulumi
+  configures on the repository backing the knowledge base.
 - **[Architecture decision records](./adr/)** — why each piece is the way it is.
 - **[Requirements](./requirements.md)** — the product this scaffold is the first phase of.
 

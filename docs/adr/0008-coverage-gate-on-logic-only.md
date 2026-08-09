@@ -31,8 +31,8 @@ Threshold **80** on statements, lines, functions and branches.
 Measured over:
 
 - `apps/gateway/src/**/*.ts` — except `index.ts`, which is process bootstrap
-- `infra/pulumi/src/config.ts` — the stack's validation logic, and the only genuinely testable
-  part of the program
+- `infra/pulumi/src/config.ts` and `infra/pulumi/src/github-config.ts` — the stack's validation
+  logic, and the only genuinely testable part of the program
 
 Everything else in `infra/pulumi/src` is excluded: it wires resources, and the honest test for
 resource wiring is `pulumi preview`, which CI runs separately.
