@@ -32,6 +32,30 @@ function hasControlCharacter(value: string): boolean {
   return false;
 }
 
+/**
+ * Encodes a branch name for use in a URL path, one segment at a time.
+ *
+ * `encodeURI` is the obvious choice and the wrong one: it deliberately leaves `#` alone, because in
+ * a whole URL that character starts the fragment. A branch name is not a whole URL. `#` is legal in
+ * a git ref and permitted by the policy above, so `encodeURI('cms/review#1')` yields a request for
+ * `.../heads/cms/review` — a *different, real* branch. An author deleting their draft would delete
+ * somebody else's.
+ *
+ * Splitting on `/` keeps the path structure the git host expects while encoding everything else,
+ * including a literal `%` that would otherwise be read as the start of an escape.
+ *
+ * @param branch - A branch name that has already passed {@link resolveBranch}.
+ * @returns The name, safe to interpolate into a URL path.
+ *
+ * @example
+ * ```ts
+ * encodeRefPath('cms/review#1'); // → 'cms/review%231'
+ * ```
+ */
+export function encodeRefPath(branch: string): string {
+  return branch.split('/').map(encodeURIComponent).join('/');
+}
+
 export type BranchOperation = 'create' | 'update' | 'delete' | 'read';
 
 export type BranchPolicyViolation = 'empty' | 'malformed' | 'default-branch' | 'outside-prefix';

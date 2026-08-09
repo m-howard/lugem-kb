@@ -84,7 +84,7 @@ export function createCmsDependencies(cms: CmsConfig, region: string): CmsDepend
     tokens,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
-    submissions: new SubmissionService({ client, settings }),
+    submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),
     verifier: createVerifier(cms.auth, region),
     allowMergeFromCms: cms.allowMergeFromCms,
   };

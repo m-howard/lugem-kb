@@ -113,7 +113,11 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
     tokens,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
-    submissions: new SubmissionService({ client, settings }),
+    submissions: new SubmissionService({
+      client,
+      settings,
+      allowMerge: options.allowMergeFromCms ?? false,
+    }),
     verifier: createBearerVerifier({
       issuer: idp.issuer,
       audience: idp.audience,

@@ -1,3 +1,4 @@
+import { encodeRefPath } from '../git/branch-policy';
 import { type GitHubClient } from '../git/github-client';
 
 /** Where a branch points, and the tree it points at. */
@@ -42,7 +43,7 @@ export async function readBranchSnapshot(
   branch: string,
 ): Promise<BranchSnapshot | undefined> {
   const ref = await client.getOrUndefined<RefResponse>(
-    client.path(`/git/ref/heads/${encodeURI(branch)}`),
+    client.path(`/git/ref/heads/${encodeRefPath(branch)}`),
   );
   const commitSha = ref?.object?.sha;
   if (commitSha === undefined) {

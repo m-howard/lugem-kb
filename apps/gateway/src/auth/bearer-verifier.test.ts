@@ -156,6 +156,53 @@ describe('createBearerVerifier', () => {
       expect(requested).toEqual(['https://idp.test/realm/.well-known/openid-configuration']);
     });
 
+    // Caching the rejected promise would make one blip permanent: every author refused until the
+    // process restarts, long after the provider came back. No `keyResolver` here on purpose, so
+    // discovery genuinely runs and the retry is observable in the request count.
+    it('retries discovery after a failure rather than caching it', async () => {
+      const idp = await fakeIdp();
+      const discovered: string[] = [];
+      const verifier = createBearerVerifier({
+        issuer: idp.issuer,
+        audience: idp.audience,
+        claimNames: CLAIM_NAMES,
+        fetch: ((input: string | URL | Request) => {
+          discovered.push(requestUrl(input));
+          return Promise.resolve(
+            discovered.length === 1
+              ? new Response('down', { status: 503 })
+              : Response.json({ jwks_uri: 'https://idp.test/keys' }),
+          );
+        }) as typeof globalThis.fetch,
+      });
+
+      const token = `Bearer ${await idp.sign(SUBJECT)}`;
+      await verifier.verify(headers({ authorization: token }));
+      await verifier.verify(headers({ authorization: token }));
+
+      expect(discovered).toHaveLength(2);
+    });
+
+    it('caches a successful discovery, so it is fetched once', async () => {
+      const idp = await fakeIdp();
+      const discovered: string[] = [];
+      const verifier = createBearerVerifier({
+        issuer: idp.issuer,
+        audience: idp.audience,
+        claimNames: CLAIM_NAMES,
+        fetch: ((input: string | URL | Request) => {
+          discovered.push(requestUrl(input));
+          return Promise.resolve(Response.json({ jwks_uri: 'https://idp.test/keys' }));
+        }) as typeof globalThis.fetch,
+      });
+
+      const token = `Bearer ${await idp.sign(SUBJECT)}`;
+      await verifier.verify(headers({ authorization: token }));
+      await verifier.verify(headers({ authorization: token }));
+
+      expect(discovered).toHaveLength(1);
+    });
+
     it('refuses rather than throwing when discovery fails', async () => {
       const idp = await fakeIdp();
       const verifier = createBearerVerifier({

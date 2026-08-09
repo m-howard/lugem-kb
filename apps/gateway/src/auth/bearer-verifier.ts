@@ -67,10 +67,16 @@ function bearerToken(headers: HeaderLookup): string | undefined {
 }
 
 /**
- * Discovers the issuer's key set, once.
+ * Discovers the issuer's key set, once — but caches only success.
  *
  * Discovery is lazy rather than done at start-up on purpose: an identity provider that is briefly
  * unreachable should fail readiness, not stop the process from booting at all.
+ *
+ * Which makes clearing the cache on failure the other half of that decision. Memoising the
+ * rejected promise would turn one unlucky moment — the first author of the day arriving during a
+ * provider blip — into every author being refused until someone restarts the service, long after
+ * the provider recovered. `createAppKeyLoader` in `git/app-key.ts` takes the same care, for the
+ * same reason.
  */
 function discoverKeyResolver(options: BearerVerifierOptions): () => Promise<JWTVerifyGetKey> {
   const request = options.fetch ?? globalThis.fetch;
@@ -79,18 +85,23 @@ function discoverKeyResolver(options: BearerVerifierOptions): () => Promise<JWTV
   return () => {
     resolver ??= (async () => {
       const issuer = options.issuer.replace(/\/+$/, '');
-      const response = await request(`${issuer}/.well-known/openid-configuration`);
-      if (!response.ok) {
-        throw new Error(
-          `OIDC discovery for ${issuer} returned ${String(response.status)}. ` +
-            'Check AUTH_ISSUER_URL, or configure the key set directly.',
-        );
+      try {
+        const response = await request(`${issuer}/.well-known/openid-configuration`);
+        if (!response.ok) {
+          throw new Error(
+            `OIDC discovery for ${issuer} returned ${String(response.status)}. ` +
+              'Check AUTH_ISSUER_URL, or configure the key set directly.',
+          );
+        }
+        const document = (await response.json()) as { jwks_uri?: unknown };
+        if (typeof document.jwks_uri !== 'string') {
+          throw new Error(`OIDC discovery for ${issuer} returned no jwks_uri.`);
+        }
+        return createRemoteJWKSet(new URL(document.jwks_uri));
+      } catch (error) {
+        resolver = undefined;
+        throw error;
       }
-      const document = (await response.json()) as { jwks_uri?: unknown };
-      if (typeof document.jwks_uri !== 'string') {
-        throw new Error(`OIDC discovery for ${issuer} returned no jwks_uri.`);
-      }
-      return createRemoteJWKSet(new URL(document.jwks_uri));
     })();
     return resolver;
   };

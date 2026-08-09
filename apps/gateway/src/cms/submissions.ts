@@ -14,6 +14,8 @@ export interface SubmitRequest {
 export interface Submission {
   readonly number: number;
   readonly branch: string;
+  /** Where this submission would land. Carried so a merge can be refused before it is attempted. */
+  readonly base: string;
   readonly title: string;
   readonly state: string;
   readonly url: string;
@@ -29,17 +31,25 @@ interface PullResponse {
   readonly mergeable?: boolean | null;
   readonly html_url?: string;
   readonly head?: { readonly ref?: string };
+  readonly base?: { readonly ref?: string };
 }
 
 export interface SubmissionServiceOptions {
   readonly client: GitHubClient;
   readonly settings: CmsSettings;
+  /**
+   * requirements.md R7 and R16. Checked here as well as in the endpoint allowlist, on purpose:
+   * this one refuses before any upstream call, and the allowlist still refuses a caller that
+   * reaches the client some other way. Neither is redundant — they guard different mistakes.
+   */
+  readonly allowMerge: boolean;
 }
 
 function toSubmission(pull: PullResponse): Submission {
   return {
     number: pull.number ?? 0,
     branch: pull.head?.ref ?? '',
+    base: pull.base?.ref ?? '',
     title: pull.title ?? '',
     state: pull.merged === true ? 'merged' : (pull.state ?? 'unknown'),
     url: pull.html_url ?? '',
@@ -55,17 +65,19 @@ function toSubmission(pull: PullResponse): Submission {
  * the default branch are refused" (R4) holds because there is no way to express one — not because
  * a check rejects it.
  *
- * Merging is not implemented here on purpose. The endpoint exists so the CMS gets an honest 403
- * rather than a 404, and the refusal lives in the endpoint allowlist where the
- * `POLICY_ALLOW_MERGE_FROM_CMS` flag can lift it later (R16) without new code paths.
+ * Merging is refused unless `POLICY_ALLOW_MERGE_FROM_CMS` is set, and even then only for the
+ * service's own submissions — see {@link merge}. The flag is what R16 anticipates: moving approval
+ * into the CMS becomes configuration plus a UI, not a rewrite.
  */
 export class SubmissionService {
   readonly #client: GitHubClient;
   readonly #settings: CmsSettings;
+  readonly #allowMerge: boolean;
 
   constructor(options: SubmissionServiceOptions) {
     this.#client = options.client;
     this.#settings = options.settings;
+    this.#allowMerge = options.allowMerge;
   }
 
   /**
@@ -131,17 +143,61 @@ export class SubmissionService {
   }
 
   /**
-   * Merges a submission — refused by the endpoint allowlist unless the policy flag is set.
+   * Merges a submission, once it is established that the submission is one of ours.
+   *
+   * The endpoint allowlist cannot make this decision. `PUT /pulls/42/merge` is a well-formed,
+   * permitted call whatever 42 turns out to be, so with `POLICY_ALLOW_MERGE_FROM_CMS` set an
+   * author could otherwise merge any open pull request in the repository — a colleague's release
+   * branch into the default branch, reviewed by nobody. Confinement here has to look at the pull
+   * request rather than at the URL, which means reading it first.
+   *
+   * Both refs are checked, because either one alone would leave a hole: a CMS head could target a
+   * protected branch that is not the default, and a non-CMS head could target the default branch.
    *
    * @param number - Pull request number.
-   * @returns The submission's state after the attempt.
+   * @returns The submission's state after the merge.
+   * @throws {CmsPolicyError} When the pull request is not a CMS submission. Nothing is merged.
    */
   async merge(number: number): Promise<Submission> {
+    if (!this.#allowMerge) {
+      throw new CmsPolicyError(
+        'merge-disabled',
+        'Merging happens in the git host, where branch protection can require an owner approval. ' +
+          'Set POLICY_ALLOW_MERGE_FROM_CMS only once that review moves here.',
+      );
+    }
+
+    const submission = await this.read(number);
+    this.#requireOwnSubmission(submission);
+
     await this.#client.request('PUT', this.#client.path(`/pulls/${String(number)}/merge`), {
       merge_method: 'squash',
     });
 
     return this.read(number);
+  }
+
+  #requireOwnSubmission(submission: Submission): void {
+    const head = resolveBranch(submission.branch, {
+      prefix: this.#settings.branchPrefix,
+      defaultBranch: this.#settings.defaultBranch,
+      operation: 'update',
+    });
+    if (!head.ok) {
+      throw new CmsPolicyError(
+        'foreign-submission',
+        `Pull request ${String(submission.number)} is from "${submission.branch}", which the CMS ` +
+          'does not own. Merge it in the git host.',
+      );
+    }
+
+    if (submission.base !== this.#settings.defaultBranch) {
+      throw new CmsPolicyError(
+        'foreign-base',
+        `Pull request ${String(submission.number)} targets "${submission.base}", not the default ` +
+          `branch "${this.#settings.defaultBranch}".`,
+      );
+    }
   }
 
   #resolveDraftBranch(branch: string): string {

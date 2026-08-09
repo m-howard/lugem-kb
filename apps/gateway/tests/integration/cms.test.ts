@@ -369,6 +369,29 @@ describe('the editorial API', () => {
       expect(cms.host.paths()).toEqual([`${REPO}/git/refs/heads/cms/pricing`]);
     });
 
+    // `encodeURI` left `#` alone, so this used to address `cms/review` — a different draft, quite
+    // possibly someone else's, and deleted rather than the one asked for.
+    it('discards the draft that was named, not a truncation of it', async () => {
+      const cms = await buildCmsTestApp({
+        routes: [
+          {
+            method: 'DELETE',
+            path: `${REPO}/git/refs/heads/cms/review%231`,
+            status: 204,
+            respond: {},
+          },
+        ],
+      });
+
+      const response = await cms.app.request('/v1/cms/drafts/cms/review%231', {
+        method: 'DELETE',
+        headers: await cms.authorize(),
+      });
+
+      expect(response.status).toBe(204);
+      expect(cms.host.paths()).toEqual([`${REPO}/git/refs/heads/cms/review%231`]);
+    });
+
     it('lists submissions for one draft branch', async () => {
       const cms = await buildCmsTestApp({
         routes: [
@@ -435,8 +458,12 @@ describe('the editorial API', () => {
       const cms = await buildCmsTestApp({
         allowMergeFromCms: true,
         routes: [
+          {
+            method: 'GET',
+            path: `${REPO}/pulls/7`,
+            respond: { number: 7, state: 'open', head: { ref: 'cms/pricing' }, base: { ref: 'main' } },
+          },
           { method: 'PUT', path: `${REPO}/pulls/7/merge`, status: 200, respond: { merged: true } },
-          { method: 'GET', path: `${REPO}/pulls/7`, respond: { number: 7, merged: true } },
         ],
       });
 
@@ -446,7 +473,32 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ state: 'merged' });
+    });
+
+    // The endpoint allowlist cannot catch these: `PUT /pulls/42/merge` is a permitted call whatever
+    // 42 turns out to be. With the flag on, the only thing standing between an author and a
+    // colleague's release branch is this check.
+    describe('with the merge policy enabled, still refuses', () => {
+      it.each([
+        ['a pull request from a branch the CMS does not own', { ref: 'feature/pricing' }, { ref: 'main' }],
+        ['a pull request targeting something other than the default branch', { ref: 'cms/pricing' }, { ref: 'production' }],
+      ])('%s', async (_case, head, base) => {
+        const cms = await buildCmsTestApp({
+          allowMergeFromCms: true,
+          routes: [
+            { method: 'GET', path: `${REPO}/pulls/9`, respond: { number: 9, state: 'open', head, base } },
+          ],
+        });
+
+        const response = await cms.app.request('/v1/cms/submissions/9/merge', {
+          method: 'POST',
+          headers: await cms.authorize(),
+        });
+
+        expect(response.status).toBe(403);
+        // It read the pull request to decide, and then stopped. No merge was attempted.
+        expect(cms.host.paths()).toEqual([`${REPO}/pulls/9`]);
+      });
     });
   });
 

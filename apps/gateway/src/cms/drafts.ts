@@ -3,7 +3,7 @@ import { type CmsSettings } from './settings';
 import { type BranchSnapshot, readBranchSnapshot } from './tree';
 import { type Identity } from '../auth/claims';
 import { buildCommitPayload } from '../git/attribution';
-import { type BranchOperation, resolveBranch } from '../git/branch-policy';
+import { type BranchOperation, encodeRefPath, resolveBranch } from '../git/branch-policy';
 import { type GitHubClient } from '../git/github-client';
 import { resolveWritePaths } from '../git/path-policy';
 
@@ -106,7 +106,7 @@ export class DraftService {
     const resolved = this.#resolveBranch(branch, 'delete');
     await this.#client.request(
       'DELETE',
-      this.#client.path(`/git/refs/heads/${encodeURI(resolved)}`),
+      this.#client.path(`/git/refs/heads/${encodeRefPath(resolved)}`),
     );
   }
 
@@ -185,7 +185,7 @@ export class DraftService {
       return;
     }
 
-    await this.#client.request('PATCH', this.#client.path(`/git/refs/heads/${encodeURI(branch)}`), {
+    await this.#client.request('PATCH', this.#client.path(`/git/refs/heads/${encodeRefPath(branch)}`), {
       sha,
       force: false,
     });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type BranchOperation, type BranchPolicyViolation, resolveBranch } from './branch-policy';
+import {
+  type BranchOperation,
+  type BranchPolicyViolation,
+  encodeRefPath,
+  resolveBranch,
+} from './branch-policy';
 
 const OPTIONS = { prefix: 'cms/', defaultBranch: 'main' } as const;
 const WRITES: readonly BranchOperation[] = ['create', 'update', 'delete'];
@@ -99,5 +104,36 @@ describe('resolveBranch', () => {
 
     expect(resolveBranch('trunk', options)).toMatchObject({ reason: 'default-branch' });
     expect(resolveBranch('main', options)).toMatchObject({ reason: 'outside-prefix' });
+  });
+});
+
+describe('encodeRefPath', () => {
+  it('keeps the path structure the git host expects', () => {
+    expect(encodeRefPath('cms/pricing')).toBe('cms/pricing');
+    expect(encodeRefPath('cms/2026/q1-pricing')).toBe('cms/2026/q1-pricing');
+  });
+
+  // The bug this exists for. `encodeURI` leaves `#` alone because in a whole URL it opens the
+  // fragment — so `cms/review#1` addressed `cms/review`, a different and quite possibly real
+  // branch. Deleting a draft would have deleted somebody else's.
+  it('escapes a hash, which would otherwise truncate the ref', () => {
+    expect(encodeRefPath('cms/review#1')).toBe('cms/review%231');
+    expect(encodeURI('cms/review#1')).toBe('cms/review#1');
+  });
+
+  it.each([
+    ['a space', 'cms/my draft', 'cms/my%20draft'],
+    ['a percent, which would read as an escape', 'cms/50%', 'cms/50%25'],
+    ['a question mark', 'cms/why?', 'cms/why%3F'],
+    ['an ampersand', 'cms/a&b', 'cms/a%26b'],
+  ])('escapes %s', (_case, branch, expected) => {
+    expect(encodeRefPath(branch)).toBe(expected);
+  });
+
+  it('produces a URL whose path still contains the whole branch', () => {
+    const url = new URL(`https://api.github.test/repos/o/r/git/refs/heads/${encodeRefPath('cms/review#1')}`);
+
+    expect(url.pathname).toBe('/repos/o/r/git/refs/heads/cms/review%231');
+    expect(url.hash).toBe('');
   });
 });
