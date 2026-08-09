@@ -3,8 +3,9 @@
 #
 # Prerequisites this stack does NOT create for you:
 #   1. Bedrock model access for the embedding model, granted in aws:region.
-#   2. A region where S3 Vectors is available (see S3_VECTORS_REGIONS in src/config.ts).
-# Both are checked or documented in docs/deploying-to-aws.md.
+#   2. Bedrock model access for the answer model, granted separately in the same region.
+#   3. A region where S3 Vectors is available (see S3_VECTORS_REGIONS in src/config.ts).
+# All are checked or documented in docs/deploying-to-aws.md.
 
 config:
   aws:region: us-east-1
@@ -27,6 +28,21 @@ config:
   # internal (default) or internet-facing.
   lugem-kb:albScheme: internal
 
+  # Required. The Bedrock model that writes answers for POST /v1/ask. There is no default: a model
+  # ID names a billed resource your account must have been granted access to, and the task role is
+  # scoped to exactly this one. Verify the ID against the target region before setting it:
+  #   aws bedrock list-foundation-models --region <aws:region>
+  #   aws bedrock list-inference-profiles --region <aws:region>
+  lugem-kb:answerModelId: anthropic.replace-me-v1:0
+
+  # Only needed when answerModelId is a cross-region inference profile (a us. / eu. / apac. prefix).
+  # Bedrock authorises against the profile ARN *and* the underlying foundation model in every
+  # region the profile can route to, so each of those regions must be listed here. Granting the
+  # profile alone yields an AccessDenied naming the profile, which is a misleading place to start.
+  # lugem-kb:answerModelRegions:
+  #   - us-east-1
+  #   - us-west-2
+
   # Optional. With a certificate the listener is HTTPS and HTTP redirects to it; without one the
   # listener is plain HTTP. Set this for anything beyond a demo.
   # lugem-kb:certificateArn: arn:aws:acm:us-east-1:111122223333:certificate/...
@@ -39,6 +55,13 @@ config:
   # lugem-kb:containerPort: "3000"
   # lugem-kb:corpusPrefix: docs/
   # lugem-kb:embeddingModelId: amazon.titan-embed-text-v2:0
+  # lugem-kb:answerMaxTokens: "700"
+  # lugem-kb:askRateLimitPerMinute: "20"
+
+  # The relevance score a passage must clear to be cited — and, below it, the point at which the
+  # answer model is not called at all. Raise it to make the assistant decline more readily; lower
+  # it to make it answer from weaker matches. Exposed here because it is the gate, not a detail.
+  # lugem-kb:retrievalScoreThreshold: "0.4"
 
   # Set true only if AWS has added S3 Vectors to a region newer than src/config.ts knows about.
   # lugem-kb:allowUnverifiedRegion: "true"

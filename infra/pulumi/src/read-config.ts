@@ -31,6 +31,11 @@ export function readStackConfig(): StackConfig {
     corpusPrefix: config.get('corpusPrefix'),
     containerPort: config.getNumber('containerPort'),
     allowUnverifiedRegion: config.getBoolean('allowUnverifiedRegion'),
+    answerModelId: config.get('answerModelId'),
+    answerModelRegions: config.getObject<string[]>('answerModelRegions'),
+    answerMaxTokens: config.getNumber('answerMaxTokens'),
+    askRateLimitPerMinute: config.getNumber('askRateLimitPerMinute'),
+    retrievalScoreThreshold: config.getNumber('retrievalScoreThreshold'),
   });
 }
 

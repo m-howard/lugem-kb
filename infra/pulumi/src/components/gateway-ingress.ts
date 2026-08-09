@@ -13,6 +13,19 @@ const HEALTHY_THRESHOLD = 2;
 const UNHEALTHY_THRESHOLD = 3;
 const DEREGISTRATION_DELAY_SECONDS = 30;
 
+/**
+ * Raised from the AWS default of 60 seconds for the streamed answers on `/v1/ask`.
+ *
+ * The timer resets on every byte, so a streaming answer keeps the connection alive once it starts
+ * — but the gap before the model's first token is dead air, and 60 seconds is not a comfortable
+ * margin for a cold model under load. The route sends its citations frame before generation
+ * begins, which is the primary mitigation; this is the second one.
+ *
+ * Note the interaction with `DEREGISTRATION_DELAY_SECONDS`: a deploy still cuts an answer that is
+ * mid-stream after 30 seconds. That is accepted for a docs assistant — the reader retries.
+ */
+const IDLE_TIMEOUT_SECONDS = 120;
+
 export interface GatewayIngressArgs {
   readonly config: StackConfig;
   readonly network: Network;
@@ -75,6 +88,7 @@ export class GatewayIngress extends pulumi.ComponentResource {
         internal: config.albScheme === 'internal',
         securityGroups: [albSecurityGroup.id],
         subnets: [...network.publicSubnetIds],
+        idleTimeout: IDLE_TIMEOUT_SECONDS,
       },
       reparentedChild(this),
     );
