@@ -1,0 +1,23 @@
+name: lugem-kb
+description: ECS Fargate service and Bedrock knowledge base for the Lugem documentation corpus, deployed into an existing VPC.
+
+# Bun executes the TypeScript program directly — no ts-node, no tsconfig plumbing, no build step.
+# Requires Pulumi CLI >= 3.226.0. See docs/adr/0004-pulumi-with-bun-runtime.md.
+runtime: bun
+
+main: index.ts
+
+config:
+  aws:region:
+    description: AWS region. Must be one where both Bedrock knowledge bases and S3 Vectors are available.
+    default: us-east-1
+
+template:
+  description: Deploys the Lugem knowledge base into an existing VPC.
+  config:
+    lugem-kb:vpcId:
+      description: ID of the existing VPC to deploy into. Nothing in this stack creates a VPC.
+    lugem-kb:privateSubnetIds:
+      description: Comma-separated private subnet IDs for the ECS tasks. Must belong to vpcId.
+    lugem-kb:publicSubnetIds:
+      description: Comma-separated subnet IDs for the load balancer. Must belong to vpcId.
