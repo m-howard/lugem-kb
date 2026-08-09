@@ -59,6 +59,16 @@ cp .env.example .env   # fill in CORPUS_BUCKET, KNOWLEDGE_BASE_ID and ANSWER_MOD
 bun run dev
 ```
 
+No AWS account yet? Run the whole thing — site and API, one process, one port — with AWS stubbed:
+
+```bash
+bun run docs:build
+bun run scripts/dev/serve-e2e.ts   # http://127.0.0.1:4173
+```
+
+See [Getting started](docs/getting-started.md#working-on-the-ask-widget) for what's stubbed and
+the hot-reload alternative.
+
 Deploying needs the [Pulumi CLI](https://www.pulumi.com/docs/install/) **3.226.0+** — the `bun`
 runtime landed in that release. See **[Deploying to AWS](docs/deploying-to-aws.md)** for the three
 AWS account prerequisites before you run it.
