@@ -1,0 +1,84 @@
+name: Infrastructure
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'apps/gateway/Dockerfile'
+      - '.github/workflows/infra.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: infra-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  # The preview needs a Pulumi token and AWS credentials, which forks and freshly cloned
+  # repositories do not have. Skipping cleanly keeps those green instead of failing for a reason
+  # the contributor cannot fix. `configured` is computed in a step because `secrets` is not
+  # available in job-level `if`.
+  check-credentials:
+    name: Check credentials
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.PULUMI_ACCESS_TOKEN }}" ] && [ -n "${{ secrets.AWS_ROLE_ARN }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping pulumi preview — PULUMI_ACCESS_TOKEN and AWS_ROLE_ARN are not configured for this repository."
+          fi
+
+  preview:
+    name: Pulumi preview
+    needs: check-credentials
+    if: needs.check-credentials.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      # runtime: bun requires Pulumi CLI 3.226.0 or newer.
+      # See docs/adr/0004-pulumi-with-bun-runtime.md.
+      - uses: pulumi/actions@v6
+        with:
+          pulumi-version: '>=3.226.0'
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Preview
+        uses: pulumi/actions@v6
+        with:
+          command: preview
+          stack-name: ${{ vars.PULUMI_STACK || 'dev' }}
+          work-dir: infra/pulumi
+          comment-on-pr: true
+        env:
+          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+
+  # Stack validation is pure and needs no credentials, so it runs everywhere — including forks.
+  # It is what catches a missing vpcId or an S3-Vectors-unsupported region before a preview would.
+  validate-config:
+    name: Validate stack configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run vitest run infra/pulumi/src/config.test.ts
