@@ -1,7 +1,7 @@
 import * as aws from '@pulumi/aws';
 import * as pulumi from '@pulumi/pulumi';
 
-import { type StackConfig } from '../config';
+import { answerModelArns, type StackConfig } from '../config';
 import { type Network } from '../network';
 import { reparentedChild } from './child-options';
 
@@ -29,6 +29,14 @@ export interface GatewayServiceArgs {
   readonly corpusBucketArn: pulumi.Output<string>;
   readonly knowledgeBaseId: pulumi.Output<string>;
   readonly knowledgeBaseArn: pulumi.Output<string>;
+  /**
+   * The deploying account, for the answer model's inference-profile ARN.
+   *
+   * Resolved in `index.ts` against the explicit provider rather than looked up here: a bare
+   * `getCallerIdentityOutput()` inside this file would run against the ambient default provider,
+   * which is the same trap `network.ts` documents for its own lookups.
+   */
+  readonly accountId: pulumi.Output<string>;
   /** ARN of the Secrets Manager secret holding the CMS GitHub App private key — requirements.md R2. */
   readonly cmsSecretArn?: pulumi.Output<string> | undefined;
   readonly cmsAppId?: string | undefined;
@@ -225,6 +233,10 @@ export class GatewayService extends pulumi.ComponentResource {
           { name: 'CORPUS_PREFIX', value: config.corpusPrefix },
           { name: 'KNOWLEDGE_BASE_ID', value: knowledgeBaseId },
           { name: 'SITE_ROOT', value: '/app/site' },
+          { name: 'ANSWER_MODEL_ID', value: config.answerModelId },
+          { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
+          { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
+          { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
         ];
 
         if (cmsSecretArn !== '') {
@@ -285,8 +297,13 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
   const { config } = args;
 
   return pulumi
-    .all([args.corpusBucketArn, args.knowledgeBaseArn, args.cmsSecretArn ?? pulumi.output('')])
-    .apply(([bucketArn, knowledgeBaseArn, cmsSecretArn]) => {
+    .all([
+      args.corpusBucketArn,
+      args.knowledgeBaseArn,
+      args.accountId,
+      args.cmsSecretArn ?? pulumi.output(''),
+    ])
+    .apply(([bucketArn, knowledgeBaseArn, accountId, cmsSecretArn]) => {
       const statements: PolicyStatement[] = [
         {
           Sid: 'ListCorpusPrefixOnly',
@@ -306,6 +323,16 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
           Effect: 'Allow',
           Action: ['bedrock:Retrieve'],
           Resource: [knowledgeBaseArn],
+        },
+        // Generation, granted separately from retrieval and scoped to the single configured
+        // model. Retrieval decides whether this is used at all: a question the corpus does not
+        // cover never reaches the model. See
+        // docs/adr/0012-grounded-generation-behind-retrieval.md.
+        {
+          Sid: 'GenerateAnswersWithOneModel',
+          Effect: 'Allow',
+          Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+          Resource: answerModelArns(config, accountId),
         },
       ];
 

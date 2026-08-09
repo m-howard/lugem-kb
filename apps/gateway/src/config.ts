@@ -5,6 +5,14 @@ const DEFAULT_LOG_LEVEL = 'info';
 const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.4;
 const MAX_PORT = 65_535;
 
+/** Four sentences of grounded prose. Enough to answer, short enough that nobody skims past it. */
+const DEFAULT_ANSWER_MAX_TOKENS = 700;
+const MAX_ANSWER_MAX_TOKENS = 4096;
+
+/** Per client, per minute. A cost guard on an endpoint that bills per question — see rate-limit.ts. */
+const DEFAULT_ASK_RATE_LIMIT_PER_MINUTE = 20;
+const MAX_ASK_RATE_LIMIT_PER_MINUTE = 10_000;
+
 const configSchema = z.object({
   port: z.coerce.number().int().positive().max(MAX_PORT).default(DEFAULT_PORT),
   awsRegion: z.string().min(1),
@@ -18,6 +26,22 @@ const configSchema = z.object({
     .min(0)
     .max(1)
     .default(DEFAULT_RETRIEVAL_SCORE_THRESHOLD),
+  // Required, with no default. A model ID names a resource the account must have been granted
+  // access to; guessing one would let a task boot, pass /healthz, join the target group, and then
+  // fail every question with AccessDeniedException — the exact outcome ADR 0009 exists to avoid.
+  answerModelId: z.string().min(1),
+  answerMaxTokens: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MAX_ANSWER_MAX_TOKENS)
+    .default(DEFAULT_ANSWER_MAX_TOKENS),
+  askRateLimitPerMinute: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(MAX_ASK_RATE_LIMIT_PER_MINUTE)
+    .default(DEFAULT_ASK_RATE_LIMIT_PER_MINUTE),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -47,6 +71,9 @@ const ENV_KEYS = {
   siteRoot: 'SITE_ROOT',
   logLevel: 'LOG_LEVEL',
   retrievalScoreThreshold: 'RETRIEVAL_SCORE_THRESHOLD',
+  answerModelId: 'ANSWER_MODEL_ID',
+  answerMaxTokens: 'ANSWER_MAX_TOKENS',
+  askRateLimitPerMinute: 'ASK_RATE_LIMIT_PER_MINUTE',
 } as const satisfies Record<keyof Config, string>;
 
 /**
@@ -75,6 +102,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     siteRoot: env[ENV_KEYS.siteRoot],
     logLevel: env[ENV_KEYS.logLevel],
     retrievalScoreThreshold: env[ENV_KEYS.retrievalScoreThreshold],
+    answerModelId: env[ENV_KEYS.answerModelId],
+    answerMaxTokens: env[ENV_KEYS.answerMaxTokens],
+    askRateLimitPerMinute: env[ENV_KEYS.askRateLimitPerMinute],
   });
 
   if (result.success) {

@@ -38,7 +38,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --build --force && tsc --noEmit -p tsconfig.tools.json",
+    "typecheck": "tsc --build --force && tsc --noEmit -p tsconfig.tools.json && bun run docs:typecheck",
+    "docs:typecheck": "bun run --filter '@lugem/docs' typecheck",
     "infra:preview": "bun run --filter '@lugem/infra' preview",
     "infra:up": "bun run --filter '@lugem/infra' up",
     "infra:destroy": "bun run --filter '@lugem/infra' destroy"
@@ -46,6 +47,7 @@
   "devDependencies": {
     "@aws-sdk/client-bedrock-agent": "3.1106.0",
     "@aws-sdk/client-bedrock-agent-runtime": "3.1106.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1106.0",
     "@aws-sdk/client-s3": "3.1106.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.62.1",

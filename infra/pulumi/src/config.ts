@@ -29,6 +29,15 @@ export const EMBEDDING_DIMENSIONS: Readonly<Record<string, number>> = {
   'cohere.embed-multilingual-v3': 1024,
 };
 
+/**
+ * Geo prefixes marking a cross-region inference profile rather than a plain foundation model.
+ *
+ * The distinction is not cosmetic: a profile needs its own ARN in the task policy *and* the
+ * underlying foundation-model ARN in every region it can route to. Granting only the profile
+ * produces an AccessDenied naming the profile, which sends an operator to the wrong console page.
+ */
+const INFERENCE_PROFILE_PREFIXES = ['us.', 'eu.', 'apac.'] as const;
+
 const DEFAULT_EMBEDDING_MODEL = 'amazon.titan-embed-text-v2:0';
 const DEFAULT_CORPUS_PREFIX = 'docs/';
 const DEFAULT_DESIRED_COUNT = 1;
@@ -36,6 +45,11 @@ const DEFAULT_CPU = 512;
 const DEFAULT_MEMORY = 1024;
 const DEFAULT_LOG_RETENTION_DAYS = 30;
 const DEFAULT_CONTAINER_PORT = 3000;
+const DEFAULT_ANSWER_MAX_TOKENS = 700;
+const DEFAULT_ASK_RATE_LIMIT_PER_MINUTE = 20;
+const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.4;
+const MIN_SCORE = 0;
+const MAX_SCORE = 1;
 
 /** Raw, unvalidated values as they arrive from `pulumi.Config`. */
 export interface StackConfigInput {
@@ -53,6 +67,11 @@ export interface StackConfigInput {
   readonly corpusPrefix?: string | undefined;
   readonly containerPort?: number | undefined;
   readonly allowUnverifiedRegion?: boolean | undefined;
+  readonly answerModelId?: string | undefined;
+  readonly answerModelRegions?: readonly string[] | undefined;
+  readonly answerMaxTokens?: number | undefined;
+  readonly askRateLimitPerMinute?: number | undefined;
+  readonly retrievalScoreThreshold?: number | undefined;
 }
 
 export interface StackConfig {
@@ -70,6 +89,17 @@ export interface StackConfig {
   readonly embeddingDimensions: number;
   readonly corpusPrefix: string;
   readonly containerPort: number;
+  /** Bedrock model that writes answers. Required — there is no safe default for a billed resource. */
+  readonly answerModelId: string;
+  /** True when {@link answerModelId} is a cross-region inference profile rather than a plain model. */
+  readonly answerModelIsInferenceProfile: boolean;
+  /** {@link answerModelId} with any geo prefix stripped, for building foundation-model ARNs. */
+  readonly answerModelBaseId: string;
+  /** Regions a cross-region profile may route to. Each needs its own foundation-model ARN granted. */
+  readonly answerModelRegions: readonly string[];
+  readonly answerMaxTokens: number;
+  readonly askRateLimitPerMinute: number;
+  readonly retrievalScoreThreshold: number;
 }
 
 /**
@@ -127,6 +157,93 @@ function resolveEmbedding(modelId: string): number {
   return dimensions;
 }
 
+function requireInRange(value: number, key: string, bounds: readonly [number, number]): number {
+  const [low, high] = bounds;
+  if (!Number.isFinite(value) || value < low || value > high) {
+    return raise(key, `must be between ${String(low)} and ${String(high)}, got ${String(value)}`);
+  }
+  return value;
+}
+
+function requirePositiveInteger(value: number, key: string): number {
+  if (!Number.isInteger(value) || value <= 0) {
+    return raise(key, `must be a positive whole number, got ${String(value)}`);
+  }
+  return value;
+}
+
+/**
+ * Resolves the answer model into everything the task policy needs to name it.
+ *
+ * Unlike {@link resolveEmbedding} this does not check the ID against a known list. The set of
+ * text-generation models is large and changes often, and refusing an unlisted one would mean
+ * editing this file every time AWS ships a model. A wrong ID fails loudly at the first question
+ * with a ValidationException naming it, which is a good enough signal — whereas a wrong embedding
+ * dimension fails ingestion silently, which is why that one is enumerated.
+ */
+function resolveAnswerModel(
+  input: StackConfigInput,
+  region: string,
+): Pick<
+  StackConfig,
+  'answerModelId' | 'answerModelIsInferenceProfile' | 'answerModelBaseId' | 'answerModelRegions'
+> {
+  const answerModelId = requireNonEmpty(input.answerModelId, 'answerModelId');
+  const prefix = INFERENCE_PROFILE_PREFIXES.find((candidate) =>
+    answerModelId.startsWith(candidate),
+  );
+  const regions = (input.answerModelRegions ?? [region]).map((id) => id.trim()).filter(Boolean);
+
+  if (regions.length === 0) {
+    return raise('answerModelRegions', 'must list at least one region when set');
+  }
+
+  return {
+    answerModelId,
+    answerModelIsInferenceProfile: prefix !== undefined,
+    answerModelBaseId: prefix === undefined ? answerModelId : answerModelId.slice(prefix.length),
+    answerModelRegions: regions,
+  };
+}
+
+/**
+ * Every ARN the task role must be granted to generate an answer.
+ *
+ * A plain foundation model is one ARN. A cross-region inference profile is the profile's own ARN
+ * *plus* the underlying foundation model in every region the profile can route to — Bedrock
+ * authorises against both, and granting only the profile yields an AccessDenied naming the
+ * profile, which sends an operator looking in the wrong place entirely.
+ *
+ * Lives here rather than in the component that consumes it because it is pure, and because this
+ * is the shape most likely to be wrong in a way nothing catches until the first question fails in
+ * production. Resource wiring is untestable by design (ADR 0008); this is not wiring.
+ *
+ * Still no wildcards: one model, named regions.
+ *
+ * @param config - Validated stack configuration, for the model identity and the region.
+ * @param accountId - The deploying account, needed only for an inference-profile ARN.
+ * @returns The ARNs to name in the policy's `Resource`.
+ *
+ * @example
+ * ```ts
+ * answerModelArns({ ...config, answerModelId: 'us.anthropic.x-v1:0' }, '111122223333');
+ * // → ['arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.x-v1:0',
+ * //    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.x-v1:0']
+ * ```
+ */
+export function answerModelArns(config: StackConfig, accountId: string): string[] {
+  if (!config.answerModelIsInferenceProfile) {
+    return [`arn:aws:bedrock:${config.region}::foundation-model/${config.answerModelId}`];
+  }
+
+  return [
+    `arn:aws:bedrock:${config.region}:${accountId}:inference-profile/${config.answerModelId}`,
+    ...config.answerModelRegions.map(
+      (region) => `arn:aws:bedrock:${region}::foundation-model/${config.answerModelBaseId}`,
+    ),
+  ];
+}
+
 function assertRegionSupportsS3Vectors(region: string, allowUnverified: boolean): void {
   if (allowUnverified) {
     return;
@@ -182,5 +299,21 @@ export function validateStackConfig(input: StackConfigInput): StackConfig {
     embeddingDimensions: resolveEmbedding(embeddingModelId),
     corpusPrefix,
     containerPort: input.containerPort ?? DEFAULT_CONTAINER_PORT,
+    ...resolveAnswerModel(input, region),
+    answerMaxTokens: requirePositiveInteger(
+      input.answerMaxTokens ?? DEFAULT_ANSWER_MAX_TOKENS,
+      'answerMaxTokens',
+    ),
+    askRateLimitPerMinute: requirePositiveInteger(
+      input.askRateLimitPerMinute ?? DEFAULT_ASK_RATE_LIMIT_PER_MINUTE,
+      'askRateLimitPerMinute',
+    ),
+    // Exposed as stack config because it is the gate: below this, no model is called at all.
+    // Tuning how readily the assistant declines should not require a code change.
+    retrievalScoreThreshold: requireInRange(
+      input.retrievalScoreThreshold ?? DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
+      'retrievalScoreThreshold',
+      [MIN_SCORE, MAX_SCORE],
+    ),
   };
 }

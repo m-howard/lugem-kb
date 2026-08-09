@@ -36,6 +36,7 @@ actually fix.
 
 ## Where to go next
 
+- **[Asking questions](./asking-questions.md)** — ask the corpus a question and read the answer.
 - **[Getting started](./getting-started.md)** — run the site and the service locally.
 - **[Deploying to AWS](./deploying-to-aws.md)** — prerequisites, stack config, and teardown.
 - **[The corpus repository](./corpus-repository.md)** — the branch rules and publish pipeline Pulumi
@@ -46,5 +47,6 @@ actually fix.
 ## Status
 
 This is the Phase 1 scaffold described in [requirements](./requirements.md) §9: corpus in git, site
-building, deployment stood up — plus a working retrieval slice of Phase 5. The authoring gateway
+building, deployment stood up — plus the answering slice of Phase 5, which now generates a short
+answer from the retrieved passages rather than returning the passages alone. The authoring gateway
 (Decap CMS and the GitHub App credential broker) is not built yet.

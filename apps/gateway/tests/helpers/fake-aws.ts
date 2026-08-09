@@ -2,6 +2,7 @@ import {
   type BedrockAgentRuntimeClient,
   RetrieveCommand,
 } from '@aws-sdk/client-bedrock-agent-runtime';
+import { type BedrockRuntimeClient, ConverseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import {
   GetObjectCommand,
   HeadBucketCommand,
@@ -107,4 +108,52 @@ export function fakeBedrockClient(
   };
 
   return { send } as unknown as BedrockAgentRuntimeClient;
+}
+
+export interface FakeAnswerOptions {
+  /** Text deltas the model "writes", in order. */
+  readonly chunks: readonly string[];
+  /** Reject before streaming starts — models AccessDenied or a bad model ID. */
+  readonly failBeforeStreaming?: boolean;
+  /** Emit a throttling member after this many chunks — models a mid-stream failure. */
+  readonly failAfterChunks?: number;
+}
+
+/**
+ * Builds a fake Bedrock runtime client that streams fixed text.
+ *
+ * A separate client from {@link fakeBedrockClient}: retrieval and generation are two different
+ * AWS services, and keeping the fakes apart is what lets a test assert that the no-coverage path
+ * never reached the generation one. Like its siblings, this rejects any command it did not
+ * expect, so a route touching an unintended API fails loudly rather than silently passing.
+ *
+ * @param options - The text to stream, and the failure to inject if any.
+ * @returns Something structurally usable as a `BedrockRuntimeClient`.
+ */
+export function fakeBedrockRuntimeClient(options: FakeAnswerOptions): BedrockRuntimeClient {
+  const send = (command: unknown): Promise<unknown> => {
+    if (!(command instanceof ConverseStreamCommand)) {
+      return Promise.reject(new Error(`Unexpected Bedrock runtime command: ${String(command)}`));
+    }
+    if (options.failBeforeStreaming === true) {
+      return Promise.reject(new Error('AccessDeniedException on bedrock:InvokeModel'));
+    }
+
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* stream() {
+      for (const [index, text] of options.chunks.entries()) {
+        if (index === options.failAfterChunks) {
+          yield { throttlingException: { message: 'too many tokens per minute' } };
+          return;
+        }
+        yield { contentBlockDelta: { delta: { text } } };
+      }
+      yield { messageStop: { stopReason: 'end_turn' } };
+      yield { metadata: { usage: { inputTokens: 1200, outputTokens: 42 } } };
+    }
+
+    return Promise.resolve({ stream: stream() });
+  };
+
+  return { send } as unknown as BedrockRuntimeClient;
 }

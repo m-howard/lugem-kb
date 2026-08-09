@@ -34,6 +34,11 @@ const onAws: pulumi.ComponentResourceOptions = { providers: [awsProvider] };
 
 const network = resolveNetwork(config, { provider: awsProvider });
 
+// Provider-scoped for the same reason the network lookups are: an ambient invoke would resolve
+// against a different region than the resources that consume it. Only the answer model's
+// inference-profile ARN needs it.
+const accountId = aws.getCallerIdentityOutput({}, { provider: awsProvider }).accountId;
+
 const corpus = new CorpusBucket(NAME, onAws);
 
 const knowledgeBase = new DocsKnowledgeBase(
@@ -97,6 +102,7 @@ const service = new GatewayService(
     corpusBucketArn: corpus.bucketArn,
     knowledgeBaseId: knowledgeBase.knowledgeBaseId,
     knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
+    accountId,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
     ...(githubConfig?.cmsApp === undefined ? {} : { cmsAppId: githubConfig.cmsApp.appId }),
   },

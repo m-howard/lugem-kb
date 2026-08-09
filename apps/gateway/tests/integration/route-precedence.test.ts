@@ -45,6 +45,42 @@ describe('route precedence', () => {
     await expect(response.json()).resolves.toMatchObject({ covered: true });
   });
 
+  // Two shapes to guard, because /v1/ask picks between them before the site handler could see
+  // the path at all. A catch-all mounted too early would answer both with HTML and a 200.
+  describe('POST /v1/ask reaches the API in both of its response shapes', () => {
+    async function ask(retrievalResults: { text: string; uri: string; score: number }[]) {
+      return buildTestApp({ objects: CORPUS, retrievalResults }).request('/v1/ask', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: 'anything' }),
+      });
+    }
+
+    it('streams when the corpus covers the question', async () => {
+      const response = await ask([
+        { text: 'Answer.', uri: 's3://test-corpus/docs/a.md', score: 0.9 },
+      ]);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/event-stream');
+      await expect(response.text()).resolves.toContain('event: citations');
+    });
+
+    it('returns JSON when it does not', async () => {
+      const response = await ask([]);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      await expect(response.json()).resolves.toMatchObject({ covered: false });
+    });
+
+    it('does not let a GET fall through to the site and answer 200 with HTML', async () => {
+      const response = await buildTestApp({ objects: CORPUS }).request('/v1/ask');
+
+      expect(response.status).not.toBe(200);
+    });
+  });
+
   it('serves a nested site route', async () => {
     const response = await buildTestApp({ objects: CORPUS }).request('/adr/');
 

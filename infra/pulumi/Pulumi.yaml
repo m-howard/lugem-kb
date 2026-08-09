@@ -21,6 +21,11 @@ template:
       description: Comma-separated private subnet IDs for the ECS tasks. Must belong to vpcId.
     lugem-kb:publicSubnetIds:
       description: Comma-separated subnet IDs for the load balancer. Must belong to vpcId.
+    lugem-kb:answerModelId:
+      description: >-
+        Bedrock model that writes answers for POST /v1/ask. Required, with no default: it names a
+        billed resource the account must have been granted access to, per region. Verify it against
+        the target region with `aws bedrock list-foundation-models` before setting it.
     lugem-kb:corpusRepository:
       description: >-
         Optional. owner/name of the repository backing the knowledge base. Setting it puts that

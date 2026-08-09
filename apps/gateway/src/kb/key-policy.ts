@@ -1,5 +1,5 @@
 /** Extensions the corpus is allowed to contain. Everything else is refused, including inside the docs tree. */
-const PERMITTED_EXTENSIONS = ['.md', '.mdx'] as const;
+export const PERMITTED_EXTENSIONS = ['.md', '.mdx'] as const;
 
 /** Why a requested path was refused. Kept as a closed set so callers can branch and logs can be aggregated. */
 export type KeyPolicyViolation =
@@ -20,8 +20,17 @@ function refuse(reason: KeyPolicyViolation, message: string): ResolvedKey {
   return { ok: false, reason, message };
 }
 
-/** A prefix is compared as a directory boundary, so `docs` must not match `docs-internal/`. */
-function normalisePrefix(prefix: string): string {
+/**
+ * Normalises a corpus prefix to a directory boundary, so `docs` cannot match `docs-internal/`.
+ *
+ * Exported because every place that compares a key against the prefix has to agree on where the
+ * boundary is. Three copies of this rule would be three chances for one of them to drift and
+ * quietly widen what a caller can reach.
+ *
+ * @param prefix - Prefix as configured, with or without surrounding slashes.
+ * @returns The prefix with exactly one trailing slash, or `''` for an empty prefix.
+ */
+export function normalisePrefix(prefix: string): string {
   const trimmed = prefix.replace(/^\/+/, '').replace(/\/+$/, '');
   return trimmed === '' ? '' : `${trimmed}/`;
 }

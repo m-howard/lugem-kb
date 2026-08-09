@@ -39,10 +39,15 @@ function toCitation(result: KnowledgeBaseRetrievalResult): Citation | undefined 
 /**
  * Retrieval over the Bedrock knowledge base.
  *
- * Retrieval only — this deliberately does not call RetrieveAndGenerate. Returning the passages
- * and letting the caller read them keeps every claim traceable to a source; synthesis would
- * introduce text that no document contains, which is exactly the failure requirements.md R20
- * forbids. Generation can be layered on later behind a guardrail, without changing this contract.
+ * Retrieval only — this deliberately does not call RetrieveAndGenerate, and still does not now
+ * that answers are generated. `Answerer` in `kb/answer.ts` calls this first and only reaches a
+ * model with passages that already cleared the threshold, so `RETRIEVAL_SCORE_THRESHOLD` and the
+ * `covered: false` union below remain the enforcement point rather than a prompt instruction the
+ * model might ignore. Returning the passages verbatim is what keeps every claim traceable to a
+ * source.
+ *
+ * This contract is unchanged by generation, which is what the note here originally predicted.
+ * See docs/adr/0012-grounded-generation-behind-retrieval.md.
  */
 export class Retriever {
   readonly #client: BedrockAgentRuntimeClient;
