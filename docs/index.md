@@ -19,13 +19,14 @@ on ECS Fargate, and a Pulumi program that deploys the lot into an **existing** V
 
 ## What is here
 
-| Area           | Path                            | What it does                                                     |
-| -------------- | ------------------------------- | ---------------------------------------------------------------- |
-| Site           | `apps/docs`                     | Docusaurus build. Its content root is this `docs/` tree.         |
-| Service        | `apps/gateway`                  | Serves the built site plus a read-only API over the corpus.      |
-| Infrastructure | `infra/pulumi`                  | ECR, ECS Fargate, ALB, S3 corpus bucket, Bedrock knowledge base. |
-| Corpus sync    | `scripts/docs/sync-corpus.ts`   | Uploads markdown to S3 and triggers ingestion.                   |
-| Publish        | `.github/workflows/publish.yml` | Runs that sync on every merge, using variables Pulumi sets.      |
+| Area           | Path                              | What it does                                                      |
+| -------------- | --------------------------------- | ----------------------------------------------------------------- |
+| Site           | `apps/docs`                       | Docusaurus build. Its content root is this `docs/` tree.          |
+| Service        | `apps/gateway`                    | Serves the built site, the corpus API, and the authoring gateway. |
+| Infrastructure | `infra/pulumi`                    | ECR, ECS Fargate, ALB, S3 corpus bucket, Bedrock knowledge base.  |
+| Corpus sync    | `scripts/docs/sync-corpus.ts`     | Uploads markdown to S3 and triggers ingestion.                    |
+| Publish        | `.github/workflows/publish.yml`   | Runs that sync on every merge, using variables Pulumi sets.       |
+| Verification   | `scripts/check/verify-gateway.ts` | Drives a deployment through the gateway's acceptance list.        |
 
 ## One corpus, two consumers
 
@@ -37,6 +38,7 @@ actually fix.
 ## Where to go next
 
 - **[Asking questions](./asking-questions.md)** — ask the corpus a question and read the answer.
+- **[The authoring gateway](./authoring-gateway.md)** — publish a change without a git host account.
 - **[Getting started](./getting-started.md)** — run the site and the service locally.
 - **[Deploying to AWS](./deploying-to-aws.md)** — prerequisites, stack config, and teardown.
 - **[The corpus repository](./corpus-repository.md)** — the branch rules and publish pipeline Pulumi
@@ -46,7 +48,14 @@ actually fix.
 
 ## Status
 
-This is the Phase 1 scaffold described in [requirements](./requirements.md) §9: corpus in git, site
-building, deployment stood up — plus the answering slice of Phase 5, which now generates a short
-answer from the retrieved passages rather than returning the passages alone. The authoring gateway
-(Decap CMS and the GitHub App credential broker) is not built yet.
+Phases 1 and 2 of [requirements](./requirements.md) §9 are built, plus the answering slice of
+Phase 5.
+
+Phase 1 put the corpus in git, stood the site up and deployed it. Phase 2 added the authoring
+gateway: authors authenticate against an identity provider, the gateway holds one GitHub App
+credential they never see, and every write is confined to the documentation tree and the `cms/*`
+branches before that credential is used. Phase 5's answering slice generates a short answer from the
+retrieved passages rather than returning the passages alone.
+
+Phase 3's pilot surface — a CMS at `/admin`, pull request previews and content quality gates — is
+not built yet.

@@ -1,7 +1,7 @@
 ---
 title: Requirements — docs authoring gateway
 sidebar_label: Requirements
-sidebar_position: 6
+sidebar_position: 7
 owner: platform
 last_reviewed: 2026-08-08
 ---
@@ -20,6 +20,9 @@ last_reviewed: 2026-08-08
        `last_reviewed`, and readers see the review date beside citations.
     4. This file is listed in .prettierignore. Prettier renumbers markdown ordered lists,
        which rewrites story 23 below into a duplicate of 15. Do not remove that entry.
+    5. `sidebar_position` moved from 6 to 7 when docs/authoring-gateway.md joined the corpus.
+       Frontmatter only; the document below is unchanged. In particular the §6 checkboxes are NOT
+       ticked as phases land — see the README's status section for what is built.
 
     Otherwise verbatim. In particular the §5 user-story numbering is reproduced as
     supplied, including the out-of-sequence story 23 (see finding C2). Do not "fix" it

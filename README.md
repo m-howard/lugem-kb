@@ -34,6 +34,9 @@ VPC you already have.
 preview`, not discovered halfway through `up`.
 - **A knowledge base you can afford to leave running.** S3 Vectors instead of OpenSearch
   Serverless — pay-per-use rather than roughly $700/month idle.
+- **Publishing without a git account.** Authors reach GitHub through one App credential they never
+  see, confined to `docs/` and `cms/*` branches, with their own name and email on every commit.
+  Every refusal happens before the credential is used.
 - **Fails closed.** A missing variable stops start-up naming the variable; a bad region stops the
   preview naming the config key.
 - **Least privilege by construction.** The task role names one bucket, one prefix, one knowledge
@@ -79,12 +82,14 @@ AWS account prerequisites before you run it.
                         ┌──────────────────────────────┐
    reader ───▶ ALB ────▶│  ECS Fargate (private subnet)│
                         │  ┌────────────────────────┐  │
-                        │  │ Bun + Hono gateway     │  │
+   author ───▶     ────▶│  │ Bun + Hono gateway     │  │
                         │  │  /healthz  /readyz     │  │
                         │  │  /v1/documents         │──┼──▶ S3 corpus bucket
                         │  │  /v1/search            │──┼──▶ Bedrock knowledge base
                         │  │  /v1/ask  (SSE)        │──┼──▶   └─▶ S3 Vectors index
                         │  │      └─ retrieve first │──┼──▶ Bedrock answer model
+                        │  │  /v1/cms  (auth)       │──┼──▶ GitHub, as one App
+                        │  │      └─ policy first   │  │      └─▶ cms/* branches only
                         │  │  /*  built Docusaurus  │  │
                         │  └────────────────────────┘  │
                         └──────────────────────────────┘
@@ -106,6 +111,7 @@ infra/pulumi/      Pulumi program, runtime: bun. ECR, ECS, ALB, S3, Bedrock, and
                    GitHub repository backing the corpus.
 docs/              The corpus: guides, requirements, and ADRs.
 scripts/docs/      sync-corpus.ts — upload markdown to S3 and trigger ingestion.
+scripts/check/     verify-gateway.ts — drive a deployment through the R1–R10 acceptance list.
 tests/e2e/         Playwright, against a real server and a real build.
 ```
 
@@ -154,6 +160,24 @@ When nothing is relevant enough there is no stream at all — the answer model i
 bun run corpus:sync
 ```
 
+### Publish a change without a git account
+
+With the authoring gateway configured, an editor saves a draft and submits it for review over HTTP.
+Both are refused before GitHub is touched if the path or the branch is not one the CMS owns:
+
+```bash
+curl -X PUT "$SITE_URL/v1/cms/drafts/cms/leave-policy" \
+  -H "authorization: Bearer $ACCESS_TOKEN" -H 'content-type: application/json' \
+  -d '{"files":[{"path":"docs/leave-policy.md","content":"# Leave\n"}]}'
+
+curl -X POST "$SITE_URL/v1/cms/submissions" \
+  -H "authorization: Bearer $ACCESS_TOKEN" -H 'content-type: application/json' \
+  -d '{"branch":"cms/leave-policy","title":"Rewrite the leave policy"}'
+```
+
+The commit records the author from their token; the App remains the committer, because the App is
+what performed the write. See **[The authoring gateway](docs/authoring-gateway.md)**.
+
 `corpus:sync` also **deletes** objects whose source file is gone. A page removed from the
 repository must stop being answerable, or the knowledge base keeps citing a page the site no
 longer has.
@@ -176,19 +200,26 @@ Gateway environment (see `.env.example`; the service refuses to start if a requi
 | `ANSWER_MAX_TOKENS`         | no       | `700`   | Ceiling on answer length.                                      |
 | `ASK_RATE_LIMIT_PER_MINUTE` | no       | `20`    | Questions per client per minute on `/v1/ask`.                  |
 
+The authoring gateway is off unless `CMS_REPOSITORY` is set, and every companion variable is
+required once it is. They are listed in `.env.example` and explained in
+**[The authoring gateway](docs/authoring-gateway.md#configure-it)**.
+
 Pulumi stack configuration is documented in
 **[Deploying to AWS](docs/deploying-to-aws.md#configure-the-stack)**.
 
 ## 📖 Documentation
 
 - **[Asking questions](docs/asking-questions.md)** — the reader's guide to the assistant.
+- **[The authoring gateway](docs/authoring-gateway.md)** — publishing without a git host account.
 - **[Getting started](docs/getting-started.md)** — run everything locally.
 - **[Deploying to AWS](docs/deploying-to-aws.md)** — prerequisites, config, costs, teardown.
 - **[The corpus repository](docs/corpus-repository.md)** — branch rules, the publish pipeline, and the CMS app credential.
 - **[Architecture decision records](docs/adr/)** — why each piece is the way it is, and what it costs.
 - **[Requirements](docs/requirements.md)** — the product this scaffold is the first phase of.
 
-Notable decisions: [grounded generation behind retrieval](docs/adr/0012-grounded-generation-behind-retrieval.md) ·
+Notable decisions: [two authentication modes](docs/adr/0013-two-authentication-modes.md) ·
+[a purpose-built editorial API](docs/adr/0014-purpose-built-editorial-api.md) ·
+[grounded generation behind retrieval](docs/adr/0012-grounded-generation-behind-retrieval.md) ·
 [Pulumi owns the corpus repository](docs/adr/0011-pulumi-owns-the-corpus-repository.md) ·
 [custom components for resource groups](docs/adr/0010-custom-components-for-resource-groups.md) ·
 [S3 Vectors over OpenSearch Serverless](docs/adr/0005-bedrock-knowledge-base-on-s3-vectors.md) ·
@@ -205,6 +236,8 @@ bun run lint:md        # markdownlint
 bun run test           # unit + integration
 bun run test:coverage  # the same, against the 80% gate
 bun run test:e2e       # Playwright, real server and real build, AWS stubbed
+
+bun run scripts/check/verify-gateway.ts --base-url http://127.0.0.1:3000
 ```
 
 ## 🤝 Contributing
@@ -220,15 +253,31 @@ Security issues go to **[SECURITY.md](SECURITY.md)**, not the public issue track
 
 ## ⚠️ Status
 
-This is Phase 1 of [the requirements](docs/requirements.md) — corpus in git, site building,
-deployment stood up — plus the answering slice of Phase 5: grounded generation with citations, a
-chat widget on every page, and a `/ask` page. The authoring gateway (Decap CMS, the GitHub App
-credential broker, the branch and endpoint policy engine) is **not built yet**.
+Phases 1 and 2 of [the requirements](docs/requirements.md) are built, plus the answering slice of
+Phase 5.
 
-Two known gaps in answering, both recorded in
-[ADR 0012](docs/adr/0012-grounded-generation-behind-retrieval.md): the endpoint is
-**unauthenticated** (R22 wants an IdP this project does not have — the rate limit is a cost guard,
-not access control), and the **feedback loop** of R23 is unbuilt.
+- **Phase 1 — Foundation.** Corpus in git, site building, deployment stood up.
+- **Phase 2 — Gateway.** Authentication, the GitHub App credential broker, the path, branch and
+  endpoint policies, human attribution, audit records and fail-closed configuration — R1–R6, R9 and
+  R10. Verify a deployment with `scripts/check/verify-gateway.ts`, which is the phase's stated exit
+  condition.
+- **Phase 5 (partial) — Answering.** Grounded generation with citations, a chat widget on every
+  page, and a `/ask` page.
+
+**Not built yet:** Phase 3's pilot surface — Decap CMS at `/admin`, pull request previews and
+content quality gates — and Phase 4's notifications. The editorial API is a purpose-built one, so
+wiring a CMS to it needs an adapter; [ADR 0014](docs/adr/0014-purpose-built-editorial-api.md)
+records that cost.
+
+Three known gaps, each recorded where it belongs:
+
+- `/v1/ask` is still **unauthenticated**. R22 belongs to Phase 5; the rate limit on it is a cost
+  guard, not access control. See [ADR 0012](docs/adr/0012-grounded-generation-behind-retrieval.md).
+- The **feedback loop** of R23 is unbuilt.
+- **ALB auth mode is not proven end to end.** It needs an HTTPS listener, a certificate and a
+  registered identity provider application, none of which this stack has by default. Its verifier is
+  unit-tested and its listener rule is preview-only — see
+  [ADR 0013](docs/adr/0013-two-authentication-modes.md).
 
 ---
 
