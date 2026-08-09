@@ -1,0 +1,51 @@
+version: 2
+
+updates:
+  # Bun is the only package manager, so there is one manifest tree to watch.
+  # See docs/adr/0007-single-lockfile-no-pnpm-parity.md.
+  - package-ecosystem: npm
+    directories:
+      - '/'
+      - '/apps/docs'
+      - '/apps/gateway'
+      - '/infra/pulumi'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+      prefix-development: 'chore(deps-dev)'
+    groups:
+      aws-sdk:
+        patterns: ['@aws-sdk/*']
+      pulumi:
+        patterns: ['@pulumi/*']
+      docusaurus:
+        patterns: ['@docusaurus/*', 'react', 'react-dom', '@mdx-js/*']
+      linting:
+        patterns: ['eslint*', '@eslint/*', 'typescript-eslint', 'prettier', 'markdownlint*']
+      testing:
+        patterns: ['vitest', '@vitest/*', '@playwright/*']
+    ignore:
+      # Pinned deliberately: typescript-eslint@8 declares `typescript >=4.8.4 <6.1.0`, so a
+      # major bump breaks type-aware linting on install.
+      # See docs/adr/0002-typescript-pinned-to-6-x.md.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: 'ci(deps)'
+
+  - package-ecosystem: docker
+    directory: '/apps/gateway'
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: 'chore(deps)'

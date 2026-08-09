@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run format:check
+      - run: bun run lint
+      - run: bun run lint:md
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: Unit and integration tests with the coverage gate
+        run: bun run test:coverage
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - run: bun install --frozen-lockfile
+
+      # Fails on a broken link on purpose: a broken link in the corpus becomes a broken citation
+      # once the page is indexed.
+      - name: Build the documentation site
+        run: bun run docs:build
+
+      # Build context is the repo root — the Docusaurus content root lives there, not under
+      # apps/docs — so this also proves .dockerignore has not started excluding docs/.
+      - name: Build the container image
+        run: docker build -f apps/gateway/Dockerfile -t lugem-gateway:ci .
+
+      - name: The container answers its liveness probe
+        run: |
+          docker run -d --name gateway -p 3000:3000 \
+            -e AWS_REGION=us-east-1 \
+            -e CORPUS_BUCKET=ci-placeholder \
+            -e CORPUS_PREFIX=docs/ \
+            -e KNOWLEDGE_BASE_ID=ci-placeholder \
+            lugem-gateway:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/healthz; then
+              echo "healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "gateway never became healthy"
+          docker logs gateway
+          exit 1
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs gateway || true

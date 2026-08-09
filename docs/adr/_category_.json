@@ -1,0 +1,10 @@
+{
+  "label": "Architecture decision records",
+  "position": 90,
+  "link": {
+    "type": "generated-index",
+    "slug": "/adr",
+    "title": "Architecture decision records",
+    "description": "Why each part of Lugem KB is the way it is. Each record states the context at the time, the decision made, and what it costs."
+  }
+}

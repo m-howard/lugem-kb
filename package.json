@@ -1,0 +1,64 @@
+{
+  "name": "lugem-kb",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Documentation that publishes itself and answers questions — a Docusaurus corpus, a Bun service on ECS, and a Bedrock knowledge base, deployed by Pulumi.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/m-howard/lugem-kb.git"
+  },
+  "homepage": "https://github.com/m-howard/lugem-kb#readme",
+  "bugs": {
+    "url": "https://github.com/m-howard/lugem-kb/issues"
+  },
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "infra/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "bun run docs:build && bun run gateway:build",
+    "dev": "bun run --filter '@lugem/gateway' dev",
+    "docs:start": "bun run --filter '@lugem/docs' start",
+    "docs:build": "bun run --filter '@lugem/docs' build",
+    "gateway:build": "bun run --filter '@lugem/gateway' build",
+    "corpus:sync": "bun run scripts/docs/sync-corpus.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"!**/node_modules/**\" \"!docs/requirements.md\"",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --build --force && tsc --noEmit -p tsconfig.tools.json",
+    "infra:preview": "bun run --filter '@lugem/infra' preview",
+    "infra:up": "bun run --filter '@lugem/infra' up",
+    "infra:destroy": "bun run --filter '@lugem/infra' destroy"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-bedrock-agent": "3.1106.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "3.1106.0",
+    "@aws-sdk/client-s3": "3.1106.0",
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
+    "@types/bun": "1.3.14",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "10.8.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-import-x": "4.17.1",
+    "markdownlint-cli2": "0.23.2",
+    "prettier": "3.9.6",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "8.66.0",
+    "vitest": "4.1.10"
+  }
+}

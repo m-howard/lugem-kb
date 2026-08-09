@@ -2,13 +2,15 @@ node_modules
 dist
 bin
 build
+.docusaurus
 coverage
 test-results
 playwright-report
 .env
 *.log
 bun.lock
-pnpm-lock.yaml
 
-# Frozen external artifact — read, never reformatted. See spec/00-START-HERE.md.
-spec
+# Committed verbatim from a supplied source. Prettier renumbers markdown ordered lists, which
+# silently rewrites the deliberately out-of-sequence user story 23 into a duplicate of 15 — the
+# exact edit the file's own provenance comment forbids.
+docs/requirements.md

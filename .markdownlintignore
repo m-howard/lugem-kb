@@ -2,7 +2,12 @@ node_modules
 dist
 bin
 build
+.docusaurus
 coverage
 test-results
 playwright-report
-spec
+
+# Committed verbatim from a supplied source: its ordered lists are deliberately
+# non-sequential (see the provenance comment in the file itself). Also excluded in the
+# `lint:md` script glob, because markdownlint-cli2 only consults this file in some invocations.
+docs/requirements.md

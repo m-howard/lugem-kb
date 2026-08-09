@@ -76,10 +76,9 @@
 # Text files where line endings should be preserved
 *.patch    -text
 
-# Lockfiles. Both are generated and both are committed on purpose — see
-# docs/adr/0007-bun-primary-pnpm-for-node-parity.md. Collapse them in review.
+# Lockfile. Bun is the only package manager — see
+# docs/adr/0007-single-lockfile-no-pnpm-parity.md. Collapse it in review.
 bun.lock       -diff linguist-generated
-pnpm-lock.yaml -diff linguist-generated
 
 #
 # Exclude files from exporting

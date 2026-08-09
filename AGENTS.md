@@ -1,38 +1,70 @@
 # Lugem Knowledge Base agent guide
 
-> One liner
+> Documentation that publishes itself and answers questions: a Docusaurus corpus in git, a Bun
+> service on ECS, and a Bedrock knowledge base — all deployed by Pulumi into an existing VPC.
+
+## Workspace layout
+
+This is a Bun workspace monorepo. Every file belongs to exactly one workspace or to the root.
+
+| Path            | Holds                                                                     |
+| --------------- | ------------------------------------------------------------------------- |
+| `apps/docs/`    | Docusaurus site. Its content root is repo-root `docs/`, not a local copy. |
+| `apps/gateway/` | The Bun + Hono service deployed to ECS. Owns its own `Dockerfile`.        |
+| `infra/pulumi/` | The Pulumi program. `runtime: bun` — no ts-node, no build step.           |
+| `docs/`         | The corpus. Published by `apps/docs` and synced to S3 for ingestion.      |
+| `scripts/`      | Repo-level tooling, in a subfolder (see below).                           |
+| `tests/e2e/`    | Playwright only.                                                          |
 
 ## File placement & repo-root hygiene
 
-- **Test files**: ALL unit tests, integration tests, ecosystem tests, or Vitest files MUST strictly be placed within the `tests/` directory (e.g., `tests/unit/`, `tests/integration/`). NEVER create test files in the project root (`/`).
-- **Scripts and utilities**: ALL maintenance, debugging, generation, or experimental scripts (`.cjs`, `.mjs`, `.js`, `.ts`) MUST be placed strictly inside one of the `scripts/` subfolders (`build/`, `dev/`, `check/`, `docs/`, `ad-hoc/`). One-shot or experimental code goes under `scripts/ad-hoc/`. NEVER dump loose scripts in the project root (`/`) or the top-level `scripts/` folder.
+- **Test files**: unit tests live **beside the code they test** as `*.test.ts` (e.g.
+  `apps/gateway/src/kb/key-policy.test.ts`). Integration tests live in that workspace's own
+  `tests/` folder (e.g. `apps/gateway/tests/integration/`). Only cross-cutting Playwright specs go
+  in the repo-root `tests/e2e/`. NEVER create test files in the project root (`/`).
+- **Scripts and utilities**: ALL maintenance, debugging, generation, or experimental scripts
+  (`.cjs`, `.mjs`, `.js`, `.ts`) MUST be placed strictly inside one of the `scripts/` subfolders
+  (`build/`, `dev/`, `check/`, `docs/`, `ad-hoc/`). One-shot or experimental code goes under
+  `scripts/ad-hoc/`. NEVER dump loose scripts in the project root (`/`) or the top-level `scripts/`
+  folder.
 
 **The project root MUST ONLY contain:**
 
 - Configuration files (`vitest.config.mts`, `playwright.config.ts`, `eslint.config.mjs`, `tsconfig*.json`, `.prettierrc`, `.markdownlint.jsonc`, `.editorconfig`)
-- Dependency files (`package.json`, `bun.lock`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`)
+- Dependency files (`package.json`, `bun.lock`, `.npmrc`)
 - Documentation files (`README.md`, `CHANGELOG.md`, `LICENSE`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`)
 - CI/CD files and ignore definitions (`.gitignore`, `.gitattributes`, `.dockerignore`, `.npmignore`, `.prettierignore`, `.markdownlintignore`, `.nvmrc`, `.bun-version`, `.env.example`)
 
-When creating _any_ validation tests or one-off logic scripts, default to `scripts/ad-hoc/` or `tests/unit/` according to your goals. Do not pollute the `/` root context.
+When creating _any_ one-off logic script, default to `scripts/ad-hoc/`. Do not pollute the `/` root
+context.
+
+## Package manager
+
+**Bun only.** One lockfile, `bun.lock`. Do not add `pnpm-lock.yaml`, `package-lock.json`, or
+`yarn.lock`, and do not introduce a second workspace manifest — see
+[ADR 0007](docs/adr/0007-single-lockfile-no-pnpm-parity.md). Pulumi runs the infra program on Bun
+natively, so Node is a tooling dependency only.
 
 ## Testing
 
-Vitest is the only unit/integration runner; Playwright covers e2e. Scripts work under any
-package manager — `bun run` is shown because it is the fastest.
+Vitest is the only unit/integration runner; Playwright covers e2e.
 
 | What              | Command                                                                     |
 | ----------------- | --------------------------------------------------------------------------- |
 | Unit tests        | `bun run test:unit`                                                         |
 | Integration tests | `bun run test:integration`                                                  |
 | Everything        | `bun run test`                                                              |
-| Single file       | `bun run vitest run tests/unit/your-file.test.ts`                           |
+| Single file       | `bun run vitest run apps/gateway/src/kb/key-policy.test.ts`                 |
 | Watch mode        | `bun run test:watch`                                                        |
 | E2E (Playwright)  | `bun run test:e2e`                                                          |
-| Coverage gate     | `bun run test:coverage` (60/60/60/60 — statements/lines/functions/branches) |
-| Coverage report   | `bun run coverage:report`                                                   |
+| Coverage gate     | `bun run test:coverage` (80/80/80/80 — statements/lines/functions/branches) |
 
-**PR rule**: If you change production code in `src/`, you must include or update tests in the same PR.
+The coverage gate measures `apps/gateway/src/**` and `infra/pulumi/src/config.ts` — the code that
+holds logic. Declarative Pulumi resource wiring is excluded from the denominator so the number
+means something; see [ADR 0008](docs/adr/0008-coverage-gate-on-logic-only.md).
+
+**PR rule**: If you change production code under any `src/`, you must include or update tests in
+the same PR.
 
 ## Coding Style Rules
 
@@ -72,7 +104,8 @@ package manager — `bun run` is shown because it is the fastest.
 ### Formatting
 
 - Use the project's formatter (Prettier, Black, gofmt, rustfmt). Do not manually format.
-- Consistent indentation: 4 spaces (JS/TS).
+- Consistent indentation: 2 spaces (JS/TS). Pulumi resource arguments nest deeply, and at a
+  100-character line budget a wider indent costs more than it buys.
 - Trailing commas in multi-line structures (JS/TS).
 - No trailing whitespace. Files end with a single newline.
 

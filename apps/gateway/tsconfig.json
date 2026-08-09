@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "rootDir": "./",
+    // Type-check output only. Bun runs the TypeScript directly and `bun build` produces the
+    // bundle, so tsc's emit is a by-product — keep it out of the working tree.
+    "outDir": "./node_modules/.tsbuild",
+    "tsBuildInfoFile": "./node_modules/.tsbuild/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

@@ -1,0 +1,23 @@
+# Every documentation page carries an `owner` in frontmatter; this file is what turns that into
+# an actual review request. Keep the two consistent — a page whose owner has no CODEOWNERS entry
+# routes to nobody.
+
+*                       @m-howard
+
+# The corpus. Once the authoring gateway lands, these entries are the enforcement point for
+# review routing (requirements.md R8), so add a team per documentation area as they appear.
+/docs/                  @m-howard
+/docs/adr/              @m-howard
+
+# Changes here alter what a deployed task can reach.
+/infra/pulumi/src/iam.ts              @m-howard
+/infra/pulumi/src/knowledge-base.ts   @m-howard
+
+# Path handling: both files resolve untrusted input to a location.
+/apps/gateway/src/kb/key-policy.ts    @m-howard
+/apps/gateway/src/routes/site.ts      @m-howard
+
+# Supply chain and CI.
+/.github/               @m-howard
+/package.json           @m-howard
+/bun.lock               @m-howard

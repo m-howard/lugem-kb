@@ -1,0 +1,60 @@
+name: Bug report
+description: Something behaves differently from how it is documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security vulnerabilities do **not** belong here — see
+        [SECURITY.md](https://github.com/m-howard/lugem-kb/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - apps/gateway (the service)
+        - apps/docs (the site)
+        - infra/pulumi (the AWS stack)
+        - scripts (corpus sync)
+        - documentation
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. bun install
+        2. bun run ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: >
+        Paste the relevant output. Please redact bucket names, account IDs and ARNs you would
+        rather not publish — the shape of the error is usually what matters.
+      render: shell
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `bun --version`, `node --version`, and `pulumi version` if relevant.
+      placeholder: bun 1.3.14, node v24.19.0, pulumi v3.256.0
+    validations:
+      required: true

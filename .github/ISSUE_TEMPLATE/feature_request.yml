@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a capability or a change of direction
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth checking first: [the requirements](https://github.com/m-howard/lugem-kb/blob/main/docs/requirements.md)
+        §6 P2 lists things deliberately deferred, and the
+        [ADRs](https://github.com/m-howard/lugem-kb/tree/main/docs/adr) record decisions already
+        made — including what would make us revisit them.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you unable to do today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including doing nothing, and why that is not enough.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: >
+            This is not answer *generation*. Retrieval with citations is deliberate — synthesis
+            would introduce text no document contains.
+        - label: >
+            This does not require per-page read authorisation, which is out of scope by design
+            (requirements R18).

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "./",
+    // Type-check output only. Pulumi's bun runtime executes index.ts directly — nothing consumes
+    // this emit, so it stays out of the working tree.
+    "outDir": "./node_modules/.tsbuild",
+    "tsBuildInfoFile": "./node_modules/.tsbuild/tsconfig.tsbuildinfo"
+  },
+  "include": ["index.ts", "src/**/*.ts"]
+}
