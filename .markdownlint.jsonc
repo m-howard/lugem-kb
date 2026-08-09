@@ -1,7 +1,12 @@
 {
-    "default": true,
-    "MD013": false,
-    "MD033": false,
-    "MD041": false,
-    "MD060": false
+  "default": true,
+  // Prose wrapping is Prettier's job; a hard line-length rule fights it.
+  "MD013": false,
+  // The README uses inline HTML for the centred header and badges.
+  "MD033": false,
+  "MD041": false,
+  "MD060": false,
+  // Every corpus page carries a frontmatter `title` for Docusaurus *and* an H1 for readers.
+  // Without this, markdownlint counts the two as duplicate top-level headings.
+  "MD025": { "front_matter_title": "" },
 }

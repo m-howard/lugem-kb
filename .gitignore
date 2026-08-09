@@ -1,29 +1,38 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# Dependencies. No leading slash: this is a workspace monorepo, so node_modules exists at the
+# root *and* inside apps/* and infra/*. A root-anchored pattern would leave those untracked but
+# not ignored, which is one `git add -A` away from committing them.
+node_modules/
+.pnp
 .pnp.*
 
-# testing
-/coverage
-/coverage-e2e
-/test-results
-/playwright-report
+# Testing
+coverage/
+coverage-e2e/
+test-results/
+playwright-report/
 /output/
 
 /data
 
-# production
-/build
+# Build output
+build/
 /bin
-/dist
+dist/
+.docusaurus/
+.tsbuild/
 
-# misc
+# Pulumi — stack config carries account-specific VPC and subnet IDs; only the example is tracked.
+infra/*/Pulumi.*.yaml
+!infra/*/Pulumi.yaml
+!infra/*/Pulumi.*.yaml.example
+
+# Misc
 .DS_Store
 *.pem
 
-# debug
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -31,6 +40,6 @@ yarn-error.log*
 .pnpm-store/
 .eslintcache
 
-# env files (can opt-in for committing if needed)
+# Env files (can opt-in for committing if needed)
 .env*
 !.env.example

@@ -1,86 +1,86 @@
 {
-    "name": "Lugem KB",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "..",
-        "args": {
-            // "VARIANT": "22-bullseye"
-        }
-    },
-    // Configure tool-specific properties.
-    "customizations": {
-        "vscode": {
-            "settings": {
-                "terminal.integrated.defaultProfile.linux": "zsh",
-                "terminal.integrated.profiles.linux": {
-                    "bash": {
-                        "path": "bash",
-                        "icon": "terminal-bash"
-                    },
-                    "zsh": {
-                        "path": "zsh"
-                    }
-                },
-                "editor.formatOnSave": true,
-                "typescript.tsserver.trace": "verbose",
-                "editor.tabSize": 4,
-                "[javascript]": {
-                    "editor.tabSize": 4
-                },
-                "[typescript]": {
-                    "editor.tabSize": 4
-                },
-                "[json]": {
-                    "editor.tabSize": 4
-                },
-                "explorer.sortOrder": "type"
-            },
-            "extensions": [
-                "esbenp.prettier-vscode",
-                "redhat.vscode-yaml",
-                "vscode-icons-team.vscode-icons",
-                "mikestead.dotenv",
-                "DavidAnson.vscode-markdownlint",
-                "dbaeumer.vscode-eslint",
-                "github.vscode-github-actions",
-                "GitHub.copilot-chat",
-                "openai.chatgpt",
-                "Anthropic.claude-code",
-                "EditorConfig.EditorConfig"
-            ],
-            "mcp": {
-                "servers": {
-                    "playwright": {
-                        "command": "npx",
-                        "args": ["-y", "@playwright/mcp@latest"]
-                    },
-                    "context7": {
-                        "command": "npx",
-                        "args": ["-y", "@upstash/context7-mcp"]
-                    },
-                    "devTools": {
-                        "command": "npx",
-                        "args": ["-y", "chrome-devtools-mcp@latest"]
-                    }
-                }
-            }
-        }
-    },
-    "features": {
-        "ghcr.io/devcontainers/features/common-utils:2": {
-            "installZsh": true,
-            "installOhMyZsh": true,
-            "installOhMyZshConfig": true,
-            "upgradePackages": true,
-            "installSsl": true,
-            "username": "devcontainer"
-        },
-        "ghcr.io/devcontainers/features/docker-in-docker:3": {
-            "moby": true,
-            "azureDnsAutoDetection": true,
-            "installDockerBuildx": true,
-            "version": "latest",
-            "dockerDashComposeVersion": "v2"
-        }
+  "name": "Lugem KB",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      // "VARIANT": "22-bullseye"
     }
+  },
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "bash",
+            "icon": "terminal-bash"
+          },
+          "zsh": {
+            "path": "zsh"
+          }
+        },
+        "editor.formatOnSave": true,
+        "typescript.tsserver.trace": "verbose",
+        "editor.tabSize": 4,
+        "[javascript]": {
+          "editor.tabSize": 4
+        },
+        "[typescript]": {
+          "editor.tabSize": 4
+        },
+        "[json]": {
+          "editor.tabSize": 4
+        },
+        "explorer.sortOrder": "type"
+      },
+      "extensions": [
+        "esbenp.prettier-vscode",
+        "redhat.vscode-yaml",
+        "vscode-icons-team.vscode-icons",
+        "mikestead.dotenv",
+        "DavidAnson.vscode-markdownlint",
+        "dbaeumer.vscode-eslint",
+        "github.vscode-github-actions",
+        "GitHub.copilot-chat",
+        "openai.chatgpt",
+        "Anthropic.claude-code",
+        "EditorConfig.EditorConfig"
+      ],
+      "mcp": {
+        "servers": {
+          "playwright": {
+            "command": "npx",
+            "args": ["-y", "@playwright/mcp@latest"]
+          },
+          "context7": {
+            "command": "npx",
+            "args": ["-y", "@upstash/context7-mcp"]
+          },
+          "devTools": {
+            "command": "npx",
+            "args": ["-y", "chrome-devtools-mcp@latest"]
+          }
+        }
+      }
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "installOhMyZshConfig": true,
+      "upgradePackages": true,
+      "installSsl": true,
+      "username": "devcontainer"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:3": {
+      "moby": true,
+      "azureDnsAutoDetection": true,
+      "installDockerBuildx": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    }
+  }
 }

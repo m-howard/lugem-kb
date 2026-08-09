@@ -2,6 +2,7 @@ node_modules
 out
 build
 dist
+.docusaurus
 
 # Local databases and runtime data (never bake into an image).
 data
@@ -28,7 +29,11 @@ infra
 *.log
 npm-debug.log*
 
-# Docs and tests are not needed at runtime.
-docs
+# Test output.
 coverage
+test-results
+playwright-report
 .DS_Store
+
+# NOTE: repo-root `docs/` is deliberately NOT ignored. It is the Docusaurus content root
+# (apps/docs/docusaurus.config.ts sets docs.path to it), so the image build needs it.
