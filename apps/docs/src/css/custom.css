@@ -1,0 +1,27 @@
+/**
+ * Docusaurus Infima overrides. Kept minimal on purpose: the default theme is accessible in both
+ * colour modes, and every override here is a contrast decision someone has to re-check later.
+ */
+
+:root {
+  --ifm-color-primary: #2a6f5f;
+  --ifm-color-primary-dark: #266456;
+  --ifm-color-primary-darker: #245e51;
+  --ifm-color-primary-darkest: #1d4d43;
+  --ifm-color-primary-light: #2e7a68;
+  --ifm-color-primary-lighter: #30806d;
+  --ifm-color-primary-lightest: #379180;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgb(0 0 0 / 10%);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #6fc8b1;
+  --ifm-color-primary-dark: #57c0a5;
+  --ifm-color-primary-darker: #4bbc9f;
+  --ifm-color-primary-darkest: #3b9a82;
+  --ifm-color-primary-light: #87d0bd;
+  --ifm-color-primary-lighter: #93d4c3;
+  --ifm-color-primary-lightest: #b6e2d7;
+  --docusaurus-highlighted-code-line-bg: rgb(0 0 0 / 30%);
+}
