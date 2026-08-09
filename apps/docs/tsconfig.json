@@ -1,6 +1,12 @@
 {
   "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
+    // Docusaurus resolves `@site/...` and `@theme/...` through baseUrl, and @docusaurus/tsconfig
+    // sets it too — so it cannot be dropped here without breaking module resolution for the
+    // framework. TypeScript 6 deprecates it ahead of removal in 7, and ADR 0002 pins us to 6.x,
+    // so acknowledge the deprecation rather than fail the build on a setting we do not control.
+    // Revisit when Docusaurus ships a baseUrl-free tsconfig.
+    "ignoreDeprecations": "6.0",
     "baseUrl": "."
   },
   "include": ["docusaurus.config.ts", "sidebars.ts", "src/**/*"],

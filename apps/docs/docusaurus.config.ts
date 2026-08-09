@@ -69,6 +69,7 @@ const config: Config = {
       title: 'Lugem KB',
       items: [
         { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
+        { to: '/ask', label: 'Ask', position: 'left' },
         {
           href: `https://github.com/${ORGANIZATION}/${PROJECT}`,
           label: 'GitHub',

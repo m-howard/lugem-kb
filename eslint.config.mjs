@@ -66,8 +66,12 @@ export default tseslint.config(
 
   // Scoped to TypeScript: the project service has nothing to say about a `.mjs` config file,
   // and an unscoped block here would re-enable it for one and fail to parse.
+  //
+  // `.tsx` belongs here rather than in its own block. The type-aware configs above are applied
+  // unscoped, so a `.tsx` file left out of this glob would be linted with those rules and no
+  // project service — which fails in the parser, before any rule runs.
   {
-    files: ['**/*.{ts,mts,cts}'],
+    files: ['**/*.{ts,tsx,mts,cts}'],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -147,10 +151,17 @@ export default tseslint.config(
     },
   },
 
-  // Docusaurus loads its config and sidebars by default export; a named export is not read.
+  // Docusaurus loads its config, sidebars, pages and theme components by default export; a named
+  // export is not read. This is framework contract, not preference.
   {
-    files: ['apps/docs/**/*.ts'],
-    rules: { 'import-x/no-default-export': 'off' },
+    files: ['apps/docs/**/*.{ts,tsx}'],
+    rules: {
+      'import-x/no-default-export': 'off',
+      // A component's markup and its behaviour read as one unit, and JSX is verbose. Splitting a
+      // panel in half to satisfy a line count produces two names where one belonged — the same
+      // argument MAX_INFRA_FUNCTION_LINES makes for resource wiring.
+      'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
   },
 
   {
