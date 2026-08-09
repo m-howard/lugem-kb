@@ -152,10 +152,9 @@ The script drives every acceptance criterion above against a running gateway and
 table. It writes to a throwaway branch under the CMS prefix and deletes it afterwards; it never
 touches the default branch, because if it could, the gateway would already have failed.
 
-`--wait-ready` polls `/readyz` first and exits non-zero if it never reports ready. **Run it after
-every deploy and fail the deploy on its exit code** — since the target group probes `/healthz`,
-this is the only thing that stops a task with an unwritten App key from quietly serving errors to
-authors.
+`--wait-ready` polls `/readyz` first and exits non-zero if it never reports ready. Useful in a
+deploy script, and the fastest way to tell a credential problem apart from a slow rollout — though
+the editorial target group now enforces the same thing without you remembering to run it.
 
 Run the whole script before any human uses the gateway. That is the phase's stated exit condition,
 not a suggestion.
@@ -190,12 +189,15 @@ can be minted. Almost always the private key has not been written yet — the st
 empty on purpose. Run the `put-secret-value` step in
 [the corpus repository](./corpus-repository.md#the-cms-github-app).
 
-The split is deliberate, and worth understanding before you rely on it. The target group probes
-`/healthz`, so **a task with an unusable credential still receives traffic** — it serves readers
-correctly and fails only the editorial routes. Pointing the target group at `/readyz` instead would
-mean a GitHub or Secrets Manager blip drains every task and takes the documentation site down for
-readers who never needed the git host. `/readyz` is therefore a deploy-time and operator gate, not
-a traffic gate, which is why the verification step below is not optional.
+The split is deliberate. There are **two target groups**: the public one probes `/healthz` and
+carries the site, `/v1/documents`, `/v1/search` and `/v1/ask`; the editorial one probes `/readyz`
+and carries `/v1/cms/*`. A task that cannot mint a token leaves the editorial group only — authors
+get a 503 from the load balancer, readers notice nothing. One target group could not do both:
+pointing it at `/readyz` would mean a GitHub or Secrets Manager blip drains every task and takes
+the documentation site down for readers who never needed the git host.
+
+It gates deploys too. ECS waits for targets to become healthy in every attached group, so a rollout
+with an unwritten App key never stabilises and the deployment circuit breaker rolls it back.
 
 **Every author gets `401 missing-email`.** The identity provider is not releasing the claim. See the
 warning above.

@@ -33,6 +33,7 @@ const IDLE_TIMEOUT_SECONDS = 120;
  */
 const CMS_SIGN_IN_RULE_PRIORITY = 5;
 const CMS_AUTH_RULE_PRIORITY = 10;
+const CMS_FORWARD_RULE_PRIORITY = 20;
 
 /** Only the editorial surface is authenticated at the edge — never the site or `/v1/ask`. */
 const CMS_PATH_PATTERN = '/v1/cms/*';
@@ -49,6 +50,11 @@ const CMS_SIGN_IN_PATH = '/v1/cms/identity';
 export interface GatewayIngressArgs {
   readonly config: StackConfig;
   readonly network: Network;
+  /**
+   * Create the editorial target group. Set when the CMS is configured at all — independently of
+   * `cmsAuth`, which is only about ALB-mode authentication.
+   */
+  readonly cmsEnabled?: boolean | undefined;
   /** Present only in `cmsAuthMode: alb`, where the load balancer runs the OIDC exchange. */
   readonly cmsAuth?: CmsAlbAuthArgs | undefined;
 }
@@ -74,6 +80,14 @@ export interface CmsAlbAuthArgs {
 export class GatewayIngress extends pulumi.ComponentResource {
   public readonly albSecurityGroupId: pulumi.Output<string>;
   public readonly targetGroupArn: pulumi.Output<string>;
+  /**
+   * Editorial target group, present only when the CMS is configured.
+   *
+   * The service registers with both, so a task that cannot mint an installation token leaves this
+   * one — and only this one — while continuing to serve readers. See {@link cmsTargetGroupArn}'s
+   * health check for why that matters.
+   */
+  public readonly cmsTargetGroupArn: pulumi.Output<string> | undefined;
   public readonly url: pulumi.Output<string>;
   /** What `AUTH_MODE=alb` checks every token's `signer` header against — requirements.md R1. */
   public readonly loadBalancerArn: pulumi.Output<string>;
@@ -84,32 +98,7 @@ export class GatewayIngress extends pulumi.ComponentResource {
     const { config, network } = args;
     const listenerPort = config.certificateArn === undefined ? HTTP_PORT : HTTPS_PORT;
 
-    const albSecurityGroup = new aws.ec2.SecurityGroup(
-      `${name}-alb-sg`,
-      {
-        vpcId: network.vpcId,
-        description: 'Ingress to the Lugem KB load balancer',
-        ingress: [
-          {
-            protocol: 'tcp',
-            fromPort: listenerPort,
-            toPort: listenerPort,
-            cidrBlocks: ['0.0.0.0/0'],
-            description: 'Client traffic',
-          },
-        ],
-        egress: [
-          {
-            protocol: '-1',
-            fromPort: 0,
-            toPort: 0,
-            cidrBlocks: ['0.0.0.0/0'],
-            description: 'To the service tasks',
-          },
-        ],
-      },
-      reparentedChild(this),
-    );
+    const albSecurityGroup = this.createSecurityGroup(name, network.vpcId, listenerPort);
 
     const alb = new aws.lb.LoadBalancer(
       `${name}-alb`,
@@ -144,25 +133,139 @@ export class GatewayIngress extends pulumi.ComponentResource {
       reparentedChild(this),
     );
 
-    const httpsListener = this.createListeners(name, { config, alb, targetGroup });
+    // requirements.md R10: "a miscredentialed task never joins the target group". A single target
+    // group could not honour that without also draining the reader site whenever the git host
+    // blipped — so there are two. The public one asks "are you alive"; this one asks "can you
+    // actually serve an author", and only `/v1/cms/*` is routed to it.
+    //
+    // It gates deploys as well as traffic: ECS waits for targets to become healthy in every
+    // attached target group, so a deploy carrying an unusable App key never stabilises and the
+    // circuit breaker rolls it back.
+    const cmsTargetGroup =
+      args.cmsEnabled === true ? this.createCmsTargetGroup(name, { config, network }) : undefined;
 
-    if (args.cmsAuth !== undefined && httpsListener !== undefined) {
-      this.createCmsAuthRule(name, { auth: args.cmsAuth, listener: httpsListener, targetGroup });
+    const listener = this.createListeners(name, { config, alb, targetGroup });
+
+    if (cmsTargetGroup !== undefined) {
+      this.routeCmsTraffic(name, {
+        listener,
+        targetGroup: cmsTargetGroup,
+        // `authenticate-oidc` is an HTTPS listener action, so without a certificate there is
+        // nowhere to attach it. `github-config.ts` refuses that combination at preview; this
+        // keeps the component correct if it is ever constructed directly.
+        auth: config.certificateArn === undefined ? undefined : args.cmsAuth,
+      });
     }
 
     const scheme = config.certificateArn === undefined ? 'http' : 'https';
 
     this.albSecurityGroupId = albSecurityGroup.id;
     this.targetGroupArn = targetGroup.arn;
+    this.cmsTargetGroupArn = cmsTargetGroup?.arn;
     this.loadBalancerArn = alb.arn;
     this.url = pulumi.interpolate`${scheme}://${alb.dnsName}`;
 
     this.registerOutputs({
       albSecurityGroupId: this.albSecurityGroupId,
       targetGroupArn: this.targetGroupArn,
+      cmsTargetGroupArn: this.cmsTargetGroupArn,
       loadBalancerArn: this.loadBalancerArn,
       url: this.url,
     });
+  }
+
+  /** Client traffic in on the listener port, anything out to the tasks. */
+  private createSecurityGroup(
+    name: string,
+    vpcId: pulumi.Input<string>,
+    listenerPort: number,
+  ): aws.ec2.SecurityGroup {
+    return new aws.ec2.SecurityGroup(
+      `${name}-alb-sg`,
+      {
+        vpcId,
+        description: 'Ingress to the Lugem KB load balancer',
+        ingress: [
+          {
+            protocol: 'tcp',
+            fromPort: listenerPort,
+            toPort: listenerPort,
+            cidrBlocks: ['0.0.0.0/0'],
+            description: 'Client traffic',
+          },
+        ],
+        egress: [
+          {
+            protocol: '-1',
+            fromPort: 0,
+            toPort: 0,
+            cidrBlocks: ['0.0.0.0/0'],
+            description: 'To the service tasks',
+          },
+        ],
+      },
+      reparentedChild(this),
+    );
+  }
+
+  /**
+   * The target group that decides whether a task may serve *authors*.
+   *
+   * It probes `/readyz`, which mints an installation token, so requirements.md R10's "a
+   * miscredentialed task never joins the target group" becomes literally true — for the surface
+   * the requirement was written about. The public group keeps `/healthz`, so a git host outage
+   * cannot drain the documentation site out from under readers who never needed the git host.
+   *
+   * It gates deploys too, which is the part worth knowing: ECS waits for targets to become
+   * healthy in *every* attached group, so a rollout carrying an unwritten App key never
+   * stabilises and `deploymentCircuitBreaker` rolls it back.
+   */
+  private createCmsTargetGroup(name: string, args: CmsTargetGroupArgs): aws.lb.TargetGroup {
+    const { config, network } = args;
+
+    return new aws.lb.TargetGroup(
+      `${name}-cms-tg`,
+      {
+        port: config.containerPort,
+        protocol: 'HTTP',
+        targetType: 'ip',
+        vpcId: network.vpcId,
+        deregistrationDelay: DEREGISTRATION_DELAY_SECONDS,
+        healthCheck: {
+          path: '/readyz',
+          protocol: 'HTTP',
+          matcher: '200',
+          interval: HEALTH_CHECK_INTERVAL_SECONDS,
+          timeout: HEALTH_CHECK_TIMEOUT_SECONDS,
+          healthyThreshold: HEALTHY_THRESHOLD,
+          unhealthyThreshold: UNHEALTHY_THRESHOLD,
+        },
+      },
+      reparentedChild(this),
+    );
+  }
+
+  /** Sends `/v1/cms/*` to the editorial group, authenticating first in `alb` mode. */
+  private routeCmsTraffic(name: string, args: CmsRoutingArgs): void {
+    new aws.lb.ListenerRule(
+      `${name}-cms-forward`,
+      {
+        listenerArn: args.listener.arn,
+        priority: CMS_FORWARD_RULE_PRIORITY,
+        conditions: [{ pathPattern: { values: [CMS_PATH_PATTERN] } }],
+        actions: [{ type: 'forward', targetGroupArn: args.targetGroup.arn }],
+      },
+      reparentedChild(this),
+    );
+
+    // In `alb` mode two higher-precedence rules authenticate first; both forward here as well.
+    if (args.auth !== undefined) {
+      this.createCmsAuthRule(name, {
+        auth: args.auth,
+        listener: args.listener,
+        targetGroup: args.targetGroup,
+      });
+    }
   }
 
   /**
@@ -171,12 +274,15 @@ export class GatewayIngress extends pulumi.ComponentResource {
    * Plain HTTP is the demo default because requiring a certificate would make the stack
    * undeployable without a domain. Any real deployment should set `certificateArn`.
    */
-  private createListeners(name: string, args: ListenerArgs): aws.lb.Listener | undefined {
+  private createListeners(name: string, args: ListenerArgs): aws.lb.Listener {
     const { config, alb, targetGroup } = args;
     const forward = [{ type: 'forward', targetGroupArn: targetGroup.arn }];
 
     if (config.certificateArn === undefined) {
-      new aws.lb.Listener(
+      // Returned so rules can attach here too. Without a certificate there is no HTTPS listener,
+      // and the editorial routing still has to work — only `authenticate-oidc` needs HTTPS, which
+      // is why `cmsAuthMode: alb` is refused at preview when no certificate is configured.
+      return new aws.lb.Listener(
         `${name}-http`,
         {
           loadBalancerArn: alb.arn,
@@ -186,7 +292,6 @@ export class GatewayIngress extends pulumi.ComponentResource {
         },
         reparentedChild(this),
       );
-      return undefined;
     }
 
     const https = new aws.lb.Listener(
@@ -313,6 +418,18 @@ interface CmsAuthRuleArgs {
   readonly auth: CmsAlbAuthArgs;
   readonly listener: aws.lb.Listener;
   readonly targetGroup: aws.lb.TargetGroup;
+}
+
+interface CmsTargetGroupArgs {
+  readonly config: StackConfig;
+  readonly network: Network;
+}
+
+interface CmsRoutingArgs {
+  readonly listener: aws.lb.Listener;
+  readonly targetGroup: aws.lb.TargetGroup;
+  /** Present only in `alb` mode, and only meaningful with an HTTPS listener. */
+  readonly auth: CmsAlbAuthArgs | undefined;
 }
 
 interface ListenerArgs {

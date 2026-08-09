@@ -172,11 +172,10 @@ SITE=$(pulumi -C infra/pulumi stack output siteUrl)
 bun run scripts/check/verify-gateway.ts --base-url "$SITE" --token "$ACCESS_TOKEN" --wait-ready 300
 ```
 
-This is the deploy gate, and it is not optional. The ALB target group probes `/healthz`, so a task
-whose GitHub App key is missing or wrong becomes healthy and takes traffic — it serves readers fine
-and fails every author. Nothing else catches that; `--wait-ready` exits non-zero when `/readyz`
-never comes good, so a deploy script can fail on it. See
-[the authoring gateway](./authoring-gateway.md#verify-a-deployment).
+A task whose GitHub App key is missing or wrong never joins the **editorial** target group, which
+probes `/readyz` — so `pulumi up` will not stabilise and ECS rolls the deployment back. This script
+tells you that has happened, and why, rather than leaving you to read target group health in the
+console. See [the authoring gateway](./authoring-gateway.md#verify-a-deployment).
 
 Then the read paths, which need no credential:
 

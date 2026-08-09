@@ -27,16 +27,15 @@ interface ReadinessCheck {
  * unwritten App key is a visible, specific failure rather than a save that breaks for the first
  * author who tries one.
  *
- * **What `/readyz` does not do is keep a task out of the load balancer.** The target group probes
- * `/healthz` (see `gateway-ingress.ts`), so a task whose credential is unusable still receives
- * traffic and still serves readers perfectly well; only the editorial routes fail. That is the
- * deliberate trade. Pointing the target group here instead would satisfy R10's wording and mean a
- * GitHub or Secrets Manager blip drains every task and takes the public documentation site down
- * for readers who never needed the git host.
+ * **`/readyz` gates editorial admission.** The load balancer has two target groups: the public one
+ * probes `/healthz` and carries the site and the read APIs; the editorial one probes here and
+ * carries `/v1/cms/*`. A task that cannot mint an installation token leaves the editorial group and
+ * stays in the public one, so authors get a 503 from the load balancer while readers are entirely
+ * unaffected — which is what R10 asks for without a git host outage taking the documentation site
+ * down with it.
  *
- * So this is a **deploy-time and operator gate**, not a traffic gate: run
- * `scripts/check/verify-gateway.ts --wait-ready` after a deploy and fail the deploy on it.
- * `docs/deploying-to-aws.md` documents that as the step after `pulumi up`.
+ * It gates deploys as well: ECS waits for health in every attached target group, so a rollout
+ * carrying an unwritten App key never stabilises and the circuit breaker rolls it back.
  *
  * @param options - The corpus client, and the token source when the CMS is on.
  * @returns A Hono app exposing `/healthz` and `/readyz`.

@@ -98,9 +98,13 @@ const cmsAuth =
     ? undefined
     : { oidc: cmsOidc, clientSecret: new pulumi.Config().requireSecret('cmsOidcClientSecret') };
 
+// The editorial target group exists whenever the CMS does, independently of how authors
+// authenticate: `/readyz` gating editorial admission is about the credential, not the login.
+const cmsEnabled = githubConfig?.cmsApp !== undefined && cmsCredential !== undefined;
+
 const ingress = new GatewayIngress(
   NAME,
-  { config, network, ...(cmsAuth === undefined ? {} : { cmsAuth }) },
+  { config, network, cmsEnabled, ...(cmsAuth === undefined ? {} : { cmsAuth }) },
   onAws,
 );
 
@@ -136,6 +140,9 @@ const service = new GatewayService(
     accountId,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
     ...(cms === undefined ? {} : { cms }),
+    ...(ingress.cmsTargetGroupArn === undefined
+      ? {}
+      : { cmsTargetGroupArn: ingress.cmsTargetGroupArn }),
   },
   onAws,
 );

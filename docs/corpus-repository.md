@@ -142,10 +142,10 @@ Until step 4 the gateway's readiness probe fails with `cms-credential-unusable`,
 installation token can be minted. Liveness stays green throughout, so the task is not killed and
 restarted into the same problem. The task role can read that one secret and nothing else.
 
-Note what readiness does **not** do: the load balancer's target group probes `/healthz`, so a task
-whose credential is unusable still takes traffic and still serves readers — only the editorial
-routes fail. Run `scripts/check/verify-gateway.ts --wait-ready 300` after deploying and fail the
-deploy on it; see [The authoring gateway](./authoring-gateway.md#verify-a-deployment).
+A task in that state is removed from the **editorial** target group, which probes `/readyz`, and
+stays in the public one, which probes `/healthz`. Authors get a 503 from the load balancer; readers
+notice nothing. A deploy in that state never stabilises, so ECS rolls it back — see
+[The authoring gateway](./authoring-gateway.md#verify-a-deployment).
 
 Both ids reach the container, along with the repository and the branch and path prefixes, so the
 gateway can mint a token and confine what it does with one. Choosing how authors authenticate is the

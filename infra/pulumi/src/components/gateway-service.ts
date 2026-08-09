@@ -25,6 +25,15 @@ export interface GatewayServiceArgs {
   readonly network: Network;
   readonly albSecurityGroupId: pulumi.Output<string>;
   readonly targetGroupArn: pulumi.Output<string>;
+  /**
+   * Editorial target group, present when the CMS is configured.
+   *
+   * Registering with both is what makes requirements.md R10 true: this one probes `/readyz`, so a
+   * task that cannot mint an installation token is removed from it while staying in the public
+   * group and continuing to serve readers. It also gates the deploy — ECS waits for health in
+   * every attached group, so a rollout with a bad credential never stabilises.
+   */
+  readonly cmsTargetGroupArn?: pulumi.Output<string> | undefined;
   readonly imageUri: pulumi.Output<string>;
   readonly corpusBucketName: pulumi.Output<string>;
   readonly corpusBucketArn: pulumi.Output<string>;
@@ -138,13 +147,7 @@ export class GatewayService extends pulumi.ComponentResource {
           securityGroups: [serviceSecurityGroup.id],
           assignPublicIp: false,
         },
-        loadBalancers: [
-          {
-            targetGroupArn: args.targetGroupArn,
-            containerName: CONTAINER_NAME,
-            containerPort: config.containerPort,
-          },
-        ],
+        loadBalancers: loadBalancerRegistrations(args),
         healthCheckGracePeriodSeconds: HEALTH_CHECK_GRACE_PERIOD_SECONDS,
         deploymentCircuitBreaker: { enable: true, rollback: true },
         waitForSteadyState: true,
@@ -405,4 +408,27 @@ function cmsEnvironment(
   }
 
   return entries;
+}
+
+/**
+ * Which target groups this service registers with.
+ *
+ * Two when the CMS is configured: the public group probing `/healthz`, and the editorial group
+ * probing `/readyz`. ECS keeps a task in each group independently, so an unusable GitHub App
+ * credential removes it from the editorial group alone — readers are unaffected — and a deploy
+ * carrying one never reaches a stable state, which is what makes requirements.md R10 enforced
+ * rather than merely documented.
+ */
+function loadBalancerRegistrations(args: GatewayServiceArgs) {
+  const registration = {
+    containerName: CONTAINER_NAME,
+    containerPort: args.config.containerPort,
+  };
+
+  return [
+    { ...registration, targetGroupArn: args.targetGroupArn },
+    ...(args.cmsTargetGroupArn === undefined
+      ? []
+      : [{ ...registration, targetGroupArn: args.cmsTargetGroupArn }]),
+  ];
 }
