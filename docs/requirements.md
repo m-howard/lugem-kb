@@ -1,10 +1,25 @@
+---
+title: Requirements — docs authoring gateway
+sidebar_label: Requirements
+sidebar_position: 4
+owner: platform
+last_reviewed: 2026-08-08
+---
+
 <!--
     Provenance: this document was supplied as pasted text and committed here so that
-    docs/reviews/requirements-review.md has a resolvable target. Two notes:
+    docs/reviews/requirements-review.md has a resolvable target. Notes:
 
     1. The source was supplied twice, identically. Only one copy is committed.
-    2. The `Related:` links below point at files that do not exist in this repository.
-       They are left unchanged deliberately — see finding C4 in the review.
+    2. The `Related:` line originally linked to project-brief.md and api-contract.md,
+       neither of which exists here. They were demoted to plain text when this file joined
+       the Docusaurus corpus: the site builds with onBrokenMarkdownLinks set to 'throw',
+       because a broken link in the corpus becomes a broken citation once the page is
+       indexed. Restore the links when the targets land.
+    3. Frontmatter was added for the same reason — every corpus page carries `owner` and
+       `last_reviewed`, and readers see the review date beside citations.
+    4. This file is listed in .prettierignore. Prettier renumbers markdown ordered lists,
+       which rewrites story 23 below into a duplicate of 15. Do not remove that entry.
 
     Otherwise verbatim. In particular the §5 user-story numbering is reproduced as
     supplied, including the out-of-sequence story 23 (see finding C2). Do not "fix" it
@@ -14,7 +29,7 @@
 # Requirements: docs authoring gateway
 
 **Status:** draft for review
-**Related:** [project-brief.md](./project-brief.md), [api-contract.md](./api-contract.md)
+**Related:** `project-brief.md`, `api-contract.md` — not yet in this repository
 **Last updated:** 2026-08-08
 
 ---
