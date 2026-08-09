@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'vitest';
+
+import { buildTestApp } from '../helpers/build-test-app';
+
+const STRONG_MATCH = {
+  text: 'Submit leave requests in Workday at least two weeks in advance.',
+  uri: 's3://test-corpus/docs/people/leave.md',
+  score: 0.91,
+};
+
+async function post(app: ReturnType<typeof buildTestApp>, body: unknown): Promise<Response> {
+  return await app.request('/v1/search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+describe('POST /v1/search', () => {
+  it('returns citations for a covered question', async () => {
+    const app = buildTestApp({ retrievalResults: [STRONG_MATCH] });
+    const response = await post(app, { question: 'how do I request leave?' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      covered: true,
+      citations: [{ text: STRONG_MATCH.text, sourceUri: STRONG_MATCH.uri, score: 0.91 }],
+    });
+  });
+
+  it('returns the passage verbatim, so the reader can check the claim against the source', async () => {
+    const app = buildTestApp({ retrievalResults: [STRONG_MATCH] });
+    const body = (await (await post(app, { question: 'leave' })).json()) as {
+      citations: { text: string }[];
+    };
+
+    expect(body.citations[0]?.text).toBe(STRONG_MATCH.text);
+  });
+
+  // R20: when nothing is above the threshold the reader is told plainly. The response shape is
+  // distinct — no `citations` key at all — so a client cannot render an empty list as an answer.
+  describe('no coverage', () => {
+    it('says so when retrieval returns nothing', async () => {
+      const app = buildTestApp({ retrievalResults: [] });
+      const response = await post(app, { question: 'what is our policy on unicorns?' });
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body).toEqual({ covered: false, message: 'No documentation covers this question.' });
+      expect(body).not.toHaveProperty('citations');
+    });
+
+    it('discards weak matches rather than presenting them as answers', async () => {
+      const app = buildTestApp({
+        retrievalResults: [{ text: 'Vaguely related.', uri: 's3://c/docs/other.md', score: 0.1 }],
+      });
+      const response = await post(app, { question: 'unrelated question' });
+
+      await expect(response.json()).resolves.toMatchObject({ covered: false });
+    });
+  });
+
+  describe('request validation', () => {
+    it.each([
+      ['an empty question', { question: '' }],
+      ['a whitespace-only question', { question: '    ' }],
+      ['a missing question field', {}],
+      ['a non-string question', { question: 42 }],
+    ])('rejects %s with 400', async (_case, body) => {
+      const response = await post(buildTestApp(), body);
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({ error: 'invalid_request' });
+    });
+
+    it('rejects a malformed JSON body without crashing the request', async () => {
+      const response = await buildTestApp().request('/v1/search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{not json',
+      });
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  it('does not accept GET, so questions cannot end up in access logs as query strings', async () => {
+    const response = await buildTestApp().request('/v1/search?question=sensitive');
+
+    expect(response.status).not.toBe(200);
+  });
+});
