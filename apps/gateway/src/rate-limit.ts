@@ -42,7 +42,7 @@ function clientKey(forwardedFor: string | undefined): string {
  *   rate-based rule or a shared store.
  * - It does not identify anyone. requirements.md R22 requires the endpoint to authenticate
  *   against the same IdP as `/admin`; no IdP exists in this project yet, and this does not
- *   substitute for one. See docs/adr/0010-grounded-generation-behind-retrieval.md.
+ *   substitute for one. See docs/adr/0012-grounded-generation-behind-retrieval.md.
  *
  * @param options - The per-client, per-minute allowance.
  * @returns Hono middleware answering 429 with `Retry-After` once a client is over.

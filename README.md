@@ -26,9 +26,10 @@ VPC you already have.
 - **One corpus, two consumers.** The markdown in `docs/` is published by the site and ingested by
   the knowledge base from the same commit. Nothing is duplicated, so the page and the answer
   cannot drift apart.
-- **Retrieval with citations, never synthesis.** `POST /v1/search` returns the passages it found
-  and where they came from. When nothing clears the relevance threshold it says so, in a distinct
-  response shape a client cannot render as an answer.
+- **Grounded answers, or none at all.** Ask a question from any page and get a short answer
+  streamed back with citations. Retrieval is the gate: when nothing clears the relevance threshold
+  the answer model is never called, and the reader is told plainly — in a distinct response shape
+  a client cannot render as an answer.
 - **Deploys into your VPC.** No VPC is created. Subnet membership is verified during `pulumi
 preview`, not discovered halfway through `up`.
 - **A knowledge base you can afford to leave running.** S3 Vectors instead of OpenSearch
@@ -47,19 +48,19 @@ git clone https://github.com/m-howard/lugem-kb.git
 cd lugem-kb
 bun install
 
-bun run docs:start   # documentation site on http://localhost:3000
+bun run docs:start   # documentation site on http://localhost:3001
 ```
 
 To run the service, which serves the built site alongside its API:
 
 ```bash
 bun run docs:build
-cp .env.example .env   # fill in CORPUS_BUCKET and KNOWLEDGE_BASE_ID
+cp .env.example .env   # fill in CORPUS_BUCKET, KNOWLEDGE_BASE_ID and ANSWER_MODEL_ID
 bun run dev
 ```
 
 Deploying needs the [Pulumi CLI](https://www.pulumi.com/docs/install/) **3.226.0+** — the `bun`
-runtime landed in that release. See **[Deploying to AWS](docs/deploying-to-aws.md)** for the two
+runtime landed in that release. See **[Deploying to AWS](docs/deploying-to-aws.md)** for the three
 AWS account prerequisites before you run it.
 
 ## 🏗️ Architecture
@@ -72,7 +73,9 @@ AWS account prerequisites before you run it.
                         │  │  /healthz  /readyz     │  │
                         │  │  /v1/documents         │──┼──▶ S3 corpus bucket
                         │  │  /v1/search            │──┼──▶ Bedrock knowledge base
-                        │  │  /*  built Docusaurus  │  │        └─▶ S3 Vectors index
+                        │  │  /v1/ask  (SSE)        │──┼──▶   └─▶ S3 Vectors index
+                        │  │      └─ retrieve first │──┼──▶ Bedrock answer model
+                        │  │  /*  built Docusaurus  │  │
                         │  └────────────────────────┘  │
                         └──────────────────────────────┘
                                       ▲
@@ -100,30 +103,37 @@ tests/e2e/         Playwright, against a real server and a real build.
 
 ### Ask the corpus a question
 
+Open the site and use **Ask the docs** on any page, or the `/ask` page. Over HTTP:
+
 ```bash
-curl -X POST "$SITE_URL/v1/search" \
+curl -N -X POST "$SITE_URL/v1/ask" \
   -H 'content-type: application/json' \
   -d '{"question":"how do I deploy into an existing VPC?"}'
 ```
 
-```json
-{
-  "covered": true,
-  "citations": [
-    {
-      "sourceUri": "s3://lugem-corpus/docs/adr/0006-deploy-into-an-existing-vpc.md",
-      "text": "The stack consumes an existing VPC and never creates one...",
-      "score": 0.87
-    }
-  ]
-}
+Citations arrive first, so the sources are on screen before the prose is finished — and so
+"every answer carries a citation" holds by construction rather than by hope:
+
+```text
+event: citations
+data: [{"sourceUri":"s3://lugem-corpus/docs/adr/0006-deploy-into-an-existing-vpc.md",
+        "url":"/adr/0006-deploy-into-an-existing-vpc","lastReviewed":"2026-08-09",
+        "text":"The stack consumes an existing VPC and never creates one...","score":0.87}]
+
+event: token
+data: {"text":"The stack consumes an existing VPC and never creates one. [1]"}
+
+event: done
+data: {"ok":true}
 ```
 
-When nothing is relevant enough:
+When nothing is relevant enough there is no stream at all — the answer model is never called:
 
 ```json
 { "covered": false, "message": "No documentation covers this question." }
 ```
+
+`POST /v1/search` still returns the raw passages, for a client that wants to do its own reading.
 
 ### Publish a change
 
@@ -142,29 +152,36 @@ longer has.
 
 Gateway environment (see `.env.example`; the service refuses to start if a required one is absent):
 
-| Variable                    | Required | Default | Purpose                                                      |
-| --------------------------- | -------- | ------- | ------------------------------------------------------------ |
-| `AWS_REGION`                | yes      | —       | Region of the corpus bucket and knowledge base.              |
-| `CORPUS_BUCKET`             | yes      | —       | S3 bucket holding the markdown.                              |
-| `CORPUS_PREFIX`             | yes      | —       | Key prefix. Reads outside it are refused before any S3 call. |
-| `KNOWLEDGE_BASE_ID`         | yes      | —       | Bedrock knowledge base to retrieve from.                     |
-| `SITE_ROOT`                 | yes      | —       | Directory holding the built Docusaurus output.               |
-| `PORT`                      | no       | `3000`  | Listen port.                                                 |
-| `LOG_LEVEL`                 | no       | `info`  | `fatal` … `trace`.                                           |
-| `RETRIEVAL_SCORE_THRESHOLD` | no       | `0.4`   | Below this, the API reports no coverage.                     |
+| Variable                    | Required | Default | Purpose                                                        |
+| --------------------------- | -------- | ------- | -------------------------------------------------------------- |
+| `AWS_REGION`                | yes      | —       | Region of the corpus bucket and knowledge base.                |
+| `CORPUS_BUCKET`             | yes      | —       | S3 bucket holding the markdown.                                |
+| `CORPUS_PREFIX`             | yes      | —       | Key prefix. Reads outside it are refused before any S3 call.   |
+| `KNOWLEDGE_BASE_ID`         | yes      | —       | Bedrock knowledge base to retrieve from.                       |
+| `ANSWER_MODEL_ID`           | yes      | —       | Bedrock model that writes answers. Needs model access granted. |
+| `SITE_ROOT`                 | yes      | —       | Directory holding the built Docusaurus output.                 |
+| `PORT`                      | no       | `3000`  | Listen port.                                                   |
+| `LOG_LEVEL`                 | no       | `info`  | `fatal` … `trace`.                                             |
+| `RETRIEVAL_SCORE_THRESHOLD` | no       | `0.4`   | Below this, no coverage — and no model call.                   |
+| `ANSWER_MAX_TOKENS`         | no       | `700`   | Ceiling on answer length.                                      |
+| `ASK_RATE_LIMIT_PER_MINUTE` | no       | `20`    | Questions per client per minute on `/v1/ask`.                  |
 
 Pulumi stack configuration is documented in
 **[Deploying to AWS](docs/deploying-to-aws.md#configure-the-stack)**.
 
 ## 📖 Documentation
 
+- **[Asking questions](docs/asking-questions.md)** — the reader's guide to the assistant.
 - **[Getting started](docs/getting-started.md)** — run everything locally.
 - **[Deploying to AWS](docs/deploying-to-aws.md)** — prerequisites, config, costs, teardown.
 - **[The corpus repository](docs/corpus-repository.md)** — branch rules, the publish pipeline, and the CMS app credential.
 - **[Architecture decision records](docs/adr/)** — why each piece is the way it is, and what it costs.
 - **[Requirements](docs/requirements.md)** — the product this scaffold is the first phase of.
 
-Notable decisions: [S3 Vectors over OpenSearch Serverless](docs/adr/0005-bedrock-knowledge-base-on-s3-vectors.md) ·
+Notable decisions: [grounded generation behind retrieval](docs/adr/0012-grounded-generation-behind-retrieval.md) ·
+[Pulumi owns the corpus repository](docs/adr/0011-pulumi-owns-the-corpus-repository.md) ·
+[custom components for resource groups](docs/adr/0010-custom-components-for-resource-groups.md) ·
+[S3 Vectors over OpenSearch Serverless](docs/adr/0005-bedrock-knowledge-base-on-s3-vectors.md) ·
 [Pulumi on the bun runtime](docs/adr/0004-pulumi-with-bun-runtime.md) ·
 [one lockfile, no pnpm parity](docs/adr/0007-single-lockfile-no-pnpm-parity.md) ·
 [serving the site from ECS](docs/adr/0003-serve-the-site-from-ecs.md) — and what that costs.
@@ -194,10 +211,14 @@ Security issues go to **[SECURITY.md](SECURITY.md)**, not the public issue track
 ## ⚠️ Status
 
 This is Phase 1 of [the requirements](docs/requirements.md) — corpus in git, site building,
-deployment stood up — plus a working retrieval slice of Phase 5. The authoring gateway (Decap CMS,
-the GitHub App credential broker, the branch and endpoint policy engine) is **not built yet**, and
-answer _generation_ is deliberately out of scope: retrieval with citations ships, synthesis does
-not.
+deployment stood up — plus the answering slice of Phase 5: grounded generation with citations, a
+chat widget on every page, and a `/ask` page. The authoring gateway (Decap CMS, the GitHub App
+credential broker, the branch and endpoint policy engine) is **not built yet**.
+
+Two known gaps in answering, both recorded in
+[ADR 0012](docs/adr/0012-grounded-generation-behind-retrieval.md): the endpoint is
+**unauthenticated** (R22 wants an IdP this project does not have — the rate limit is a cost guard,
+not access control), and the **feedback loop** of R23 is unbuilt.
 
 ---
 

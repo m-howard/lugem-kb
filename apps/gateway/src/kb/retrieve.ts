@@ -47,7 +47,7 @@ function toCitation(result: KnowledgeBaseRetrievalResult): Citation | undefined 
  * source.
  *
  * This contract is unchanged by generation, which is what the note here originally predicted.
- * See docs/adr/0010-grounded-generation-behind-retrieval.md.
+ * See docs/adr/0012-grounded-generation-behind-retrieval.md.
  */
 export class Retriever {
   readonly #client: BedrockAgentRuntimeClient;

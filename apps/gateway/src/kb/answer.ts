@@ -103,7 +103,7 @@ function toMessages(request: AnswerRequest): Message[] {
  * worst the model can do is put a marker against the wrong source, and the reader has the
  * verbatim passage beside it to check.
  *
- * See docs/adr/0010-grounded-generation-behind-retrieval.md.
+ * See docs/adr/0012-grounded-generation-behind-retrieval.md.
  */
 export class Answerer {
   readonly #client: BedrockRuntimeClient;

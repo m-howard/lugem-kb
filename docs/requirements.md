@@ -1,7 +1,7 @@
 ---
 title: Requirements — docs authoring gateway
 sidebar_label: Requirements
-sidebar_position: 5
+sidebar_position: 6
 owner: platform
 last_reviewed: 2026-08-08
 ---
