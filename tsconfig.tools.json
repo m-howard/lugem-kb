@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // `bun` for `Bun.serve` in the e2e harness; `node` for the fs and path builtins the sync
+    // script uses. Both runtimes are in play here — Bun executes these, Node types describe the
+    // builtins it implements.
+    "types": ["node", "bun"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "./node_modules/.cache/tsc-tools"
+  },
+  "include": ["scripts/**/*.ts", "tests/e2e/**/*.ts", "*.config.ts", "*.config.mts"]
+}
