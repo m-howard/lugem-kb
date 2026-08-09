@@ -55,6 +55,12 @@ cp Pulumi.dev.yaml.example Pulumi.dev.yaml   # then edit it
 | `embeddingModelId`      | no       | Default `amazon.titan-embed-text-v2:0`.                                   |
 | `allowUnverifiedRegion` | no       | Escape hatch for a newly added S3 Vectors region.                         |
 
+Setting `corpusRepository` additionally puts the repository backing the knowledge base under
+Pulumi's control — its branch rules, its publish pipeline and the CMS app credential. Those keys,
+and the GitHub token they need, are documented in
+[the corpus repository guide](./corpus-repository.md). Leave the key unset and the stack manages no
+GitHub resources at all.
+
 ### Networking your VPC must already provide
 
 The tasks run in private subnets with **no public IP**, so they need a route to S3, Bedrock and ECR
@@ -83,6 +89,9 @@ pulumi stack output knowledgeBaseId
 pulumi stack output dataSourceId
 ```
 
+With `corpusRepository` set there are three more — `corpusRepositoryFullName`, `publishRoleArn` and
+`cmsAppSecretArn`. They are omitted otherwise.
+
 ## Populate the knowledge base
 
 The stack creates an empty corpus bucket and an empty index. Fill both:
@@ -101,6 +110,10 @@ The script uploads every markdown file, **deletes objects that no longer exist l
 starts an ingestion job and waits for it to finish. Deletion is not optional: a page removed from
 the repository must stop being answerable, or the knowledge base keeps citing a page the site no
 longer has.
+
+Run it by hand once, to prove the wiring. After that the `Publish` workflow runs the same script on
+every merge that touches `docs/`, reading the same four values from repository variables Pulumi
+publishes — see [the corpus repository guide](./corpus-repository.md).
 
 ## Verify
 
@@ -158,6 +171,11 @@ private subnets have a route to ECR and CloudWatch Logs.
 **The service is healthy but `/readyz` returns 503.** The task role cannot reach the corpus bucket.
 The policy is scoped to one bucket and one prefix — confirm `corpusPrefix` matches where the sync
 script actually uploaded.
+
+**Readiness never passes and the logs mention the GitHub App.** With `cmsGitHubAppId` set, the stack
+creates the App's secret but leaves it empty on purpose — the private key is written out of band.
+Until it is, no installation token can be minted and the task correctly refuses to accept traffic.
+See [the corpus repository guide](./corpus-repository.md).
 
 **Ingestion completes but `/v1/search` finds nothing.** Check the model access from prerequisite 1,
 and confirm `embeddingModelId` matches the dimension the index was created with. Changing the

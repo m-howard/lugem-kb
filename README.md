@@ -89,7 +89,8 @@ notices — which is why there are tests for it at both the integration and e2e 
 ```text
 apps/docs/         Docusaurus site. Content root is the repo-root docs/ tree.
 apps/gateway/      Bun + Hono service. Serves the site and the API. Owns the Dockerfile.
-infra/pulumi/      Pulumi program, runtime: bun. ECR, ECS, ALB, S3, Bedrock.
+infra/pulumi/      Pulumi program, runtime: bun. ECR, ECS, ALB, S3, Bedrock, and the
+                   GitHub repository backing the corpus.
 docs/              The corpus: guides, requirements, and ADRs.
 scripts/docs/      sync-corpus.ts — upload markdown to S3 and trigger ingestion.
 tests/e2e/         Playwright, against a real server and a real build.
@@ -159,6 +160,7 @@ Pulumi stack configuration is documented in
 
 - **[Getting started](docs/getting-started.md)** — run everything locally.
 - **[Deploying to AWS](docs/deploying-to-aws.md)** — prerequisites, config, costs, teardown.
+- **[The corpus repository](docs/corpus-repository.md)** — branch rules, the publish pipeline, and the CMS app credential.
 - **[Architecture decision records](docs/adr/)** — why each piece is the way it is, and what it costs.
 - **[Requirements](docs/requirements.md)** — the product this scaffold is the first phase of.
 

@@ -18,18 +18,23 @@ export interface Network {
  * something unrelated. Checking here turns that into a preview-time failure naming the subnet.
  *
  * @param config - Validated stack configuration.
+ * @param opts - Invoke options, so the lookups run against the same explicit AWS provider — and
+ *   therefore the same region — as the resources that consume them.
  * @returns The VPC ID and the subnet lists, once verified.
  */
-export function resolveNetwork(config: StackConfig): Network {
-  const vpc = aws.ec2.getVpcOutput({ id: config.vpcId });
+export function resolveNetwork(config: StackConfig, opts?: pulumi.InvokeOptions): Network {
+  const vpc = aws.ec2.getVpcOutput({ id: config.vpcId }, opts);
 
   const allSubnetIds = [...config.privateSubnetIds, ...config.publicSubnetIds];
-  const subnetsInVpc = aws.ec2.getSubnetsOutput({
-    filters: [
-      { name: 'vpc-id', values: [config.vpcId] },
-      { name: 'subnet-id', values: allSubnetIds },
-    ],
-  });
+  const subnetsInVpc = aws.ec2.getSubnetsOutput(
+    {
+      filters: [
+        { name: 'vpc-id', values: [config.vpcId] },
+        { name: 'subnet-id', values: allSubnetIds },
+      ],
+    },
+    opts,
+  );
 
   const verifiedVpcId = pulumi
     .all([vpc.id, subnetsInVpc.ids])

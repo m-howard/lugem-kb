@@ -14,7 +14,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   # The preview needs a Pulumi token and AWS credentials, which forks and freshly cloned
@@ -41,6 +40,12 @@ jobs:
     needs: check-credentials
     if: needs.check-credentials.outputs.configured == 'true'
     runs-on: ubuntu-latest
+    # id-token for the AWS OIDC exchange; pull-requests because `comment-on-pr` below writes one.
+    # Neither belongs on the other two jobs, which touch no credentials at all.
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -69,6 +74,10 @@ jobs:
           comment-on-pr: true
         env:
           PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          # Only needed once `lugem-kb:corpusRepository` is set: the GitHub provider has to read
+          # the repository's current rules to diff them. A secret cannot be named `GITHUB_*`, hence
+          # the indirection. See docs/corpus-repository.md for the scopes it needs.
+          GITHUB_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
 
   # Stack validation is pure and needs no credentials, so it runs everywhere — including forks.
   # It is what catches a missing vpcId or an S3-Vectors-unsupported region before a preview would.
@@ -81,4 +90,6 @@ jobs:
         with:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
-      - run: bun run vitest run infra/pulumi/src/config.test.ts
+      # The whole infra unit project, not one named file: the stack and GitHub configuration are
+      # validated by separate modules, and a hardcoded path silently stops covering the next one.
+      - run: bun run vitest run --project unit infra/pulumi

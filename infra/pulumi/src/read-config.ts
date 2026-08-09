@@ -1,6 +1,7 @@
 import * as pulumi from '@pulumi/pulumi';
 
 import { type StackConfig, validateStackConfig } from './config';
+import { type GithubConfig, validateGithubConfig } from './github-config';
 
 /**
  * Reads and validates stack configuration from the Pulumi engine.
@@ -30,5 +31,31 @@ export function readStackConfig(): StackConfig {
     corpusPrefix: config.get('corpusPrefix'),
     containerPort: config.getNumber('containerPort'),
     allowUnverifiedRegion: config.getBoolean('allowUnverifiedRegion'),
+  });
+}
+
+/**
+ * Reads and validates the configuration for the repository backing the knowledge base.
+ *
+ * The thin half of {@link validateGithubConfig}, and untested for the same reason
+ * {@link readStackConfig} is: there is nothing here a test could assert that the Pulumi engine
+ * does not already guarantee.
+ *
+ * @returns Validated GitHub configuration, or `undefined` when `corpusRepository` is unset.
+ * @throws {import('./config').StackConfigError} When configuration is unusable.
+ */
+export function readGithubConfig(): GithubConfig | undefined {
+  const config = new pulumi.Config();
+
+  return validateGithubConfig({
+    corpusRepository: config.get('corpusRepository'),
+    corpusRepositoryDescription: config.get('corpusRepositoryDescription'),
+    corpusDefaultBranch: config.get('corpusDefaultBranch'),
+    corpusRepositoryCreate: config.getBoolean('corpusRepositoryCreate'),
+    corpusRepositoryImportId: config.get('corpusRepositoryImportId'),
+    requiredStatusChecks: config.getObject<string[]>('requiredStatusChecks'),
+    githubOidcProviderArn: config.get('githubOidcProviderArn'),
+    cmsGitHubAppId: config.get('cmsGitHubAppId'),
+    cmsGitHubAppInstallationId: config.get('cmsGitHubAppInstallationId'),
   });
 }

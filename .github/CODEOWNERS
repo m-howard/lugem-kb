@@ -9,9 +9,14 @@
 /docs/                  @m-howard
 /docs/adr/              @m-howard
 
-# Changes here alter what a deployed task can reach.
-/infra/pulumi/src/iam.ts              @m-howard
-/infra/pulumi/src/knowledge-base.ts   @m-howard
+# Changes here alter what a deployed task, or GitHub Actions, can reach.
+/infra/pulumi/src/components/gateway-service.ts    @m-howard
+/infra/pulumi/src/components/docs-knowledge-base.ts @m-howard
+/infra/pulumi/src/components/publish-pipeline.ts   @m-howard
+/infra/pulumi/src/components/cms-credential.ts     @m-howard
+
+# Who may push to the corpus, and under what review.
+/infra/pulumi/src/components/corpus-repository.ts  @m-howard
 
 # Path handling: both files resolve untrusted input to a location.
 /apps/gateway/src/kb/key-policy.ts    @m-howard
