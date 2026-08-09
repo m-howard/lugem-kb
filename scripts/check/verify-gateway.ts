@@ -14,6 +14,10 @@
  * Usage:
  *   bun run scripts/check/verify-gateway.ts --base-url https://docs.internal --token "$ID_TOKEN"
  *
+ * `--wait-ready <seconds>` polls `/readyz` before running the checks and fails if it never reports
+ * ready. That is the post-deploy gate: the ALB target group probes `/healthz` on purpose, so
+ * nothing else stops a task with an unusable App credential from taking traffic.
+ *
  * The token is any credential the deployment's AUTH_MODE accepts. In `alb` mode there is nothing
  * to pass: run this from behind the load balancer and it will forward the session cookie the ALB
  * set, so omit --token and pass --cookie instead.
@@ -27,11 +31,15 @@ const UNAUTHORIZED = 401;
 const FORBIDDEN = 403;
 const NOT_FOUND = 404;
 
+const READY_POLL_INTERVAL_MS = 2000;
+
 interface Options {
   readonly baseUrl: string;
   readonly token: string | undefined;
   readonly cookie: string | undefined;
   readonly branch: string;
+  /** Seconds to wait for `/readyz`, or 0 to check once and move on. */
+  readonly waitReadySeconds: number;
 }
 
 interface CheckResult {
@@ -57,6 +65,39 @@ function parseOptions(argv: readonly string[]): Options {
     // A distinct branch per run, so two people verifying at once do not collide. Not random:
     // the caller can pass --branch to reuse one, and a fixed default would be worse than either.
     branch: flags.get('branch') ?? `cms/verify-${String(process.pid)}`,
+    waitReadySeconds: Number(flags.get('wait-ready') ?? '0'),
+  };
+}
+
+/**
+ * Waits for the gateway to report ready, and is the closest thing to a deployment gate this
+ * service has.
+ *
+ * Worth being clear about why it exists. `/readyz` does **not** keep a task out of the load
+ * balancer — the target group probes `/healthz`, deliberately, so that a git host outage cannot
+ * drain every task and take the documentation site down for readers. That leaves a real gap: a
+ * task deployed with an unwritten or wrong App key becomes healthy, takes traffic, and fails every
+ * author. Running this after `pulumi up` and failing the deploy on it is what closes that gap.
+ *
+ * @param gateway - The gateway under test.
+ * @param seconds - How long to keep asking. 0 checks once.
+ * @returns Whether it reported ready, and what it last said.
+ */
+async function waitUntilReady(
+  gateway: Gateway,
+  seconds: number,
+): Promise<{ ready: boolean; detail: string }> {
+  const deadline = Date.now() + seconds * 1000;
+  let last = await gateway.call('GET', '/readyz', { anonymous: true });
+
+  while (last.status !== OK && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, READY_POLL_INTERVAL_MS));
+    last = await gateway.call('GET', '/readyz', { anonymous: true });
+  }
+
+  return {
+    ready: last.status === OK,
+    detail: `${String(last.status)} ${JSON.stringify(last.body)}`,
   };
 }
 
@@ -268,15 +309,15 @@ async function checkAttribution(gateway: Gateway, branch: string): Promise<Check
 }
 
 /** R10: liveness does not depend on the git host; readiness does. */
-async function checkHealth(gateway: Gateway): Promise<CheckResult[]> {
+async function checkHealth(gateway: Gateway, waitReadySeconds: number): Promise<CheckResult[]> {
   const live = await gateway.call('GET', '/healthz', { anonymous: true });
-  const ready = await gateway.call('GET', '/readyz', { anonymous: true });
+  const ready = await waitUntilReady(gateway, waitReadySeconds);
 
   return [
     check('R10', 'liveness is green', expectStatus(live.status, OK)),
     check('R10', 'readiness is green, so a token can be minted', {
-      passed: ready.status === OK,
-      detail: `${String(ready.status)} ${JSON.stringify(ready.body)}`,
+      passed: ready.ready,
+      detail: ready.detail,
     }),
   ];
 }
@@ -316,7 +357,7 @@ const gateway = new Gateway(options);
 console.log(`Verifying ${options.baseUrl} with draft branch ${options.branch}`);
 
 const results: CheckResult[] = [
-  ...(await checkHealth(gateway)),
+  ...(await checkHealth(gateway, options.waitReadySeconds)),
   ...(await checkAuthentication(gateway)),
   ...(await checkWriteConfinement(gateway, options.branch)),
   ...(await checkBranchConfinement(gateway)),

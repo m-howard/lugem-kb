@@ -139,10 +139,13 @@ Pulumi cannot create a GitHub App. Create it once by hand, then hand Pulumi its 
    ```
 
 Until step 4 the gateway's readiness probe fails with `cms-credential-unusable`, because no
-installation token can be minted. That is [ADR 0009](./adr/0009-fail-closed-configuration.md)
-working: a miscredentialed task never joins the target group. Liveness stays green throughout, so
-the task is not killed and restarted into the same problem. The task role can read that one secret
-and nothing else.
+installation token can be minted. Liveness stays green throughout, so the task is not killed and
+restarted into the same problem. The task role can read that one secret and nothing else.
+
+Note what readiness does **not** do: the load balancer's target group probes `/healthz`, so a task
+whose credential is unusable still takes traffic and still serves readers — only the editorial
+routes fail. Run `scripts/check/verify-gateway.ts --wait-ready 300` after deploying and fail the
+deploy on it; see [The authoring gateway](./authoring-gateway.md#verify-a-deployment).
 
 Both ids reach the container, along with the repository and the branch and path prefixes, so the
 gateway can mint a token and confine what it does with one. Choosing how authors authenticate is the

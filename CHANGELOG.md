@@ -30,9 +30,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     added exactly once even on retry. The pull request body names the submitter and their email.
   - One typed audit record per request, refusals at `warn` so alarms key on level. Request and
     response bodies are never logged.
-  - `/readyz` now mints an installation token when the CMS is on, so a task that cannot authenticate
-    never joins the target group — the behaviour `docs/corpus-repository.md` already promised.
-    `/healthz` is unchanged, so a git host outage does not cycle tasks.
+  - `/readyz` now mints an installation token when the CMS is on, so an unwritten App key is a
+    specific, visible failure rather than a save that breaks for the first author. `/healthz` is
+    unchanged, so a git host outage does not cycle tasks. Note that the ALB target group probes
+    `/healthz`, so readiness is a **deploy-time and operator gate, not a traffic gate** — run
+    `scripts/check/verify-gateway.ts --wait-ready` after deploying and fail the deploy on it.
 - **[The authoring gateway](docs/authoring-gateway.md)** — configuration, what is refused and why,
   and how to verify a deployment.
 - `scripts/check/verify-gateway.ts` — drives a running gateway through the R1–R6, R9 and R10

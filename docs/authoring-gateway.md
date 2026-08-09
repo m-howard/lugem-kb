@@ -90,8 +90,17 @@ locally, and a script can hold a token. Start here.
 
 **`alb`** — the load balancer runs `authenticate-oidc`, and the gateway verifies the JWT it signs.
 This needs `certificateArn` set, because ALB authentication is an HTTPS listener action; the preview
-fails if it is not. The `authenticate-oidc` action is attached as a rule matching `/v1/cms/*` only,
-so readers never meet a login page.
+fails if it is not. The action is attached as a rule matching `/v1/cms/*` only, so readers never
+meet a login page.
+
+In this mode, **`GET /v1/cms/identity` is where you sign in**. It is the one path whose rule
+redirects to the identity provider rather than answering 401: an ALB session cookie is only ever
+issued by a rule that authenticates, so without a redirecting path a browser with no cookie would be
+told 401 and given no way to fix it. Send an author there first; they come back with a cookie and a
+JSON answer saying who the gateway thinks they are, and every later `/v1/cms/*` call carries it.
+
+Every other editorial path denies rather than redirects, on purpose — an editor mid-draft should get
+a 401 it can act on, not an HTML login page it will try to parse as JSON.
 
 Both are described in [ADR 0013](./adr/0013-two-authentication-modes.md), including what carrying
 both costs.
@@ -135,15 +144,21 @@ git host accounts.
 ```bash
 bun run scripts/check/verify-gateway.ts \
   --base-url https://docs.internal \
-  --token "$ACCESS_TOKEN"
+  --token "$ACCESS_TOKEN" \
+  --wait-ready 300
 ```
 
 The script drives every acceptance criterion above against a running gateway and prints a pass/fail
 table. It writes to a throwaway branch under the CMS prefix and deletes it afterwards; it never
 touches the default branch, because if it could, the gateway would already have failed.
 
-Run it before any human uses the gateway. That is the phase's stated exit condition, not a
-suggestion.
+`--wait-ready` polls `/readyz` first and exits non-zero if it never reports ready. **Run it after
+every deploy and fail the deploy on its exit code** — since the target group probes `/healthz`,
+this is the only thing that stops a task with an unwritten App key from quietly serving errors to
+authors.
+
+Run the whole script before any human uses the gateway. That is the phase's stated exit condition,
+not a suggestion.
 
 ## Run it locally
 
@@ -173,8 +188,14 @@ variable that is missing, not just the first.
 **`/readyz` returns `cms-credential-unusable` while `/healthz` stays green.** No installation token
 can be minted. Almost always the private key has not been written yet — the stack creates the secret
 empty on purpose. Run the `put-secret-value` step in
-[the corpus repository](./corpus-repository.md#the-cms-github-app). Liveness stays green
-deliberately: a GitHub outage should take tasks out of the target group, not kill and restart them.
+[the corpus repository](./corpus-repository.md#the-cms-github-app).
+
+The split is deliberate, and worth understanding before you rely on it. The target group probes
+`/healthz`, so **a task with an unusable credential still receives traffic** — it serves readers
+correctly and fails only the editorial routes. Pointing the target group at `/readyz` instead would
+mean a GitHub or Secrets Manager blip drains every task and takes the documentation site down for
+readers who never needed the git host. `/readyz` is therefore a deploy-time and operator gate, not
+a traffic gate, which is why the verification step below is not optional.
 
 **Every author gets `401 missing-email`.** The identity provider is not releasing the claim. See the
 warning above.

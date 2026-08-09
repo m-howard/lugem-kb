@@ -79,6 +79,11 @@ jobs:
           # the indirection. See docs/corpus-repository.md for the scopes it needs.
           GITHUB_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
 
+  # There is deliberately no `pulumi up` here — deploys are run by hand. When one is added, it must
+  # finish with `bun run scripts/check/verify-gateway.ts --wait-ready <seconds>` and fail on its
+  # exit code: the target group probes /healthz, so nothing else stops a task with an unusable
+  # GitHub App credential from joining it. See docs/authoring-gateway.md.
+
   # Stack validation is pure and needs no credentials, so it runs everywhere — including forks.
   # It is what catches a missing vpcId or an S3-Vectors-unsupported region before a preview would.
   validate-config:

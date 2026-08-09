@@ -185,10 +185,14 @@ export class DraftService {
       return;
     }
 
-    await this.#client.request('PATCH', this.#client.path(`/git/refs/heads/${encodeRefPath(branch)}`), {
-      sha,
-      force: false,
-    });
+    await this.#client.request(
+      'PATCH',
+      this.#client.path(`/git/refs/heads/${encodeRefPath(branch)}`),
+      {
+        sha,
+        force: false,
+      },
+    );
   }
 }
 

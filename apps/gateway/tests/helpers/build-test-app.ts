@@ -40,6 +40,17 @@ export const TEST_CMS_SETTINGS: CmsSettings = {
   pathPrefixes: ['docs/'],
 };
 
+/** Silent unless a test wants the records, in which case they are parsed back into objects. */
+function createTestLogger(sink: Record<string, unknown>[] | undefined) {
+  if (sink === undefined) {
+    return pino({ level: 'silent' });
+  }
+  return pino(
+    { level: 'trace', formatters: { level: (label) => ({ level: label }) } },
+    { write: (line: string) => sink.push(JSON.parse(line) as Record<string, unknown>) },
+  );
+}
+
 const TEST_SCORE_THRESHOLD = 0.4;
 const TEST_ANSWER_MAX_TOKENS = 700;
 const TEST_ASK_RATE_LIMIT = 100;
@@ -55,6 +66,8 @@ export interface TestAppOptions {
   readonly askRateLimitPerMinute?: number;
   /** Present only when a test switches the CMS on, mirroring the CMS_REPOSITORY master switch. */
   readonly cms?: CmsDependencies | undefined;
+  /** Collects log records instead of discarding them, for tests that assert on audit output. */
+  readonly captureLogs?: Record<string, unknown>[] | undefined;
 }
 
 export interface TestCms {
@@ -72,6 +85,8 @@ export interface TestCmsOptions {
   readonly allowMergeFromCms?: boolean;
   /** Status the token mint answers with. 401 is what an unwritten credential secret looks like. */
   readonly mintStatus?: number;
+  /** Collects the audit records the app writes, so R9 can be asserted rather than assumed. */
+  readonly captureLogs?: Record<string, unknown>[];
 }
 
 /**
@@ -128,7 +143,10 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
   };
 
   return {
-    app: buildTestApp({ cms: dependencies }),
+    app: buildTestApp({
+      cms: dependencies,
+      ...(options.captureLogs === undefined ? {} : { captureLogs: options.captureLogs }),
+    }),
     idp,
     host,
     dependencies,
@@ -175,8 +193,9 @@ export function buildTestApp(options: TestAppOptions = {}): Hono<AppEnv> {
       modelId: 'test.answer-model-v1:0',
       maxTokens: TEST_ANSWER_MAX_TOKENS,
     }),
-    // Silent: these tests assert on HTTP responses, and pino's output would drown the reporter.
-    logger: pino({ level: 'silent' }),
+    // Silent by default: these tests assert on HTTP responses, and pino's output would drown the
+    // reporter. A test that asserts on audit records passes a sink instead.
+    logger: createTestLogger(options.captureLogs),
     siteRoot: options.siteRoot ?? TEST_SITE_ROOT,
     askRateLimitPerMinute: options.askRateLimitPerMinute ?? TEST_ASK_RATE_LIMIT,
     ...(options.cms === undefined ? {} : { cms: options.cms }),

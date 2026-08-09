@@ -122,6 +122,51 @@ describe('the editorial API', () => {
     });
   });
 
+  // requirements.md R9: every request produces a record. The unauthenticated case is covered by
+  // the auth middleware; an *authenticated* request for a route that does not exist reaches
+  // neither the middleware's refusal path nor a CMS handler, so it is the one that could slip
+  // through silently.
+  describe('audit records (R9)', () => {
+    it('records an authenticated request for a route that does not exist', async () => {
+      const lines: Record<string, unknown>[] = [];
+      const cms = await buildCmsTestApp({ captureLogs: lines });
+
+      const response = await cms.app.request('/v1/cms/nonsense', {
+        headers: await cms.authorize(),
+      });
+
+      expect(response.status).toBe(404);
+      expect(lines).toContainEqual(
+        expect.objectContaining({
+          decision: 'refused',
+          reason: 'no-such-route',
+          path: '/v1/cms/nonsense',
+          email: 'sam@example.com',
+        }) as unknown,
+      );
+    });
+
+    it('records a refused write with the author and the reason', async () => {
+      const lines: Record<string, unknown>[] = [];
+      const cms = await buildCmsTestApp({ captureLogs: lines });
+
+      await cms.app.request('/v1/cms/drafts/cms/pricing', {
+        method: 'PUT',
+        headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
+        body: JSON.stringify({ files: [{ path: 'README.md', content: 'x' }] }),
+      });
+
+      expect(lines).toContainEqual(
+        expect.objectContaining({
+          decision: 'refused',
+          reason: 'outside-prefixes',
+          subject: 'a1b2',
+          method: 'PUT',
+        }) as unknown,
+      );
+    });
+  });
+
   // requirements.md R3. Refusal happens before the upstream call, so a policy failure can never
   // partially apply — asserted by the git host recording no calls at all.
   describe('write confinement (R3)', () => {
@@ -461,7 +506,12 @@ describe('the editorial API', () => {
           {
             method: 'GET',
             path: `${REPO}/pulls/7`,
-            respond: { number: 7, state: 'open', head: { ref: 'cms/pricing' }, base: { ref: 'main' } },
+            respond: {
+              number: 7,
+              state: 'open',
+              head: { ref: 'cms/pricing' },
+              base: { ref: 'main' },
+            },
           },
           { method: 'PUT', path: `${REPO}/pulls/7/merge`, status: 200, respond: { merged: true } },
         ],
@@ -480,13 +530,25 @@ describe('the editorial API', () => {
     // colleague's release branch is this check.
     describe('with the merge policy enabled, still refuses', () => {
       it.each([
-        ['a pull request from a branch the CMS does not own', { ref: 'feature/pricing' }, { ref: 'main' }],
-        ['a pull request targeting something other than the default branch', { ref: 'cms/pricing' }, { ref: 'production' }],
+        [
+          'a pull request from a branch the CMS does not own',
+          { ref: 'feature/pricing' },
+          { ref: 'main' },
+        ],
+        [
+          'a pull request targeting something other than the default branch',
+          { ref: 'cms/pricing' },
+          { ref: 'production' },
+        ],
       ])('%s', async (_case, head, base) => {
         const cms = await buildCmsTestApp({
           allowMergeFromCms: true,
           routes: [
-            { method: 'GET', path: `${REPO}/pulls/9`, respond: { number: 9, state: 'open', head, base } },
+            {
+              method: 'GET',
+              path: `${REPO}/pulls/9`,
+              respond: { number: 9, state: 'open', head, base },
+            },
           ],
         });
 

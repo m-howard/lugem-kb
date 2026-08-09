@@ -131,7 +131,9 @@ describe('encodeRefPath', () => {
   });
 
   it('produces a URL whose path still contains the whole branch', () => {
-    const url = new URL(`https://api.github.test/repos/o/r/git/refs/heads/${encodeRefPath('cms/review#1')}`);
+    const url = new URL(
+      `https://api.github.test/repos/o/r/git/refs/heads/${encodeRefPath('cms/review#1')}`,
+    );
 
     expect(url.pathname).toBe('/repos/o/r/git/refs/heads/cms/review%231');
     expect(url.hash).toBe('');

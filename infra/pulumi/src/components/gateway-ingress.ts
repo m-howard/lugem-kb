@@ -28,15 +28,23 @@ const DEREGISTRATION_DELAY_SECONDS = 30;
 const IDLE_TIMEOUT_SECONDS = 120;
 
 /**
- * Priority of the `authenticate-oidc` rule.
- *
- * Nothing else creates rules on this listener, so any value works; a low one leaves room to add
- * rules that must run before authentication, which is the direction a later change would want.
+ * Rule priorities. ALB evaluates ascending, so the sign-in rule must precede the deny rule that
+ * would otherwise swallow its path.
  */
+const CMS_SIGN_IN_RULE_PRIORITY = 5;
 const CMS_AUTH_RULE_PRIORITY = 10;
 
 /** Only the editorial surface is authenticated at the edge — never the site or `/v1/ask`. */
 const CMS_PATH_PATTERN = '/v1/cms/*';
+
+/**
+ * Where a browser goes to obtain an ALB session, and the one route that redirects to the IdP.
+ *
+ * `/v1/cms/identity` already exists and already answers "who does the gateway think you are",
+ * which is exactly what you want to see after signing in. Reusing it means ALB mode needs no route
+ * that exists solely to be a login page.
+ */
+const CMS_SIGN_IN_PATH = '/v1/cms/identity';
 
 export interface GatewayIngressArgs {
   readonly config: StackConfig;
@@ -239,16 +247,10 @@ export class GatewayIngress extends pulumi.ComponentResource {
           {
             type: 'authenticate-oidc',
             authenticateOidc: {
-              issuer: auth.oidc.issuer,
-              authorizationEndpoint: auth.oidc.authorizationEndpoint,
-              tokenEndpoint: auth.oidc.tokenEndpoint,
-              userInfoEndpoint: auth.oidc.userInfoEndpoint,
-              clientId: auth.oidc.clientId,
-              clientSecret: auth.clientSecret,
+              ...oidcAction(auth),
               // An editor mid-draft must get a 401 it can act on, not an HTML login page it will
               // try to parse as JSON.
               onUnauthenticatedRequest: 'deny',
-              scope: 'openid email profile',
             },
           },
           { type: 'forward', targetGroupArn: targetGroup.arn },
@@ -256,7 +258,55 @@ export class GatewayIngress extends pulumi.ComponentResource {
       },
       reparentedChild(this),
     );
+
+    this.createCmsSignInRule(name, args);
   }
+
+  /**
+   * The one rule that will actually sign somebody in.
+   *
+   * Without it ALB mode cannot be entered at all, which is easy to miss: an ALB session cookie is
+   * only ever issued by a rule whose action *authenticates*, and every other rule here denies. A
+   * browser arriving with no cookie would be told 401 by the deny rule and given no way to fix it,
+   * forever.
+   *
+   * So exactly one path redirects. It is narrow — a single exact path, evaluated before the deny
+   * rule — because `authenticate` on anything broader would put an identity provider round trip in
+   * front of API calls that should fail fast with a status a client can read.
+   */
+  private createCmsSignInRule(name: string, args: CmsAuthRuleArgs): void {
+    const { auth, listener, targetGroup } = args;
+
+    new aws.lb.ListenerRule(
+      `${name}-cms-sign-in`,
+      {
+        listenerArn: listener.arn,
+        priority: CMS_SIGN_IN_RULE_PRIORITY,
+        conditions: [{ pathPattern: { values: [CMS_SIGN_IN_PATH] } }],
+        actions: [
+          {
+            type: 'authenticate-oidc',
+            authenticateOidc: { ...oidcAction(auth), onUnauthenticatedRequest: 'authenticate' },
+          },
+          { type: 'forward', targetGroupArn: targetGroup.arn },
+        ],
+      },
+      reparentedChild(this),
+    );
+  }
+}
+
+/** The provider settings both rules share; only `onUnauthenticatedRequest` differs between them. */
+function oidcAction(auth: CmsAlbAuthArgs) {
+  return {
+    issuer: auth.oidc.issuer,
+    authorizationEndpoint: auth.oidc.authorizationEndpoint,
+    tokenEndpoint: auth.oidc.tokenEndpoint,
+    userInfoEndpoint: auth.oidc.userInfoEndpoint,
+    clientId: auth.oidc.clientId,
+    clientSecret: auth.clientSecret,
+    scope: 'openid email profile',
+  };
 }
 
 interface CmsAuthRuleArgs {

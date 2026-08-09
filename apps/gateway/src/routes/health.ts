@@ -23,12 +23,20 @@ interface ReadinessCheck {
  * `/healthz` touches nothing upstream. If it called S3, an S3 outage would fail liveness, ECS
  * would kill every task, and a dependency blip would become an outage of our own making.
  *
- * `/readyz` does depend on S3, because a task that cannot read the corpus has nothing to serve
- * and should leave the target group until it can. When the CMS is configured it also mints an
- * installation token, so a task that cannot authenticate to the git host never joins the target
- * group — which is what makes an empty credential secret a visible failure rather than a save
- * that breaks for the first author who tries one. `docs/corpus-repository.md` tells operators to
- * expect exactly this until they have written the PEM.
+ * `/readyz` checks the corpus bucket, and the CMS credential when the CMS is configured — so an
+ * unwritten App key is a visible, specific failure rather than a save that breaks for the first
+ * author who tries one.
+ *
+ * **What `/readyz` does not do is keep a task out of the load balancer.** The target group probes
+ * `/healthz` (see `gateway-ingress.ts`), so a task whose credential is unusable still receives
+ * traffic and still serves readers perfectly well; only the editorial routes fail. That is the
+ * deliberate trade. Pointing the target group here instead would satisfy R10's wording and mean a
+ * GitHub or Secrets Manager blip drains every task and takes the public documentation site down
+ * for readers who never needed the git host.
+ *
+ * So this is a **deploy-time and operator gate**, not a traffic gate: run
+ * `scripts/check/verify-gateway.ts --wait-ready` after a deploy and fail the deploy on it.
+ * `docs/deploying-to-aws.md` documents that as the step after `pulumi up`.
  *
  * @param options - The corpus client, and the token source when the CMS is on.
  * @returns A Hono app exposing `/healthz` and `/readyz`.

@@ -165,8 +165,22 @@ publishes — see [the corpus repository guide](./corpus-repository.md).
 
 ## Verify
 
+With the authoring gateway configured, do this first, before anything else:
+
 ```bash
 SITE=$(pulumi -C infra/pulumi stack output siteUrl)
+bun run scripts/check/verify-gateway.ts --base-url "$SITE" --token "$ACCESS_TOKEN" --wait-ready 300
+```
+
+This is the deploy gate, and it is not optional. The ALB target group probes `/healthz`, so a task
+whose GitHub App key is missing or wrong becomes healthy and takes traffic — it serves readers fine
+and fails every author. Nothing else catches that; `--wait-ready` exits non-zero when `/readyz`
+never comes good, so a deploy script can fail on it. See
+[the authoring gateway](./authoring-gateway.md#verify-a-deployment).
+
+Then the read paths, which need no credential:
+
+```bash
 curl -fsS "$SITE/healthz"
 curl -fsS "$SITE/v1/documents" | head
 curl -fsS -X POST "$SITE/v1/search" \
@@ -253,8 +267,9 @@ script actually uploaded.
 
 **`/readyz` returns `cms-credential-unusable`.** With `cmsGitHubAppId` set, the stack creates the
 App's secret but leaves it empty on purpose — the private key is written out of band. Until it is,
-no installation token can be minted and the task correctly refuses to accept traffic. Liveness stays
-green, so the task is not restarted into the same problem. See
+no installation token can be minted. Liveness stays green, so the task is not restarted into the
+same problem — but note that the target group probes `/healthz`, so the task _does_ still take
+traffic and fails only the editorial routes. See
 [the corpus repository guide](./corpus-repository.md).
 
 **The task exits with code 78 naming a `CMS_` or `AUTH_` variable.** Fail-closed configuration
