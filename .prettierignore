@@ -1,0 +1,14 @@
+node_modules
+dist
+bin
+build
+coverage
+test-results
+playwright-report
+.env
+*.log
+bun.lock
+pnpm-lock.yaml
+
+# Frozen external artifact — read, never reformatted. See spec/00-START-HERE.md.
+spec
