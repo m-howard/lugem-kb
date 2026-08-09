@@ -30,11 +30,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     added exactly once even on retry. The pull request body names the submitter and their email.
   - One typed audit record per request, refusals at `warn` so alarms key on level. Request and
     response bodies are never logged.
-  - `/readyz` now mints an installation token when the CMS is on, and the load balancer gained a
-    second, **editorial target group** that probes it. A task that cannot authenticate to the git
-    host leaves that group and stays in the public one, so authors get a 503 while readers are
-    unaffected — and a deploy in that state never stabilises, so ECS rolls it back. `/healthz`
-    still backs the public group, so a git host outage cannot drain the documentation site.
+  - A task that cannot authenticate to the git host refuses `/v1/cms/*` with `503 not_ready` from
+    the gateway itself, and never becomes healthy in the new **editorial target group** — so a
+    deploy in that state does not stabilise and ECS rolls it back. Readers are unaffected either
+    way: the public target group still probes `/healthz`. The refusal is in the application rather
+    than the load balancer because an ALB fails open when every target in a group is unhealthy,
+    which is exactly the state a missing credential produces.
 - **[The authoring gateway](docs/authoring-gateway.md)** — configuration, what is refused and why,
   and how to verify a deployment.
 - `scripts/check/verify-gateway.ts` — drives a running gateway through the R1–R6, R9 and R10

@@ -144,7 +144,10 @@ const service = new GatewayService(
       ? {}
       : { cmsTargetGroupArn: ingress.cmsTargetGroupArn }),
   },
-  onAws,
+  // A target group is unusable by a service until a listener associates it with the load balancer,
+  // and passing its ARN alone does not express that — Pulumi would be free to create the service
+  // first and get `does not have an associated load balancer`.
+  { ...onAws, dependsOn: ingress.routingDependencies },
 );
 
 export const siteUrl = ingress.url;

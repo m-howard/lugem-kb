@@ -94,13 +94,19 @@ fails if it is not. The action is attached as a rule matching `/v1/cms/*` only, 
 meet a login page.
 
 In this mode, **`GET /v1/cms/identity` is where you sign in**. It is the one path whose rule
-redirects to the identity provider rather than answering 401: an ALB session cookie is only ever
-issued by a rule that authenticates, so without a redirecting path a browser with no cookie would be
-told 401 and given no way to fix it. Send an author there first; they come back with a cookie and a
-JSON answer saying who the gateway thinks they are, and every later `/v1/cms/*` call carries it.
+redirects to the identity provider: an ALB session cookie is only ever issued by a rule that
+authenticates, so without a redirecting path a browser with no cookie would have no way to get one.
+Send an author there first; they come back with a cookie and a JSON answer saying who the gateway
+thinks they are, and every later `/v1/cms/*` call carries it.
 
-Every other editorial path denies rather than redirects, on purpose — an editor mid-draft should get
-a 401 it can act on, not an HTML login page it will try to parse as JSON.
+Every other editorial path is set to `allow`, which sounds wrong and is not. The alternative,
+`deny`, returns 401 only for a request carrying _no_ authentication — AWS
+[redirects an **expired** session to the identity provider](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-authenticate-users.html)
+instead. An editor whose session lapsed mid-draft would get a 302 into an HTML login page and their
+client would try to parse it as JSON. With `allow`, the request reaches the gateway without
+authentication information and the gateway answers `401` with a reason — reliably, in JSON, for
+both the absent and the expired case. The load balancer rule was only ever defence in depth; the
+verifier is the authority.
 
 Both are described in [ADR 0013](./adr/0013-two-authentication-modes.md), including what carrying
 both costs.
@@ -189,15 +195,22 @@ can be minted. Almost always the private key has not been written yet — the st
 empty on purpose. Run the `put-secret-value` step in
 [the corpus repository](./corpus-repository.md#the-cms-github-app).
 
-The split is deliberate. There are **two target groups**: the public one probes `/healthz` and
-carries the site, `/v1/documents`, `/v1/search` and `/v1/ask`; the editorial one probes `/readyz`
-and carries `/v1/cms/*`. A task that cannot mint a token leaves the editorial group only — authors
-get a 503 from the load balancer, readers notice nothing. One target group could not do both:
-pointing it at `/readyz` would mean a GitHub or Secrets Manager blip drains every task and takes
-the documentation site down for readers who never needed the git host.
+Two things keep an unusable credential from reaching authors, and they do different jobs.
 
-It gates deploys too. ECS waits for targets to become healthy in every attached group, so a rollout
-with an unwritten App key never stabilises and the deployment circuit breaker rolls it back.
+**The gateway refuses the request.** Every `/v1/cms/*` call passes a readiness guard that answers
+`503 {"error":"not_ready"}` when no installation token can be obtained. This is what turns traffic
+away, and it is in the application because that is where the behaviour can be guaranteed.
+
+**The editorial target group fails the deploy.** There are two target groups: the public one probes
+`/healthz` and carries the site and the read APIs; the editorial one probes `/readyz` and carries
+`/v1/cms/*`. ECS waits for health in every attached group, so a rollout with an unwritten App key
+never stabilises and the circuit breaker rolls it back.
+
+The target group is deliberately _not_ what refuses the request. An ALB
+[fails open](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html):
+when every target in a group is unhealthy it routes to them anyway — and that is precisely the
+state a missing credential produces. The public group keeps `/healthz` so a git host outage cannot
+drain the documentation site out from under readers.
 
 **Every author gets `401 missing-email`.** The identity provider is not releasing the claim. See the
 warning above.

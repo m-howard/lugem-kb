@@ -5,12 +5,14 @@ import { z } from 'zod';
 import { type AppEnv } from '../app-env';
 import { recordAudit } from '../audit';
 import { type createAuthMiddleware } from '../auth/middleware';
+import { createCredentialGuard } from '../cms/credential-guard';
 import { DocumentMissingError, type DocumentReader } from '../cms/documents';
 import { type DraftService } from '../cms/drafts';
 import { CmsPolicyError } from '../cms/errors';
 import { type CmsSettings } from '../cms/settings';
 import { type SubmissionService } from '../cms/submissions';
 import { EndpointPolicyError, GitHubError } from '../git/github-client';
+import { type InstallationTokenSource } from '../git/installation-token';
 import { PERMITTED_EXTENSIONS } from '../kb/key-policy';
 
 const BAD_REQUEST: ContentfulStatusCode = 400;
@@ -56,6 +58,8 @@ export interface CmsRoutesOptions {
   readonly settings: CmsSettings;
   readonly allowMergeFromCms: boolean;
   readonly auth: ReturnType<typeof createAuthMiddleware>;
+  /** Backs the readiness guard, which is what actually turns traffic away — see R10. */
+  readonly tokens: InstallationTokenSource;
 }
 
 interface Refusal {
@@ -294,6 +298,9 @@ export function createCmsRoutes(options: CmsRoutesOptions): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.use('*', options.auth);
+  // After authentication on purpose: an anonymous caller gets 401 and learns nothing about the
+  // credential's state.
+  app.use('*', createCredentialGuard({ tokens: options.tokens }));
 
   registerReadRoutes(app, options);
   registerDraftRoutes(app, options);

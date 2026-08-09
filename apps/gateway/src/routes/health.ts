@@ -27,15 +27,18 @@ interface ReadinessCheck {
  * unwritten App key is a visible, specific failure rather than a save that breaks for the first
  * author who tries one.
  *
- * **`/readyz` gates editorial admission.** The load balancer has two target groups: the public one
- * probes `/healthz` and carries the site and the read APIs; the editorial one probes here and
- * carries `/v1/cms/*`. A task that cannot mint an installation token leaves the editorial group and
- * stays in the public one, so authors get a 503 from the load balancer while readers are entirely
- * unaffected — which is what R10 asks for without a git host outage taking the documentation site
- * down with it.
+ * **`/readyz` gates deploys, not requests.** The load balancer has two target groups: the public
+ * one probes `/healthz` and carries the site and the read APIs; the editorial one probes here and
+ * carries `/v1/cms/*`. ECS waits for health in every attached target group, so a rollout carrying
+ * an unwritten App key never stabilises and the circuit breaker rolls it back.
  *
- * It gates deploys as well: ECS waits for health in every attached target group, so a rollout
- * carrying an unwritten App key never stabilises and the circuit breaker rolls it back.
+ * What the editorial target group does **not** do is turn requests away. An ALB fails open: when
+ * every target in a group is unhealthy it routes to them anyway rather than answering 503 — and
+ * "every target unhealthy" is exactly the state a bad credential produces. Refusing the request is
+ * `cms/credential-guard.ts`'s job, in the application, where the behaviour is ours to guarantee.
+ *
+ * The public group keeps `/healthz` so that a git host outage cannot drain the documentation site
+ * out from under readers who never needed the git host.
  *
  * @param options - The corpus client, and the token source when the CMS is on.
  * @returns A Hono app exposing `/healthz` and `/readyz`.

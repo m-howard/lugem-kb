@@ -81,6 +81,16 @@ export class GatewayIngress extends pulumi.ComponentResource {
   public readonly albSecurityGroupId: pulumi.Output<string>;
   public readonly targetGroupArn: pulumi.Output<string>;
   /**
+   * Resources the ECS service must exist *after*.
+   *
+   * A target group is not usable by a service until it is associated with a load balancer, and
+   * ECS says so with a flat `does not have an associated load balancer` error. The association is
+   * the listener rule, which nothing else in the graph connects to the service — Pulumi would
+   * happily create them in parallel and lose the race some of the time.
+   */
+  public readonly routingDependencies: pulumi.Resource[] = [];
+
+  /**
    * Editorial target group, present only when the CMS is configured.
    *
    * The service registers with both, so a task that cannot mint an installation token leaves this
@@ -146,8 +156,10 @@ export class GatewayIngress extends pulumi.ComponentResource {
 
     const listener = this.createListeners(name, { config, alb, targetGroup });
 
+    this.routingDependencies.push(listener);
+
     if (cmsTargetGroup !== undefined) {
-      this.routeCmsTraffic(name, {
+      const rule = this.routeCmsTraffic(name, {
         listener,
         targetGroup: cmsTargetGroup,
         // `authenticate-oidc` is an HTTPS listener action, so without a certificate there is
@@ -155,6 +167,7 @@ export class GatewayIngress extends pulumi.ComponentResource {
         // keeps the component correct if it is ever constructed directly.
         auth: config.certificateArn === undefined ? undefined : args.cmsAuth,
       });
+      this.routingDependencies.push(rule);
     }
 
     const scheme = config.certificateArn === undefined ? 'http' : 'https';
@@ -246,8 +259,8 @@ export class GatewayIngress extends pulumi.ComponentResource {
   }
 
   /** Sends `/v1/cms/*` to the editorial group, authenticating first in `alb` mode. */
-  private routeCmsTraffic(name: string, args: CmsRoutingArgs): void {
-    new aws.lb.ListenerRule(
+  private routeCmsTraffic(name: string, args: CmsRoutingArgs): aws.lb.ListenerRule {
+    const rule = new aws.lb.ListenerRule(
       `${name}-cms-forward`,
       {
         listenerArn: args.listener.arn,
@@ -266,6 +279,8 @@ export class GatewayIngress extends pulumi.ComponentResource {
         targetGroup: args.targetGroup,
       });
     }
+
+    return rule;
   }
 
   /**
@@ -353,9 +368,19 @@ export class GatewayIngress extends pulumi.ComponentResource {
             type: 'authenticate-oidc',
             authenticateOidc: {
               ...oidcAction(auth),
-              // An editor mid-draft must get a 401 it can act on, not an HTML login page it will
-              // try to parse as JSON.
-              onUnauthenticatedRequest: 'deny',
+              // `allow`, not `deny`, and this is the one setting on the page worth arguing about.
+              //
+              // `deny` returns 401 for a request carrying no authentication at all — but AWS
+              // documents that an *expired* session is redirected to the identity provider
+              // instead. An editor whose session lapsed mid-draft would then get a 302 into an
+              // HTML login page, which their client tries to parse as JSON. R1 asks for a 401,
+              // and `deny` cannot promise one for the case that actually happens.
+              //
+              // `allow` forwards without authentication information, and `alb-verifier.ts`
+              // answers 401 with a reason. It always could: the rule was only ever defence in
+              // depth, and the service check is the authority. The interactive redirect still
+              // exists, on the single sign-in path — see `createCmsSignInRule`.
+              onUnauthenticatedRequest: 'allow',
             },
           },
           { type: 'forward', targetGroupArn: targetGroup.arn },

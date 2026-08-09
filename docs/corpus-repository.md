@@ -142,9 +142,8 @@ Until step 4 the gateway's readiness probe fails with `cms-credential-unusable`,
 installation token can be minted. Liveness stays green throughout, so the task is not killed and
 restarted into the same problem. The task role can read that one secret and nothing else.
 
-A task in that state is removed from the **editorial** target group, which probes `/readyz`, and
-stays in the public one, which probes `/healthz`. Authors get a 503 from the load balancer; readers
-notice nothing. A deploy in that state never stabilises, so ECS rolls it back — see
+Authors get `503 {"error":"not_ready"}` from the gateway itself while that is true, and a deploy in
+that state never stabilises, so ECS rolls it back. Readers are unaffected throughout — see
 [The authoring gateway](./authoring-gateway.md#verify-a-deployment).
 
 Both ids reach the container, along with the repository and the branch and path prefixes, so the

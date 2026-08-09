@@ -58,7 +58,7 @@ describe('the editorial API', () => {
         error: 'unauthorized',
         reason: 'missing-credential',
       });
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
 
     it.each([
@@ -75,7 +75,7 @@ describe('the editorial API', () => {
 
       expect(response.status).toBe(401);
       expect(await response.json()).toMatchObject({ reason });
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
 
     it('refuses a verified token that cannot be attributed to a person', async () => {
@@ -118,7 +118,63 @@ describe('the editorial API', () => {
         email: 'sam@example.com',
         name: 'Sam Okoro',
       });
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
+    });
+  });
+
+  // requirements.md R10. This is what actually turns editorial traffic away: an ALB fails open
+  // when every target in a group is unhealthy, routing to them anyway, so the editorial target
+  // group cannot be the thing that refuses. It gates the *deploy*; this gates the request.
+  describe('the credential guard (R10)', () => {
+    it('answers 503 while the credential is unusable', async () => {
+      const cms = await buildCmsTestApp({ mintStatus: 401 });
+
+      const response = await cms.app.request('/v1/cms/documents', {
+        headers: await cms.authorize(),
+      });
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ error: 'not_ready' });
+      // It never got as far as asking the repository for anything.
+      expect(cms.host.paths()).toEqual([]);
+    });
+
+    it('refuses a save rather than half-applying it', async () => {
+      const cms = await buildCmsTestApp({ mintStatus: 401, routes: WRITE_ROUTES });
+
+      const response = await cms.app.request('/v1/cms/drafts/cms/pricing', {
+        method: 'PUT',
+        headers: { ...(await cms.authorize()), 'content-type': 'application/json' },
+        body: JSON.stringify(DRAFT),
+      });
+
+      expect(response.status).toBe(503);
+      expect(cms.host.paths()).toEqual([]);
+    });
+
+    // An anonymous caller learns nothing about the credential's state — the guard sits behind
+    // authentication on purpose.
+    it('still answers 401 to an unauthenticated caller', async () => {
+      const cms = await buildCmsTestApp({ mintStatus: 401 });
+
+      const response = await cms.app.request('/v1/cms/documents');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('records the refusal with the author who hit it', async () => {
+      const lines: Record<string, unknown>[] = [];
+      const cms = await buildCmsTestApp({ mintStatus: 401, captureLogs: lines });
+
+      await cms.app.request('/v1/cms/documents', { headers: await cms.authorize() });
+
+      expect(lines).toContainEqual(
+        expect.objectContaining({
+          decision: 'error',
+          reason: 'cms-credential-unusable',
+          subject: 'a1b2',
+        }) as unknown,
+      );
     });
   });
 
@@ -203,7 +259,7 @@ describe('the editorial API', () => {
 
         expect(response.status).toBe(403);
         expect(await response.json()).toMatchObject({ error: 'forbidden', reason });
-        expect(cms.host.calls).toEqual([]);
+        expect(cms.host.paths()).toEqual([]);
       },
     );
 
@@ -223,7 +279,7 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
 
     it('refuses a deletion outside the documentation prefixes', async () => {
@@ -236,7 +292,7 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
   });
 
@@ -270,7 +326,7 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
 
     // R4: "Pull requests targeting anything other than the default branch are refused." The base
@@ -507,7 +563,7 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
 
     it('permits a merge once the policy flag is set', async () => {
@@ -647,7 +703,7 @@ describe('the editorial API', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(cms.host.calls).toEqual([]);
+      expect(cms.host.paths()).toEqual([]);
     });
   });
 
@@ -714,7 +770,7 @@ describe('the editorial API', () => {
     expect(lines).toContainEqual(
       expect.objectContaining({ decision: 'refused', reason: 'invalid-json' }) as unknown,
     );
-    expect(cms.host.calls).toEqual([]);
+    expect(cms.host.paths()).toEqual([]);
   });
 
   // The failures nobody anticipated are the ones most worth reading about later, and they were
@@ -755,6 +811,6 @@ describe('the editorial API', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'invalid_request' });
-    expect(cms.host.calls).toEqual([]);
+    expect(cms.host.paths()).toEqual([]);
   });
 });
