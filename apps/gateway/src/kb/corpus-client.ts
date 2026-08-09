@@ -5,7 +5,7 @@ import {
   type S3Client,
 } from '@aws-sdk/client-s3';
 
-import { resolveDocumentKey } from './key-policy';
+import { normalisePrefix, resolveDocumentKey } from './key-policy';
 
 /** S3 caps a single ListObjectsV2 page at 1000 keys; asking for more is silently clamped. */
 const MAX_KEYS_PER_PAGE = 1000;
@@ -49,11 +49,6 @@ export class DocumentPolicyError extends Error {
     this.name = 'DocumentPolicyError';
     this.reason = reason;
   }
-}
-
-function normalisePrefix(prefix: string): string {
-  const trimmed = prefix.replace(/^\/+/, '').replace(/\/+$/, '');
-  return trimmed === '' ? '' : `${trimmed}/`;
 }
 
 /**
@@ -119,18 +114,31 @@ export class CorpusClient {
    * Fetches one document, refusing the path before any S3 call if it violates key policy.
    *
    * @param requestedPath - Path relative to the corpus prefix.
+   * @param options - `maxBytes` requests only the first N bytes, for callers that need the
+   *   frontmatter rather than the page. The body is then truncated, not the whole document.
    * @returns The document body and metadata.
    * @throws {DocumentPolicyError} When the path is not permitted.
    * @throws {DocumentNotFoundError} When no object exists at the resolved key.
    */
-  async get(requestedPath: string): Promise<DocumentContent> {
+  async get(
+    requestedPath: string,
+    options: { readonly maxBytes?: number } = {},
+  ): Promise<DocumentContent> {
     const resolved = resolveDocumentKey(requestedPath, { prefix: this.#prefix });
     if (!resolved.ok) {
       throw new DocumentPolicyError(resolved.reason, resolved.message);
     }
 
     const response = await this.#s3
-      .send(new GetObjectCommand({ Bucket: this.#bucket, Key: resolved.key }))
+      .send(
+        new GetObjectCommand({
+          Bucket: this.#bucket,
+          Key: resolved.key,
+          ...(options.maxBytes === undefined
+            ? {}
+            : { Range: `bytes=0-${String(options.maxBytes - 1)}` }),
+        }),
+      )
       .catch((error: unknown) => {
         if (isNoSuchKey(error)) {
           throw new DocumentNotFoundError(requestedPath);

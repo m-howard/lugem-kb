@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { type AppEnv } from '../app-env';
+import { type CitationViewer } from '../kb/citation-view';
 import { type Retriever } from '../kb/retrieve';
 
 const BAD_REQUEST = 400;
@@ -13,6 +14,7 @@ const searchRequestSchema = z.object({
 
 export interface SearchRoutesOptions {
   readonly retriever: Retriever;
+  readonly viewer: CitationViewer;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface SearchRoutesOptions {
  * "how do I report my manager" is a disclosure about the asker even though the page it retrieves
  * is internally public (requirements.md R22, open question Q11).
  *
- * @param options - The retriever backing the route.
+ * @param options - The retriever backing the route, and the viewer that resolves citations to pages.
  * @returns A Hono app exposing `POST /`.
  */
 export function createSearchRoutes(options: SearchRoutesOptions): Hono<AppEnv> {
@@ -55,7 +57,7 @@ export function createSearchRoutes(options: SearchRoutesOptions): Hono<AppEnv> {
       });
     }
 
-    return c.json({ covered: true, citations: outcome.citations });
+    return c.json({ covered: true, citations: await options.viewer.present(outcome.citations) });
   });
 
   return app;

@@ -16,16 +16,52 @@ async function post(app: ReturnType<typeof buildTestApp>, body: unknown): Promis
   });
 }
 
+const LEAVE_PAGE = '---\ntitle: Leave\nlast_reviewed: 2026-06-15\n---\n\n# Leave\n';
+
 describe('POST /v1/search', () => {
   it('returns citations for a covered question', async () => {
-    const app = buildTestApp({ retrievalResults: [STRONG_MATCH] });
+    const app = buildTestApp({
+      retrievalResults: [STRONG_MATCH],
+      objects: { 'docs/people/leave.md': LEAVE_PAGE },
+    });
     const response = await post(app, { question: 'how do I request leave?' });
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       covered: true,
-      citations: [{ text: STRONG_MATCH.text, sourceUri: STRONG_MATCH.uri, score: 0.91 }],
+      citations: [
+        {
+          text: STRONG_MATCH.text,
+          sourceUri: STRONG_MATCH.uri,
+          score: 0.91,
+          path: 'people/leave.md',
+          url: '/people/leave',
+          lastReviewed: '2026-06-15',
+        },
+      ],
     });
+  });
+
+  // A citation the reader cannot open is only checkable by someone with bucket access, which
+  // defeats the point of citing it.
+  it('resolves each citation to the page a reader can open', async () => {
+    const app = buildTestApp({ retrievalResults: [STRONG_MATCH] });
+    const body = (await (await post(app, { question: 'leave' })).json()) as {
+      citations: { url: string | null }[];
+    };
+
+    expect(body.citations[0]?.url).toBe('/people/leave');
+  });
+
+  it('leaves the page fields null when the source is outside this corpus', async () => {
+    const app = buildTestApp({
+      retrievalResults: [{ ...STRONG_MATCH, uri: 's3://somewhere-else/notes.md' }],
+    });
+    const body = (await (await post(app, { question: 'leave' })).json()) as {
+      citations: { url: string | null; path: string | null; text: string }[];
+    };
+
+    expect(body.citations[0]).toMatchObject({ url: null, path: null, text: STRONG_MATCH.text });
   });
 
   it('returns the passage verbatim, so the reader can check the claim against the source', async () => {
