@@ -17,6 +17,10 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
+      # A job-level block replaces the default token scopes rather than adding to them, so leaving
+      # `contents: read` out gives `actions/checkout` a token that cannot read this repository —
+      # which it reports as `Repository not found`, not as a permission error.
+      contents: read
       security-events: write
       actions: read
     strategy:
