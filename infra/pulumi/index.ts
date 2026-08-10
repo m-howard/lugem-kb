@@ -11,6 +11,7 @@ import { GapReportPipeline } from './src/components/gap-report-pipeline';
 import { GatewayImage } from './src/components/gateway-image';
 import { GatewayIngress } from './src/components/gateway-ingress';
 import { GatewayService } from './src/components/gateway-service';
+import { NotificationPipeline } from './src/components/notification-pipeline';
 import { PublishPipeline } from './src/components/publish-pipeline';
 import { resolveNetwork } from './src/network';
 import { readGithubConfig, readStackConfig } from './src/read-config';
@@ -103,6 +104,25 @@ if (githubConfig !== undefined) {
     },
     onBoth,
   );
+
+  // R14, and off unless a sender address is configured. Notifying people is the one part of this
+  // system that reaches outside it, so it stays absent until an operator names the address it may
+  // send from — see ADR 0018.
+  if (config.notifySenderAddress !== undefined) {
+    new NotificationPipeline(
+      NAME,
+      {
+        config,
+        githubConfig,
+        repositoryName: corpusRepository.name,
+        senderAddress: config.notifySenderAddress,
+        recipientDomains: config.notifyRecipientDomains,
+        cmsBranchPrefix: githubConfig.cmsGateway?.branchPrefix ?? 'cms/',
+        oidcProviderArn: publishPipeline.oidcProviderArn,
+      },
+      onBoth,
+    );
+  }
 
   if (githubConfig.cmsApp !== undefined) {
     cmsCredential = new CmsCredential(

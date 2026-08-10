@@ -1,0 +1,4 @@
+{
+  "$comment": "CODEOWNERS handle → the address that hears when a page it owns needs review (requirements.md R14). CODEOWNERS names GitHub handles and email needs addresses; nothing in the GitHub API reliably bridges the two, so the mapping is explicit and reviewed. An owner with no entry here is reported as unroutable in the workflow log rather than guessed at — see docs/adr/0018-review-notifications-by-email.md. Ships empty: until an operator fills it in, no review request is routed and every run says so.",
+  "owners": {}
+}

@@ -150,3 +150,17 @@ config:
   # requirements.md R7: by default the gateway refuses merges from the CMS, so approval happens in
   # the git host where branch protection can require an owner. R16 is the reason this flag exists.
   # lugem-kb:cmsAllowMerge: "false"
+
+  # requirements.md R14: notify owners when a pull request awaits their review, and authors when
+  # their submission is published or has changes requested. Absent means the feature does not
+  # exist — no SES identity, no role, and a workflow that skips. Setting it is what turns R14 on.
+  #
+  # Two manual steps follow `pulumi up`: verify the address (AWS emails it a link), and request
+  # SES production access, without which you can only send to verified addresses. Then map each
+  # CODEOWNERS handle to an address in .github/docs-owner-emails.json — see ADR 0018.
+  # lugem-kb:notifySenderAddress: docs-notifications@example.com
+
+  # Domains a notification may be delivered to. Defaults to the sender's own domain, so the common
+  # case needs no entry here. Widen it only deliberately: this sends from a verified address.
+  # lugem-kb:notifyRecipientDomains:
+  #   - example.com

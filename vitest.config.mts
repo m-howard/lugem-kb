@@ -39,7 +39,14 @@ export default defineConfig({
         'apps/gateway/src/**/*.ts',
         'infra/pulumi/src/config.ts',
         'infra/pulumi/src/github-config.ts',
+        // The CODEOWNERS parser decides who hears about a documentation gap, and the four
+        // notification modules decide who hears about a pending review — including which addresses
+        // this system is willing to send mail to at all. All logic, all measured.
         'scripts/docs/codeowners.ts',
+        'scripts/docs/notification-event.ts',
+        'scripts/docs/notification-message.ts',
+        'scripts/docs/notification-recipients.ts',
+        'scripts/docs/submitter-identity.ts',
       ],
       exclude: ['**/*.test.ts', 'apps/gateway/src/index.ts'],
       thresholds: {

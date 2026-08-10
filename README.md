@@ -220,7 +220,8 @@ Pulumi stack configuration is documented in
 - **[Architecture decision records](docs/adr/)** — why each piece is the way it is, and what it costs.
 - **[Requirements](docs/requirements.md)** — the product this scaffold is the first phase of.
 
-Notable decisions: [the Decap adapter in the gateway](docs/adr/0015-decap-adapter-in-the-gateway.md) ·
+Notable decisions: [review notifications by email](docs/adr/0018-review-notifications-by-email.md) ·
+[the Decap adapter in the gateway](docs/adr/0015-decap-adapter-in-the-gateway.md) ·
 [two authentication modes](docs/adr/0013-two-authentication-modes.md) ·
 [a purpose-built editorial API](docs/adr/0014-purpose-built-editorial-api.md) ·
 [grounded generation behind retrieval](docs/adr/0012-grounded-generation-behind-retrieval.md) ·
@@ -258,7 +259,7 @@ Security issues go to **[SECURITY.md](SECURITY.md)**, not the public issue track
 ## ⚠️ Status
 
 Phases 1, 2 and 5 of [the requirements](docs/requirements.md) are built, plus the CMS half of
-Phase 3.
+Phase 3 and the notification half of Phase 4.
 
 - **Phase 1 — Foundation.** Corpus in git, site building, deployment stood up.
 - **Phase 2 — Gateway.** Authentication, the GitHub App credential broker, the path, branch and
@@ -270,16 +271,23 @@ Phase 3.
   name on every commit. The editorial API is purpose-built, so the CMS reaches it through an
   adapter in the gateway — [ADR 0015](docs/adr/0015-decap-adapter-in-the-gateway.md) records the
   mapping, and [Editing in the CMS](docs/editing-in-the-cms.md) is the author's guide.
+- **Phase 4 (partial) — Rollout.** Review notifications by email — R14. Owners hear when a page
+  they own is waiting for review, authors hear when their submission is published or has changes
+  requested, and the recipient comes from `CODEOWNERS` and the pull request body rather than from
+  anything a submitter can set. Off unless a sender address is configured;
+  [ADR 0018](docs/adr/0018-review-notifications-by-email.md) records why it is email, and why it
+  runs from GitHub Actions rather than the gateway. The S3 sync this phase also names has been
+  built since Phase 1.
 - **Phase 5 — Answering.** Grounded generation with citations, a chat widget on every page, a
   `/ask` page, and the gap feedback loop: readers can mark an answer unhelpful, questions the
   corpus cannot answer are recorded, and a weekly job files them as a rolling GitHub issue naming
   the owning team — R20, R21, R23. R22 is built and switched off, see below.
 
 **Not built yet:** the rest of Phase 3 — pull request previews (R12) and content quality gates
-(R13) — and Phase 4's notifications. Image upload through the CMS (R15) is a P1 requirement and is
-not built: the corpus holds markdown only.
+(R13). Image upload through the CMS (R15) is a P1 requirement and is not built: the corpus holds
+markdown only.
 
-Three known gaps, each recorded where it belongs:
+Four known gaps, each recorded where it belongs:
 
 - **Reader authentication is built and off by default.** `/v1/ask` is unauthenticated unless
   `READER_AUTH_REQUIRED` is set, so R22's first criterion is not met on a default deployment and
@@ -290,6 +298,11 @@ Three known gaps, each recorded where it belongs:
   registered identity provider application, none of which this stack has by default. Its verifiers
   are unit-tested and its listener rules — editorial and, now, reader — are preview-only. See
   [ADR 0013](docs/adr/0013-two-authentication-modes.md).
+- **Review notifications are built and off by default.** No `notifySenderAddress` means no SES
+  identity, no role and a workflow that skips, so R14 is not met on a default deployment. Turning
+  it on needs a verified sender, SES production access, and an entry per owner in
+  `.github/docs-owner-emails.json` — the file ships empty and every unroutable owner is reported in
+  the workflow log. See [ADR 0018](docs/adr/0018-review-notifications-by-email.md).
 - **Conflicting pages are not verified.** R20 asks that two indexed pages that disagree are both
   surfaced. The prompt requires it and nothing checks that the model complies; closing it needs an
   evaluation fixture with two deliberately contradictory pages.

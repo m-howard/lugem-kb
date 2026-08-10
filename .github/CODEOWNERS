@@ -28,6 +28,16 @@
 # Who may push to the corpus, and under what review.
 /infra/pulumi/src/components/corpus-repository.ts  @m-howard
 
+# Who this system will send mail to, and with what credential. The workflow runs on
+# `pull_request_target`, so it holds repository credentials while handling a fork's event — a
+# change adding a checkout of pull request code is a privilege escalation. See
+# docs/adr/0018-review-notifications-by-email.md.
+/.github/workflows/review-notifications.yml          @m-howard
+/.github/docs-owner-emails.json                      @m-howard
+/infra/pulumi/src/components/notification-pipeline.ts @m-howard
+/scripts/docs/notification-recipients.ts             @m-howard
+/scripts/docs/submitter-identity.ts                  @m-howard
+
 # Path handling: both files resolve untrusted input to a location.
 /apps/gateway/src/kb/key-policy.ts    @m-howard
 /apps/gateway/src/routes/site.ts      @m-howard

@@ -284,6 +284,70 @@ describe('validateStackConfig', () => {
       }
     });
   });
+
+  // R14. The feature reaches outside the system, so its default is "does not exist" and its
+  // recipient set is bounded even once it does.
+  describe('review notifications', () => {
+    it('is off when no sender is configured', () => {
+      expect(validateStackConfig({ ...VALID })).toMatchObject({
+        notifySenderAddress: undefined,
+        notifyRecipientDomains: [],
+      });
+    });
+
+    it.each([
+      ['an empty string', ''],
+      ['whitespace', '   '],
+    ])('treats %s as unconfigured', (_case, notifySenderAddress) => {
+      expect(validateStackConfig({ ...VALID, notifySenderAddress })).toMatchObject({
+        notifySenderAddress: undefined,
+      });
+    });
+
+    it("defaults the permitted domains to the sender's own", () => {
+      expect(
+        validateStackConfig({ ...VALID, notifySenderAddress: 'docs@example.com' }),
+      ).toMatchObject({
+        notifySenderAddress: 'docs@example.com',
+        notifyRecipientDomains: ['example.com'],
+      });
+    });
+
+    it('accepts an explicit wider set', () => {
+      const config = validateStackConfig({
+        ...VALID,
+        notifySenderAddress: 'docs@example.com',
+        notifyRecipientDomains: ['example.com', 'Contractors.Example.NET', '  '],
+      });
+
+      expect(config.notifyRecipientDomains).toEqual(['example.com', 'contractors.example.net']);
+    });
+
+    it('trims the sender', () => {
+      expect(
+        validateStackConfig({ ...VALID, notifySenderAddress: '  docs@example.com  ' })
+          .notifySenderAddress,
+      ).toBe('docs@example.com');
+    });
+
+    // An address with a typo verifies never, and the first anyone hears of it is a reviewer who
+    // was not told about a pull request.
+    it.each([
+      ['a bare domain', 'example.com'],
+      ['a list', 'a@example.com,b@example.com'],
+      ['no domain dot', 'docs@localhost'],
+      ['an address with a space', 'docs @example.com'],
+      ['two at-signs', 'docs@@example.com'],
+    ])('rejects %s and names the key', (_case, notifySenderAddress) => {
+      try {
+        validateStackConfig({ ...VALID, notifySenderAddress });
+        expect.unreachable('validateStackConfig should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(StackConfigError);
+        expect((error as StackConfigError).keys).toContain('notifySenderAddress');
+      }
+    });
+  });
 });
 
 // The task role is granted exactly what this returns. Getting it wrong produces an AccessDenied
