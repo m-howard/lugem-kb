@@ -74,6 +74,8 @@ export function readGithubConfig(): GithubConfig | undefined {
     cmsAuthNameClaim: config.get('cmsAuthNameClaim'),
     cmsBranchPrefix: config.get('cmsBranchPrefix'),
     cmsPathPrefixes: config.getObject<string[]>('cmsPathPrefixes'),
+    cmsMediaFolder: config.get('cmsMediaFolder'),
+    cmsMaxUploadBytes: config.getNumber('cmsMaxUploadBytes'),
     cmsAllowMerge: config.getBoolean('cmsAllowMerge'),
     cmsOidcIssuer: config.get('cmsOidcIssuer'),
     cmsOidcAuthorizationEndpoint: config.get('cmsOidcAuthorizationEndpoint'),

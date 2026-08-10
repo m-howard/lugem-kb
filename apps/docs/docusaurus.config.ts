@@ -26,6 +26,22 @@ const CONTENT_ROOT = '../../docs';
  */
 const BASE_URL = process.env.DOCUSAURUS_BASE_URL ?? '/';
 
+/**
+ * Where images uploaded through the CMS are published from (requirements.md R15).
+ *
+ * `docs/assets/` is the corpus's non-prose subtree, and Docusaurus copies a static directory's
+ * *contents* to the site root — so `docs/assets/media/org-chart.png` is served at
+ * `/media/org-chart.png`, which is the path the gateway tells the editor to write into the markdown.
+ * That indirection is the reason uploads sit one level inside: pointing this at the media folder
+ * itself would publish images at the site root, and pointing it at `../../docs` would copy every
+ * page's markdown source into the build alongside its rendered page.
+ *
+ * `CMS_MEDIA_FOLDER` on the gateway must agree with this. Both default to the same place, and
+ * `/v1/cms/config` derives the public path from the folder name so the two cannot drift silently.
+ * See [ADR 0021](../../docs/adr/0021-images-travel-with-the-draft.md).
+ */
+const STATIC_DIRECTORIES = ['static', '../../docs/assets'];
+
 const config: Config = {
   title: 'Lugem Knowledge Base',
   tagline: 'Documentation that publishes itself and answers questions',
@@ -33,6 +49,7 @@ const config: Config = {
 
   url: 'https://lugem-kb.example.com',
   baseUrl: BASE_URL,
+  staticDirectories: STATIC_DIRECTORIES,
 
   organizationName: ORGANIZATION,
   projectName: PROJECT,

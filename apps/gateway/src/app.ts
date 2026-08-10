@@ -274,6 +274,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         reader: cms.reader,
         drafts: cms.drafts,
         submissions: cms.submissions,
+        media: cms.media,
         settings: cms.settings,
         allowMergeFromCms: cms.allowMergeFromCms,
         tokens: cms.tokens,

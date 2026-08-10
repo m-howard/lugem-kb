@@ -5,11 +5,12 @@ import {
   type UnpublishedEntry,
   type UnpublishedEntryDiff,
 } from './protocol';
+import { resolveDraftPaths } from '../../git/path-policy';
 import { listDraftBranches } from '../draft-branches';
 import { branchForEntry, type EntryRef, parseEntryBranch } from '../entry-branch';
 import { CmsPolicyError, DraftMissingError } from '../errors';
 import { type Submission } from '../submissions';
-import { readBranchSnapshot } from '../tree';
+import { readBranchSnapshot, readTreeEntries } from '../tree';
 
 const MERGED_STATE = 'merged';
 const OPEN_STATE = 'open';
@@ -113,33 +114,69 @@ export async function readUnpublishedEntry(
 }
 
 /**
- * Works out which documents the draft changes relative to the published corpus.
+ * Works out which files the draft changes relative to the published corpus.
  *
  * Compared by blob sha rather than by content: identical content has an identical sha, so a file
  * an author opened and saved unchanged does not show up as a change.
  *
+ * Images count as changed files, not only pages (requirements.md R15). Decap derives an entry's
+ * media from exactly this list — everything in it that is not a page, it asks for through
+ * `unpublishedEntryMediaFile` — so leaving images out would make an uploaded screenshot disappear
+ * from the editor the moment the author reloaded, while sitting on the branch all along.
+ *
  * @param context - The CMS services.
  * @param branch - The draft branch.
- * @returns One diff per changed or added document.
+ * @returns One diff per changed or added file, pages first.
  */
 async function readDiffs(
   context: DecapContext,
   branch: string,
 ): Promise<readonly UnpublishedEntryDiff[]> {
   const [draft, published] = await Promise.all([
-    context.reader.list(branch),
-    context.reader.list(context.settings.defaultBranch),
+    readEntryFiles(context, branch),
+    readEntryFiles(context, context.settings.defaultBranch),
   ]);
 
-  const publishedShas = new Map(published.map((document) => [document.path, document.sha]));
+  const publishedShas = new Map(published.map((file) => [file.path, file.sha]));
 
   return draft
-    .filter((document) => publishedShas.get(document.path) !== document.sha)
-    .map((document) => ({
-      id: document.sha,
-      path: document.path,
-      newFile: !publishedShas.has(document.path),
+    .filter((file) => publishedShas.get(file.path) !== file.sha)
+    .map((file) => ({
+      id: file.sha,
+      path: file.path,
+      newFile: !publishedShas.has(file.path),
     }));
+}
+
+/**
+ * Every file on a branch that an entry could consist of: its pages and its images.
+ *
+ * Reads the branch **once**. Asking `DocumentReader` for the pages and `MediaService` for the
+ * images would be the obvious composition and costs twice as much — each resolves the ref, reads
+ * its commit and walks the tree, so the two together read the same tree twice. The board asks this
+ * per card on every refresh, which makes it the one listing worth spending a private function on.
+ *
+ * The predicate is `resolveDraftPaths`, the same combined rule that decides what a draft may
+ * *write*, so a file that could not have been committed here is not reported as a change either.
+ *
+ * Both callers pass a branch that policy has already accepted — `branchForEntry` for the draft, and
+ * the configured default branch — so there is no third branch check to lose.
+ */
+async function readEntryFiles(
+  context: DecapContext,
+  branch: string,
+): Promise<readonly { readonly path: string; readonly sha: string }[]> {
+  const snapshot = await readBranchSnapshot(context.client, branch);
+  if (snapshot === undefined) {
+    return [];
+  }
+
+  const entries = await readTreeEntries(context.client, snapshot.treeSha);
+  const { pathPrefixes, mediaFolder } = context.settings;
+
+  return entries.filter(
+    (entry) => resolveDraftPaths([entry.path], { prefixes: pathPrefixes, mediaFolder }).ok,
+  );
 }
 
 /**

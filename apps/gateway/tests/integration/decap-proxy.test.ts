@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCmsTestApp, buildTestApp, TEST_REPOSITORY } from '../helpers/build-test-app';
+import {
+  buildCmsTestApp,
+  buildTestApp,
+  TEST_MAX_UPLOAD_BYTES,
+  TEST_MEDIA_FOLDER,
+  TEST_REPOSITORY,
+} from '../helpers/build-test-app';
 import { type FakeGitHubRoute } from '../helpers/fake-github';
 
 const REPO = `/repos/${TEST_REPOSITORY}`;
@@ -12,9 +18,21 @@ const DRAFT_BRANCH = 'cms/guides/leave-policy';
 const DRAFT_COMMIT = 'commit-draft';
 const DRAFT_TREE = 'tree-draft';
 const DRAFT_UPDATED_AT = '2026-08-10T09:00:00Z';
+const MEDIA_FOLDER = TEST_MEDIA_FOLDER;
+const ENTRY = { collection: 'guides', slug: 'leave-policy' };
+
+/** A one-pixel PNG. Real image bytes, because the signature check reads them. */
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAd8s6BwAAAABJRU5ErkJggg==';
 
 function base64(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64');
+}
+
+/** A base64 payload that decodes to more than the configured limit. */
+function oversizedPng(): string {
+  const png = Buffer.from(PNG_BASE64, 'base64');
+  return Buffer.concat([png, Buffer.alloc(TEST_MAX_UPLOAD_BYTES, 0)]).toString('base64');
 }
 
 function blobRoute(sha: string, content: string): FakeGitHubRoute {
@@ -44,13 +62,21 @@ const MAIN_ROUTES: readonly FakeGitHubRoute[] = [
         // Neither of these may reach an editor: one is outside the docs prefix, the other is not
         // markdown. Both are dropped by the path policy the adapter shares with the REST routes.
         { path: '.github/workflows/ci.yml', type: 'blob', sha: 'blob-ci', size: 4 },
+        // An image outside the media folder. Not a page, and not the media library's either.
         { path: 'docs/logo.png', type: 'blob', sha: 'blob-logo', size: 4 },
+        // The media folder, holding the one published image.
+        { path: `${MEDIA_FOLDER}org-chart.png`, type: 'blob', sha: 'blob-chart', size: 68 },
       ],
     },
   },
   blobRoute('blob-index', '# Index\n'),
   blobRoute('blob-leave', '# Leave\n'),
   blobRoute('blob-nested', '# Deep\n'),
+  {
+    method: 'GET',
+    path: `${REPO}/git/blobs/blob-chart`,
+    respond: { content: PNG_BASE64, encoding: 'base64' },
+  },
 ];
 
 /** A draft branch that changes one page and adds another. */
@@ -73,11 +99,18 @@ const DRAFT_ROUTES: readonly FakeGitHubRoute[] = [
         { path: 'docs/index.md', type: 'blob', sha: 'blob-index', size: 9 },
         { path: 'docs/guides/leave-policy.md', type: 'blob', sha: 'blob-leave-2', size: 12 },
         { path: 'docs/guides/new-page.md', type: 'blob', sha: 'blob-new', size: 6 },
+        // An image the author uploaded to this draft, not yet published — requirements.md R15.
+        { path: `${MEDIA_FOLDER}new-chart.png`, type: 'blob', sha: 'blob-new-chart', size: 68 },
       ],
     },
   },
   blobRoute('blob-leave-2', '# Leave v2\n'),
   blobRoute('blob-new', '# New\n'),
+  {
+    method: 'GET',
+    path: `${REPO}/git/blobs/blob-new-chart`,
+    respond: { content: PNG_BASE64, encoding: 'base64' },
+  },
 ];
 
 const MATCHING_REFS: FakeGitHubRoute = {
@@ -302,17 +335,20 @@ describe('the Decap adapter', () => {
       expect(body).toMatchObject({ status: 'pending_review' });
     });
 
-    it('reports only the documents the draft actually changes', async () => {
+    it('reports only the files the draft actually changes', async () => {
       const { body } = await callProxy(
         'unpublishedEntry',
         { id: 'guides/leave-policy' },
         { routes: [...MAIN_ROUTES, ...DRAFT_ROUTES, pullsRoute([])] },
       );
 
-      // `docs/index.md` is byte-identical on both branches, so it is not a change.
+      // `docs/index.md` is byte-identical on both branches, so it is not a change. The uploaded
+      // image is one, and has to be listed: Decap derives an entry's media from exactly this list
+      // (requirements.md R15).
       expect((body as { diffs: unknown[] }).diffs).toEqual([
         { id: 'blob-leave-2', path: 'docs/guides/leave-policy.md', newFile: false },
         { id: 'blob-new', path: 'docs/guides/new-page.md', newFile: true },
+        { id: 'blob-new-chart', path: `${MEDIA_FOLDER}new-chart.png`, newFile: true },
       ]);
     });
 
@@ -477,6 +513,140 @@ describe('the Decap adapter', () => {
       expect(response.status).toBe(403);
       expect(cms.host.paths()).toEqual([]);
     });
+
+    // requirements.md R15, and the whole of its write path: an image arrives with the entry, so it
+    // is committed with the page rather than written to the default branch. See ADR 0021.
+    describe('with images', () => {
+      async function save(
+        assets: readonly unknown[],
+        routes: readonly FakeGitHubRoute[] = SAVE_ROUTES,
+      ) {
+        const cms = await buildCmsTestApp({ routes: [...routes] });
+
+        const response = await cms.app.request(PROXY, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...(await cms.authorize()) },
+          body: JSON.stringify({
+            action: 'persistEntry',
+            params: {
+              dataFiles: [
+                { path: 'docs/guides/leave-policy.md', slug: 'leave-policy', raw: '# Leave\n' },
+              ],
+              assets,
+              options: { collectionName: 'guides' },
+            },
+          }),
+        });
+
+        return { cms, status: response.status, body: await response.json() };
+      }
+
+      const CHART = {
+        path: `${MEDIA_FOLDER}org-chart.png`,
+        content: PNG_BASE64,
+        encoding: 'base64',
+      };
+
+      it('commits the image and the page together, in one commit', async () => {
+        const { cms, status, body } = await save([CHART]);
+
+        expect(status).toBe(200);
+        expect(body).toEqual({ branch: DRAFT_BRANCH });
+
+        const blobs = cms.host.calls.filter(
+          (call) => call.method === 'POST' && call.path === `${REPO}/git/blobs`,
+        );
+        const commits = cms.host.calls.filter(
+          (call) => call.method === 'POST' && call.path === `${REPO}/git/commits`,
+        );
+
+        expect(blobs).toHaveLength(2);
+        expect(commits).toHaveLength(1);
+      });
+
+      // The bytes must reach the git host as they arrived. Re-encoding them through a UTF-8 string
+      // would not merely waste work — it would corrupt the image, and nothing would say so.
+      it('sends the image bytes through unchanged', async () => {
+        const { cms } = await save([CHART]);
+
+        const blobs = cms.host.calls.filter(
+          (call) => call.method === 'POST' && call.path === `${REPO}/git/blobs`,
+        );
+
+        expect(blobs.map((call) => (call.body as { content: string }).content)).toContain(
+          PNG_BASE64,
+        );
+      });
+
+      it('puts the image in the same tree as the page', async () => {
+        const { cms } = await save([CHART]);
+
+        const tree = cms.host.calls.find(
+          (call) => call.method === 'POST' && call.path === `${REPO}/git/trees`,
+        );
+
+        expect(
+          (tree?.body as { tree: { path: string }[] }).tree.map((entry) => entry.path),
+        ).toEqual(['docs/guides/leave-policy.md', `${MEDIA_FOLDER}org-chart.png`]);
+      });
+
+      // R15's second acceptance criterion. "Nothing is written" is the part worth asserting: an
+      // author gets one refusal to act on rather than a half-applied commit to unpick.
+      it('refuses an oversized image, naming both sizes, and writes nothing at all', async () => {
+        const { cms, status, body } = await save([{ ...CHART, content: oversizedPng() }]);
+
+        expect(status).toBe(413);
+        expect(body).toMatchObject({ reason: 'media-too-large' });
+        expect((body as { error: string }).error).toContain('org-chart.png');
+        expect((body as { error: string }).error).toContain('4 kB');
+        expect(cms.host.paths()).toEqual([]);
+      });
+
+      it.each([
+        ['an svg, which could carry a script', `${MEDIA_FOLDER}diagram.svg`, PNG_BASE64],
+        ['an executable', `${MEDIA_FOLDER}payload.exe`, PNG_BASE64],
+        ['an image outside the media folder', 'docs/guides/inline.png', PNG_BASE64],
+        ['traversal out of the folder', `${MEDIA_FOLDER}../../ci.png`, PNG_BASE64],
+        ['html wearing a png name', `${MEDIA_FOLDER}x.png`, base64('<!doctype html>')],
+        ['a payload that is not base64 at all', `${MEDIA_FOLDER}x.png`, 'not base64 %%%'],
+      ])('refuses %s, and writes nothing', async (_case, path, content) => {
+        const { cms, status } = await save([{ path, content, encoding: 'base64' }]);
+
+        expect(status).toBe(403);
+        expect(cms.host.paths()).toEqual([]);
+      });
+
+      // One bad image refuses the whole save, exactly as one bad path does — R3's rule applied to
+      // media, and the reason the checks run before the first upstream call.
+      it('refuses the whole save when only one of several images is bad', async () => {
+        const { cms, status } = await save([
+          CHART,
+          { path: `${MEDIA_FOLDER}payload.exe`, content: PNG_BASE64, encoding: 'base64' },
+        ]);
+
+        expect(status).toBe(403);
+        expect(cms.host.paths()).toEqual([]);
+      });
+
+      it('refuses more images in one save than the protocol admits', async () => {
+        const { cms, status } = await save(
+          Array.from({ length: 9 }, (_unused, index) => ({
+            ...CHART,
+            path: `${MEDIA_FOLDER}chart-${String(index)}.png`,
+          })),
+        );
+
+        expect(status).toBe(400);
+        expect(cms.host.paths()).toEqual([]);
+      });
+
+      it('saves a page with no images exactly as it did before', async () => {
+        const { status, body } = await save([]);
+
+        expect(status).toBe(200);
+        expect(body).toEqual({ branch: DRAFT_BRANCH });
+      });
+    });
   });
 
   describe('moving between columns', () => {
@@ -620,7 +790,6 @@ describe('the Decap adapter', () => {
   // failure — it keeps the card offering to check instead of linking at a build that is not there.
   describe('preview links (R12)', () => {
     const PREVIEW_BASE_URL = 'https://kb.test/previews';
-    const ENTRY = { collection: 'guides', slug: 'leave-policy' };
 
     it('links the card to the preview for the open submission', async () => {
       const { status, body } = await callProxy('getDeployPreview', ENTRY, {
@@ -665,25 +834,141 @@ describe('the Decap adapter', () => {
     });
   });
 
-  describe('what it does not do', () => {
-    it('offers an empty media library rather than a broken one', async () => {
-      const { status, body } = await callProxy('getMedia', { mediaFolder: 'docs/img' });
+  // requirements.md R15. The write half lives in "saving an entry" above, because an upload is not
+  // a write of its own — it travels with the page (ADR 0021).
+  describe('the media library', () => {
+    it('lists the images in the media folder, with their bytes', async () => {
+      const { status, body } = await callProxy(
+        'getMedia',
+        { mediaFolder: MEDIA_FOLDER },
+        { routes: MAIN_ROUTES },
+      );
 
       expect(status).toBe(200);
-      expect(body).toEqual([]);
+      expect(body).toEqual([
+        {
+          id: 'blob-chart',
+          path: `${MEDIA_FOLDER}org-chart.png`,
+          name: 'org-chart.png',
+          content: PNG_BASE64,
+          encoding: 'base64',
+        },
+      ]);
     });
 
-    it.each([['persistMedia'], ['getMediaFile'], ['unpublishedEntryMediaFile']])(
-      'explains that %s is not supported',
-      async (action) => {
-        const { status, body } = await callProxy(action, {});
+    // The gateway knows which folder it confines uploads to. Reading the parameter would make the
+    // browser the authority on what the one credential may fetch, for no gain.
+    it('ignores the folder the browser names, and answers for the configured one', async () => {
+      const { status, body } = await callProxy(
+        'getMedia',
+        { mediaFolder: '.github/workflows' },
+        { routes: MAIN_ROUTES },
+      );
 
-        expect(status).toBe(400);
-        expect(body).toMatchObject({ reason: 'unsupported-action' });
-        expect((body as { error: string }).error).toContain('markdown');
-      },
-    );
+      expect(status).toBe(200);
+      expect(body).toMatchObject([{ path: `${MEDIA_FOLDER}org-chart.png` }]);
+    });
 
+    it('reads one image from the published corpus', async () => {
+      const { status, body } = await callProxy(
+        'getMediaFile',
+        { path: `${MEDIA_FOLDER}org-chart.png` },
+        { routes: MAIN_ROUTES },
+      );
+
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ name: 'org-chart.png', content: PNG_BASE64 });
+    });
+
+    // What keeps an uploaded image visible after a reload: it is on the draft branch, and the
+    // published corpus does not have it yet.
+    it("reads a draft's own image from the draft branch", async () => {
+      const { status, body } = await callProxy(
+        'unpublishedEntryMediaFile',
+        { ...ENTRY, path: `${MEDIA_FOLDER}new-chart.png` },
+        { routes: DRAFT_ROUTES },
+      );
+
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ id: 'blob-new-chart', name: 'new-chart.png' });
+    });
+
+    // Decap derives an entry's media from the diffs, so an image missing here is an image that
+    // vanishes from the editor while sitting on the branch all along.
+    it('reports a draft image as a changed file', async () => {
+      const { status, body } = await callProxy('unpublishedEntry', ENTRY, {
+        routes: [...MAIN_ROUTES, ...DRAFT_ROUTES, pullsRoute([])],
+      });
+
+      expect(status).toBe(200);
+      expect(body).toMatchObject({
+        diffs: expect.arrayContaining([
+          { id: 'blob-new-chart', path: `${MEDIA_FOLDER}new-chart.png`, newFile: true },
+        ]),
+      });
+    });
+
+    // The board asks for this per card on every refresh, so its cost is worth pinning. Asking the
+    // document reader for the pages and the media service for the images is the obvious composition
+    // and reads each branch's tree twice; one listing per branch, applying both policies, does not.
+    it('reads each branch once to find them, not once per kind of file', async () => {
+      const cms = await buildCmsTestApp({
+        routes: [...MAIN_ROUTES, ...DRAFT_ROUTES, pullsRoute([])],
+      });
+
+      await cms.app.request(PROXY, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cms.authorize()) },
+        body: JSON.stringify({ action: 'unpublishedEntry', params: ENTRY }),
+      });
+
+      const trees = cms.host.paths().filter((path) => path.includes('/git/trees/'));
+      expect(trees).toEqual([
+        `${REPO}/git/trees/${DRAFT_TREE}?recursive=1`,
+        `${REPO}/git/trees/${MAIN_TREE}?recursive=1`,
+      ]);
+    });
+
+    it.each([
+      ['markdown pretending to be media', `${MEDIA_FOLDER}notes.md`],
+      ['an image outside the media folder', 'docs/logo.png'],
+      ['traversal out of the folder', `${MEDIA_FOLDER}../../.github/workflows/ci.png`],
+    ])('refuses to read %s, before any upstream call', async (_case, path) => {
+      const cms = await buildCmsTestApp({ routes: MAIN_ROUTES });
+
+      const response = await cms.app.request(PROXY, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cms.authorize()) },
+        body: JSON.stringify({ action: 'getMediaFile', params: { path } }),
+      });
+
+      expect(response.status).toBe(403);
+      expect(cms.host.paths()).toEqual([]);
+    });
+
+    // Decap's own git backends answer persistMedia by committing to the default branch, which
+    // branch policy and branch protection both refuse. The author is sent somewhere that works.
+    it('refuses a standalone upload, and says where to put the image instead', async () => {
+      const { status, body } = await callProxy('persistMedia', {
+        asset: { path: `${MEDIA_FOLDER}x.png`, content: PNG_BASE64, encoding: 'base64' },
+      });
+
+      expect(status).toBe(400);
+      expect(body).toMatchObject({ reason: 'unsupported-action' });
+      expect((body as { error: string }).error).toContain('inside the page');
+    });
+
+    it('refuses to delete a published image directly', async () => {
+      const { status, body } = await callProxy('deleteMedia', {
+        path: `${MEDIA_FOLDER}org-chart.png`,
+      });
+
+      expect(status).toBe(400);
+      expect((body as { error: string }).error).toContain('submit that for review');
+    });
+  });
+
+  describe('what it does not do', () => {
     it('refuses an action it does not implement', async () => {
       const { status, body } = await callProxy('dropDatabase', {});
 
@@ -717,6 +1002,28 @@ describe('the Decap adapter', () => {
       const { status } = await callProxy('', {});
 
       expect(status).toBe(400);
+    });
+
+    // A body this large never reaches a handler, so this middleware is the only place the refusal
+    // can be worded — and it has to name the per-image limit, or an author is told a number they
+    // cannot act on (requirements.md R15).
+    it('refuses a body larger than the whole editor accepts, in words an author can act on', async () => {
+      const cms = await buildCmsTestApp();
+
+      const response = await cms.app.request(PROXY, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cms.authorize()) },
+        body: JSON.stringify({
+          action: 'persistEntry',
+          params: { dataFiles: [{ path: 'docs/a.md', slug: 'a', raw: 'x'.repeat(600_000) }] },
+        }),
+      });
+
+      expect(response.status).toBe(413);
+      expect((await response.json()) as { reason: string }).toMatchObject({
+        reason: 'body-too-large',
+      });
+      expect(cms.host.paths()).toEqual([]);
     });
 
     // A stale save arrives as the git host's "Update is not a fast forward", which is true and

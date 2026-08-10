@@ -9,6 +9,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Image handling in the CMS** — R15, so an author illustrates a page themselves instead of filing
+  a ticket for an engineer to commit a PNG. See
+  [ADR 0021](docs/adr/0021-images-travel-with-the-draft.md).
+  - An image added while a page is open is committed to that page's draft branch **in the same
+    commit as the markdown**, so R15 adds no write path: the image is submitted, reviewed and
+    published exactly as the words around it are. Decap's own git backends commit media straight to
+    the default branch, which branch policy and R8's branch protection both refuse here — so the
+    standalone media-library upload is refused with somewhere better to go.
+  - Uploads are confined to one folder, `CMS_MEDIA_FOLDER`, defaulting to `docs/assets/media/`.
+    Narrower than `CMS_PATH_PREFIXES` on purpose: those say where _pages_ may be written, and an
+    image is not a page. The gateway refuses to start if the folder falls outside them, and
+    `pulumi preview` fails on the same rule.
+  - `apps/docs` publishes `docs/assets/` as a static directory, so an upload is served from the
+    site root under its folder's own name — `/media/org-chart.png`. The gateway derives that public
+    path from the folder rather than taking it as a second setting. A missing image then fails the
+    Docusaurus build with its file and line, which is the guarantee R13 gives links, obtained
+    without adding a check.
+  - PNG, JPEG, GIF and WebP only, and the leading bytes of every file are checked against its
+    extension. **No SVG:** it can carry a script, and the site shares an origin with `/admin`, where
+    the author's token lives in `sessionStorage`.
+  - `CMS_MAX_UPLOAD_BYTES` defaults to 2 MiB. An oversized image is answered `413` with a message
+    naming the file and both sizes, and **nothing is written** — one bad image refuses the whole
+    save, as R3 already requires of one bad path. The proxy endpoint's request-body limit is derived
+    from the same number, so a save dropped by the middleware gets the same explanation.
+  - The editorial board reports images as changed files alongside pages, because Decap derives an
+    entry's media from that list — without it an uploaded screenshot would vanish from the editor on
+    reload while sitting on the branch all along.
+  - Nothing under the media folder is synced to S3 or indexed: `scripts/docs/corpus-files.ts` walks
+    markdown only, so R21 is untouched.
 - **Pull request previews** — R12, so an author sees their page rendered before anybody approves
   it, and a reviewer reads the change rather than the diff.
   - The gateway serves `/previews/pr-<number>/` from a private S3 bucket, behind whatever already
@@ -57,8 +86,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     the browser's redirect URL regardless.
   - Audit records carry the Decap action, so one endpoint carrying every operation still leaves a
     log an operator can read (R9).
-  - Image upload is not supported: the corpus holds markdown only, so the media library lists
-    nothing and uploads are refused with an explanation. R15 is a separate change.
+  - Image upload was not supported at first: the corpus held markdown only, so the media library
+    listed nothing and uploads were refused with an explanation. Added since — see R15 above.
 - **The gap feedback loop** — Phase 5 of [the requirements](docs/requirements.md), so the
   documentation learns what it is missing. Off unless `GAP_FEEDBACK_TABLE` is set.
   - A question the corpus cannot answer is recorded, and readers can mark an answer unhelpful with

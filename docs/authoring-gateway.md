@@ -22,19 +22,19 @@ never mounted, and the service behaves exactly as it did before — site, `/v1/d
 
 ## What it does
 
-| Route                                  | Purpose                                                                      |
-| -------------------------------------- | ---------------------------------------------------------------------------- |
-| `GET /v1/cms/config`                   | Repository, default branch, branch prefix, permitted extensions.             |
-| `GET /v1/cms/identity`                 | Who the gateway thinks you are. Answered from your token, never from GitHub. |
-| `GET /v1/cms/documents?branch=`        | Documents on a branch. Defaults to the default branch.                       |
-| `GET /v1/cms/documents/{path}?branch=` | One document, with the blob sha.                                             |
-| `PUT /v1/cms/drafts/{branch}`          | Save a draft. Creates or moves the branch; **does not** open a pull request. |
-| `DELETE /v1/cms/drafts/{branch}`       | Discard a draft.                                                             |
-| `POST /v1/cms/submissions`             | Open a pull request against the default branch.                              |
-| `GET /v1/cms/submissions[/{number}]`   | Where a submission got to.                                                   |
-| `POST /v1/cms/submissions/{n}/merge`   | Refused unless `POLICY_ALLOW_MERGE_FROM_CMS` is set.                         |
-| `POST /v1/cms/proxy`                   | The Decap adapter. One endpoint carrying every editorial action.             |
-| `GET /previews/pr-{n}/*`               | A pull request's rendered preview. Unauthenticated, like the site itself.    |
+| Route                                  | Purpose                                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /v1/cms/config`                   | Repository, default branch, branch prefix, permitted extensions, media folder and upload limit. |
+| `GET /v1/cms/identity`                 | Who the gateway thinks you are. Answered from your token, never from GitHub.                    |
+| `GET /v1/cms/documents?branch=`        | Documents on a branch. Defaults to the default branch.                                          |
+| `GET /v1/cms/documents/{path}?branch=` | One document, with the blob sha.                                                                |
+| `PUT /v1/cms/drafts/{branch}`          | Save a draft. Creates or moves the branch; **does not** open a pull request.                    |
+| `DELETE /v1/cms/drafts/{branch}`       | Discard a draft.                                                                                |
+| `POST /v1/cms/submissions`             | Open a pull request against the default branch.                                                 |
+| `GET /v1/cms/submissions[/{number}]`   | Where a submission got to.                                                                      |
+| `POST /v1/cms/submissions/{n}/merge`   | Refused unless `POLICY_ALLOW_MERGE_FROM_CMS` is set.                                            |
+| `POST /v1/cms/proxy`                   | The Decap adapter. One endpoint carrying every editorial action.                                |
+| `GET /previews/pr-{n}/*`               | A pull request's rendered preview. Unauthenticated, like the site itself.                       |
 
 Saving and submitting are separate on purpose. A draft written over three days should not sit in a
 reviewer's queue the whole time.
@@ -51,6 +51,37 @@ The path is refused before any S3 call if it could resolve outside the requested
 prefix, by the same kind of pure, fully tested policy that guards the corpus. Previews live in
 their own bucket, never the corpus bucket, so R21's "preview builds are never ingested" is true by
 construction rather than by a prefix filter somebody could edit.
+
+### Images {#images}
+
+Authors add images from inside the page they are writing, and the image is committed to that page's
+draft branch **in the same commit as the markdown**. There is no upload endpoint: R15's write path
+adds no write path, so an image is submitted, reviewed and published exactly as the words around it
+are, and never reaches the default branch on its own.
+
+Two settings, and one thing to keep in step:
+
+| Setting                | Default              | What it governs                             |
+| ---------------------- | -------------------- | ------------------------------------------- |
+| `CMS_MEDIA_FOLDER`     | `docs/assets/media/` | The only folder an upload may be written to |
+| `CMS_MAX_UPLOAD_BYTES` | `2097152` (2 MiB)    | The largest single image                    |
+
+The folder must sit inside `CMS_PATH_PREFIXES`, and the gateway refuses to start otherwise — a media
+folder the CMS may not write to would pass `/healthz` and then refuse every upload. `pulumi preview`
+fails on the same rule.
+
+**The site has to publish that folder.** `apps/docs/docusaurus.config.ts` lists the folder's
+_parent_ as a static directory, and Docusaurus copies a static directory's contents to the site root,
+so `docs/assets/media/org-chart.png` is served at `/media/org-chart.png` — which is what the gateway
+tells the editor to write into the markdown. Change `cmsMediaFolder` and you must change that static
+directory too. Nothing derives one from the other: they are different processes in different
+workspaces, and this is the sharpest edge in the design
+([ADR 0021](./adr/0021-images-travel-with-the-draft.md)).
+
+Uploads are confined to PNG, JPEG, GIF and WebP, and the first bytes of every file are checked
+against its extension. SVG is excluded deliberately: it can carry a script, and the site shares an
+origin with `/admin`, where the author's token lives. Images are never synced to S3 or indexed, so
+none of this touches R21.
 
 ### The Decap adapter
 
@@ -105,6 +136,8 @@ pulumi up
 | `cmsOidcClientSecret`             | for `alb`    | Set with `--secret`. Never written to a config file in plaintext.                                                                                            |
 | `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                                                                                         |
 | `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                                                                                            |
+| `cmsMediaFolder`                  | no           | Default `docs/assets/media/`. The only folder uploads may go to, and it must sit inside `cmsPathPrefixes`. See [images](#images).                            |
+| `cmsMaxUploadBytes`               | no           | Default `2097152` (2 MiB). Largest single image, from 1 byte to 25 MiB.                                                                                      |
 | `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                                                                                              |
 
 Pull request previews need no configuration key of their own. `pulumi up` creates the bucket and
@@ -166,6 +199,11 @@ applies.
 | A verified token carrying no email claim                                               | `401 missing-email`                |
 | Writing `.github/workflows/ci.yml`, `README.md`, or anything outside `cmsPathPrefixes` | `403`                              |
 | Writing a `.sh`, `.yml` or any non-markdown file, even inside `docs/`                  | `403 extension`                    |
+| An upload that is not PNG, JPEG, GIF or WebP — an SVG included                         | `403 media-extension`              |
+| An image outside `CMS_MEDIA_FOLDER`                                                    | `403 media-outside-folder`         |
+| A file whose bytes are not the format its name claims                                  | `403 media-content-mismatch`       |
+| An image over `CMS_MAX_UPLOAD_BYTES`                                                   | `413 media-too-large`              |
+| Uploading from the media library rather than from inside a page                        | `400 unsupported-action`           |
 | A path containing `..`, a null byte, a backslash or an empty segment                   | `403`                              |
 | A change set where **any** entry is bad                                                | `403`, and nothing is written      |
 | Creating, updating or deleting the default branch                                      | `403 default-branch`               |

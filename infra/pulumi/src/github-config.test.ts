@@ -280,6 +280,76 @@ describe('validateGithubConfig', () => {
       });
     });
 
+    // requirements.md R15. The same containment rule the gateway enforces, checked here so a bad
+    // value fails at preview rather than in a task that boots and then refuses every upload.
+    describe('the media folder', () => {
+      it('defaults to the folder the site publishes as static assets', () => {
+        expect(validateGithubConfig({ ...VALID, ...BEARER })?.cmsGateway).toMatchObject({
+          mediaFolder: 'docs/assets/media/',
+          maxUploadBytes: 2_097_152,
+        });
+      });
+
+      it.each([
+        ['a folder written without a trailing slash', 'docs/uploads'],
+        ['a folder written with a leading slash', '/docs/uploads/'],
+      ])('normalises %s', (_case, cmsMediaFolder) => {
+        expect(
+          validateGithubConfig({ ...VALID, ...BEARER, cmsMediaFolder })?.cmsGateway,
+        ).toMatchObject({ mediaFolder: 'docs/uploads/' });
+      });
+
+      it('accepts a folder under any configured prefix', () => {
+        const config = validateGithubConfig({
+          ...VALID,
+          ...BEARER,
+          cmsPathPrefixes: ['docs/', 'handbook/'],
+          cmsMediaFolder: 'handbook/media/',
+        });
+
+        expect(config?.cmsGateway).toMatchObject({ mediaFolder: 'handbook/media/' });
+      });
+
+      it('refuses a folder outside every write prefix, naming both keys', () => {
+        expectKeys(
+          { ...VALID, ...BEARER, cmsMediaFolder: 'static/img/' },
+          'cmsMediaFolder',
+          'cmsPathPrefixes',
+        );
+      });
+
+      // A blank value means "unset" here, as it does for every other key — `emptyToUndefined`. A
+      // value that is only a slash does not: it names the repository root, which would put uploads
+      // outside the docs tree and let the media folder match every path.
+      it.each([[' / '], ['docs/../.github/'], ['docs\\media']])(
+        'refuses %j',
+        (cmsMediaFolder: string) => {
+          expectKeys({ ...VALID, ...BEARER, cmsMediaFolder }, 'cmsMediaFolder');
+        },
+      );
+
+      it('treats a blank folder as unset, like every other key', () => {
+        expect(
+          validateGithubConfig({ ...VALID, ...BEARER, cmsMediaFolder: '   ' })?.cmsGateway,
+        ).toMatchObject({ mediaFolder: 'docs/assets/media/' });
+      });
+
+      it('takes an override for the upload limit', () => {
+        expect(
+          validateGithubConfig({ ...VALID, ...BEARER, cmsMaxUploadBytes: 512_000 })?.cmsGateway,
+        ).toMatchObject({ maxUploadBytes: 512_000 });
+      });
+
+      // The proxy sizes its request-body limit from this, so an unbounded value would let one save
+      // hold as much of the task's memory as the author cared to send.
+      it.each([[0], [-1], [1.5], [26_214_401]])(
+        'refuses an upload limit of %s',
+        (cmsMaxUploadBytes: number) => {
+          expectKeys({ ...VALID, ...BEARER, cmsMaxUploadBytes }, 'cmsMaxUploadBytes');
+        },
+      );
+    });
+
     describe('fails closed', () => {
       it('refuses an app with no auth mode chosen', () => {
         expectKeys({ ...VALID, ...CMS_APP }, 'cmsAuthMode');

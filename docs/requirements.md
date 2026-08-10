@@ -255,8 +255,8 @@ Every request produces a structured record.
 
 #### R15. Image handling
 
-- [ ] Authors upload images through the CMS into the configured media folder
-- [ ] Uploads over the size limit are rejected with a clear message
+- [x] Authors upload images through the CMS into the configured media folder — `CMS_MEDIA_FOLDER`, defaulting to `docs/assets/media/` and published by the site at `/media/`. An image added while a page is open is committed to that page's draft branch in the same commit as the markdown, so it is reviewed and published with the page rather than written straight to the default branch as Decap's own backends would ([ADR 0021](adr/0021-images-travel-with-the-draft.md))
+- [x] Uploads over the size limit are rejected with a clear message — `CMS_MAX_UPLOAD_BYTES`, defaulting to 2 MiB. The refusal names the file and both sizes, and nothing is written: one oversized image refuses the whole save. Enforced when the entry is saved rather than when the file is picked, because Decap holds the upload client-side until then and has no size limit of its own
 
 #### R20. Grounded answering
 

@@ -7,14 +7,15 @@
 
 This is a Bun workspace monorepo. Every file belongs to exactly one workspace or to the root.
 
-| Path            | Holds                                                                     |
-| --------------- | ------------------------------------------------------------------------- |
-| `apps/docs/`    | Docusaurus site. Its content root is repo-root `docs/`, not a local copy. |
-| `apps/gateway/` | The Bun + Hono service deployed to ECS. Owns its own `Dockerfile`.        |
-| `infra/pulumi/` | The Pulumi program. `runtime: bun` — no ts-node, no build step.           |
-| `docs/`         | The corpus. Published by `apps/docs` and synced to S3 for ingestion.      |
-| `scripts/`      | Repo-level tooling, in a subfolder (see below).                           |
-| `tests/e2e/`    | Playwright only.                                                          |
+| Path            | Holds                                                                        |
+| --------------- | ---------------------------------------------------------------------------- |
+| `apps/docs/`    | Docusaurus site. Its content root is repo-root `docs/`, not a local copy.    |
+| `apps/gateway/` | The Bun + Hono service deployed to ECS. Owns its own `Dockerfile`.           |
+| `infra/pulumi/` | The Pulumi program. `runtime: bun` — no ts-node, no build step.              |
+| `docs/`         | The corpus. Published by `apps/docs` and synced to S3 for ingestion.         |
+| `docs/assets/`  | The corpus's non-prose half. Published as static site assets, never indexed. |
+| `scripts/`      | Repo-level tooling, in a subfolder (see below).                              |
+| `tests/e2e/`    | Playwright only.                                                             |
 
 ## File placement & repo-root hygiene
 
@@ -31,6 +32,13 @@ This is a Bun workspace monorepo. Every file belongs to exactly one workspace or
   (`build/`, `dev/`, `check/`, `docs/`, `ad-hoc/`). One-shot or experimental code goes under
   `scripts/ad-hoc/`. NEVER dump loose scripts in the project root (`/`) or the top-level `scripts/`
   folder.
+
+- **Images and other binary assets**: uploads from the CMS live in `docs/assets/media/` and nowhere
+  else. `apps/docs` publishes `docs/assets/` as a static directory, so a file there is served from the
+  site root under its own folder name (`docs/assets/media/x.png` → `/media/x.png`), and the gateway
+  confines uploads to the same folder via `CMS_MEDIA_FOLDER`. Changing one without the other produces
+  images the site cannot serve — see
+  [ADR 0021](docs/adr/0021-images-travel-with-the-draft.md).
 
 **The project root MUST ONLY contain:**
 

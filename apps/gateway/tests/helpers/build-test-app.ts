@@ -19,6 +19,7 @@ import { type IdentityVerifier } from '../../src/auth/verifier';
 import { type CmsDependencies } from '../../src/cms/dependencies';
 import { DocumentReader } from '../../src/cms/documents';
 import { DraftService } from '../../src/cms/drafts';
+import { MediaService } from '../../src/cms/media';
 import { type CmsSettings } from '../../src/cms/settings';
 import { SubmissionService } from '../../src/cms/submissions';
 import { GitHubClient } from '../../src/git/github-client';
@@ -39,11 +40,18 @@ export const TEST_REPOSITORY = 'acme/handbook';
 export const TEST_GITHUB_API = 'https://api.github.test';
 export const TEST_ADMIN_CLIENT_ID = 'lugem-cms-admin';
 
+export const TEST_MEDIA_FOLDER = 'docs/assets/media/';
+
+/** Small enough that a test can exceed it with a literal, rather than a megabyte of fixture. */
+export const TEST_MAX_UPLOAD_BYTES = 4096;
+
 export const TEST_CMS_SETTINGS: CmsSettings = {
   repository: TEST_REPOSITORY,
   defaultBranch: 'main',
   branchPrefix: 'cms/',
   pathPrefixes: ['docs/'],
+  mediaFolder: TEST_MEDIA_FOLDER,
+  maxUploadBytes: TEST_MAX_UPLOAD_BYTES,
 };
 
 /** Silent unless a test wants the records, in which case they are parsed back into objects. */
@@ -162,6 +170,7 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
     client,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
+    media: new MediaService({ client, settings }),
     submissions: new SubmissionService({
       client,
       settings,

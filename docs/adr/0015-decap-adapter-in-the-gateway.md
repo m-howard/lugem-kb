@@ -102,9 +102,11 @@ working, not an obstacle to it.
 - **Deleting a published page is not offered.** Decap would send it as a direct write, which branch
   policy refuses anyway. It is refused here with a reason instead, and remains an engineer's job
   until it is worth designing properly.
-- **Media is absent by construction.** `PERMITTED_EXTENSIONS` is markdown only, so the media
-  library lists nothing and uploads are refused with an explanation. R15 is a separate change, and
-  it touches the write confinement R3 rests on.
+- **Media was absent by construction.** `PERMITTED_EXTENSIONS` is markdown only, so the media
+  library listed nothing and uploads were refused with an explanation. R15 was a separate change,
+  and it touched the write confinement R3 rests on — settled since by
+  [ADR 0021](./0021-images-travel-with-the-draft.md), which adds a second confined folder rather
+  than widening this one. Markdown pages are still the only thing `PERMITTED_EXTENSIONS` admits.
 - **Decap's backend API is explicitly unstable.** Its own docs say there is no finalised, documented
   API. `decap-cms-app` is pinned exactly, and the zod schemas in `cms/decap/protocol.ts` are what
   turn an upstream shape change into a failing test rather than a silent misbehaviour.

@@ -21,6 +21,19 @@ const DEFAULT_CMS_BRANCH_PREFIX = 'cms/';
 const DEFAULT_CMS_PATH_PREFIXES: readonly string[] = ['docs/'];
 
 /**
+ * Where CMS uploads live — requirements.md R15.
+ *
+ * Must match `DEFAULT_CMS_MEDIA_FOLDER` in `apps/gateway/src/config.ts` and the static directory
+ * `apps/docs/docusaurus.config.ts` publishes, or images are stored somewhere the site does not serve
+ * from. See [ADR 0021](../../../docs/adr/0021-images-travel-with-the-draft.md).
+ */
+const DEFAULT_CMS_MEDIA_FOLDER = 'docs/assets/media/';
+
+/** 2 MiB, matching the gateway's own default. */
+const DEFAULT_CMS_MAX_UPLOAD_BYTES = 2_097_152;
+const MAX_CMS_MAX_UPLOAD_BYTES = 26_214_400;
+
+/**
  * The endpoints `authenticate-oidc` needs. AWS rejects a partial block, so all of them or none.
  *
  * `cmsOidcClientSecret` is deliberately absent: it is read as a Pulumi secret in the composition
@@ -71,6 +84,8 @@ export interface GithubConfigInput {
   readonly cmsAuthNameClaim?: string | undefined;
   readonly cmsBranchPrefix?: string | undefined;
   readonly cmsPathPrefixes?: readonly string[] | undefined;
+  readonly cmsMediaFolder?: string | undefined;
+  readonly cmsMaxUploadBytes?: number | undefined;
   readonly cmsAllowMerge?: boolean | undefined;
   readonly cmsOidcIssuer?: string | undefined;
   readonly cmsOidcAuthorizationEndpoint?: string | undefined;
@@ -129,6 +144,10 @@ export interface CmsGatewayConfig {
   readonly nameClaim: string | undefined;
   readonly branchPrefix: string;
   readonly pathPrefixes: readonly string[];
+  /** Folder authors upload images into — requirements.md R15. Always inside `pathPrefixes`. */
+  readonly mediaFolder: string;
+  /** Largest single upload, in bytes. */
+  readonly maxUploadBytes: number;
   readonly allowMerge: boolean;
   /** Present only in `alb` mode, where the load balancer runs the OIDC exchange. */
   readonly oidcListener: CmsOidcListenerConfig | undefined;
@@ -281,11 +300,14 @@ function resolveCmsGateway(input: GithubConfigInput): CmsGatewayConfig {
     );
   }
 
+  const pathPrefixes = resolvePathPrefixes(input.cmsPathPrefixes);
   const common = {
     emailClaim: emptyToUndefined(input.cmsAuthEmailClaim),
     nameClaim: emptyToUndefined(input.cmsAuthNameClaim),
     branchPrefix: emptyToUndefined(input.cmsBranchPrefix) ?? DEFAULT_CMS_BRANCH_PREFIX,
-    pathPrefixes: resolvePathPrefixes(input.cmsPathPrefixes),
+    pathPrefixes,
+    mediaFolder: resolveMediaFolder(input.cmsMediaFolder, pathPrefixes),
+    maxUploadBytes: resolveMaxUploadBytes(input.cmsMaxUploadBytes),
     allowMerge: input.cmsAllowMerge ?? false,
   };
 
@@ -347,6 +369,60 @@ function resolvePathPrefixes(value: readonly string[] | undefined): readonly str
     );
   }
   return prefixes;
+}
+
+/**
+ * Resolves where uploads go, refusing a folder the gateway could never write to (R15).
+ *
+ * The containment rule is the gateway's own, checked here as well so a bad value fails at
+ * `pulumi preview` rather than in a task that boots, passes `/healthz`, and refuses every upload.
+ * Two checks of one rule, in the two places a mistake could be made.
+ *
+ * @param value - The configured folder, if any.
+ * @param pathPrefixes - The already-resolved write prefixes.
+ * @returns The folder, with exactly one trailing slash.
+ * @throws {StackConfigError} When the folder is malformed or outside every write prefix.
+ */
+function resolveMediaFolder(value: string | undefined, pathPrefixes: readonly string[]): string {
+  const configured = emptyToUndefined(value) ?? DEFAULT_CMS_MEDIA_FOLDER;
+  const folder = `${configured.replace(/^\/+/, '').replace(/\/+$/, '')}/`;
+
+  if (folder === '/' || /(^|\/)\.\.?(\/|$)/.test(folder) || folder.includes('\\')) {
+    throw new StackConfigError(
+      ['cmsMediaFolder'],
+      `must be a plain repository folder such as "${DEFAULT_CMS_MEDIA_FOLDER}"`,
+    );
+  }
+
+  const boundaries = pathPrefixes.map((prefix) => `${prefix.replace(/\/+$/, '')}/`);
+  if (!boundaries.some((prefix) => folder.startsWith(prefix))) {
+    throw new StackConfigError(
+      ['cmsMediaFolder', 'cmsPathPrefixes'],
+      `disagree: uploads would go to "${folder}", which is outside ${boundaries.join(', ')}. The ` +
+        'gateway would refuse every upload',
+    );
+  }
+
+  return folder;
+}
+
+/**
+ * Resolves the per-image upload limit — requirements.md R15.
+ *
+ * Bounded above as well as below. The proxy endpoint sizes its request-body limit from this, so an
+ * unbounded value would let one save hold as much of the task's memory as the author cared to send.
+ */
+function resolveMaxUploadBytes(value: number | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_CMS_MAX_UPLOAD_BYTES;
+  }
+  if (!Number.isInteger(value) || value < 1 || value > MAX_CMS_MAX_UPLOAD_BYTES) {
+    throw new StackConfigError(
+      ['cmsMaxUploadBytes'],
+      `must be a whole number of bytes between 1 and ${String(MAX_CMS_MAX_UPLOAD_BYTES)}`,
+    );
+  }
+  return value;
 }
 
 /**

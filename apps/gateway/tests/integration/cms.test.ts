@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCmsTestApp, buildTestApp, TEST_REPOSITORY } from '../helpers/build-test-app';
+import {
+  buildCmsTestApp,
+  buildTestApp,
+  TEST_MAX_UPLOAD_BYTES,
+  TEST_MEDIA_FOLDER,
+  TEST_REPOSITORY,
+} from '../helpers/build-test-app';
 import { type FakeGitHubRoute } from '../helpers/fake-github';
 
 const REPO = `/repos/${TEST_REPOSITORY}`;
@@ -101,6 +107,24 @@ describe('the editorial API', () => {
         branchPrefix: 'cms/',
         permittedExtensions: ['.md', '.mdx'],
         allowMergeFromCms: false,
+      });
+    });
+
+    // The `/admin` page builds Decap's `media_folder` and `public_folder` from these rather than
+    // hardcoding them, so the browser cannot hold a different answer from the gateway about where
+    // images live or how big one may be (requirements.md R15).
+    it('describes where images go, and how large one may be', async () => {
+      const cms = await buildCmsTestApp();
+
+      const response = await cms.app.request('/v1/cms/config', { headers: await cms.authorize() });
+
+      expect(await response.json()).toMatchObject({
+        mediaFolder: TEST_MEDIA_FOLDER,
+        // The folder's own name at the site root: `apps/docs` publishes its parent as a static
+        // directory, and Docusaurus copies a static directory's contents to the root. ADR 0021.
+        publicFolder: '/media',
+        maxUploadBytes: TEST_MAX_UPLOAD_BYTES,
+        permittedMediaExtensions: ['.png', '.jpg', '.jpeg', '.gif', '.webp'],
       });
     });
 

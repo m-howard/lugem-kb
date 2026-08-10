@@ -38,7 +38,14 @@ interface AdminConfig {
 interface GatewayCmsConfig {
   readonly repository: string;
   readonly defaultBranch: string;
+  /** Repository folder uploads are written to, e.g. `docs/assets/media/` — requirements.md R15. */
+  readonly mediaFolder: string;
+  /** Site path they are served from, e.g. `/media`. Derived by the gateway, not chosen here. */
+  readonly publicFolder: string;
+  readonly maxUploadBytes: number;
 }
+
+const BYTES_PER_MB = 1_000_000;
 
 function status(message: string): void {
   const target = document.querySelector('#sign-in-status');
@@ -56,6 +63,11 @@ function status(message: string): void {
  */
 type DecapConfig = NonNullable<NonNullable<Parameters<typeof CMS.init>[0]>['config']>;
 
+/** The upload limit as a person would say it, for the hint beside the editor. */
+function uploadLimit(cms: GatewayCmsConfig): string {
+  return `${(cms.maxUploadBytes / BYTES_PER_MB).toFixed(1)} MB`;
+}
+
 /** The Decap configuration, built once the gateway has said what repository it serves. */
 function decapConfig(cms: GatewayCmsConfig): DecapConfig {
   return {
@@ -63,7 +75,11 @@ function decapConfig(cms: GatewayCmsConfig): DecapConfig {
     // Not a choice. Decap's simple mode commits straight to the configured branch, which branch
     // policy refuses as `default-branch` — editorial workflow is the only mode that can work here.
     publish_mode: 'editorial_workflow',
-    media_folder: '',
+    // requirements.md R15. Both come from the gateway rather than being written here: it is the
+    // gateway that confines uploads to a folder and refuses one outside it, so a second copy of the
+    // answer in the browser would only ever be a chance to disagree. See ADR 0021.
+    media_folder: cms.mediaFolder,
+    public_folder: cms.publicFolder,
     site_url: globalThis.location.origin,
     display_url: globalThis.location.origin,
     collections: [
@@ -96,7 +112,16 @@ function decapConfig(cms: GatewayCmsConfig): DecapConfig {
             required: false,
             value_type: 'int',
           },
-          { name: 'body', label: 'Page', widget: 'markdown' },
+          {
+            name: 'body',
+            label: 'Page',
+            widget: 'markdown',
+            // Decap has no client-side size limit for its own media library, so an oversized image
+            // is refused by the gateway when the entry is saved rather than when it is picked. The
+            // hint is what stops that being a surprise — R15 asks for a clear message, and the
+            // clearest one arrives before the upload rather than after it.
+            hint: `Images are welcome — up to ${uploadLimit(cms)} each, as PNG, JPEG, GIF or WebP. They are published with the page.`,
+          },
         ],
       },
     ],

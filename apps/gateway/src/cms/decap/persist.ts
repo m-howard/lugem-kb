@@ -1,4 +1,5 @@
 import { type DecapContext } from './context';
+import { type DecapAsset, resolveAssets } from './media';
 import { DRAFT_STATUS } from './protocol';
 import { ensureSubmissionOpen } from './unpublished';
 import { type DraftFile } from '../drafts';
@@ -14,6 +15,8 @@ export interface DecapDataFile {
 
 export interface PersistEntryRequest {
   readonly dataFiles: readonly DecapDataFile[];
+  /** Images added while the entry was open — requirements.md R15. */
+  readonly assets?: readonly DecapAsset[];
   readonly options: {
     readonly commitMessage?: string | undefined;
     readonly collectionName: string;
@@ -33,10 +36,16 @@ export interface PersistEntryRequest {
  * two saves would leave a window in which the page existed twice, and a reviewer would see an
  * added file and a deleted file rather than a move.
  *
+ * Images the author added arrive here too, as `assets` (requirements.md R15), and go into the same
+ * commit as the page. That is the whole of R15's write path: there is no separate upload step, so
+ * there is no moment at which an image exists in the repository without the page that shows it, and
+ * no write to the default branch. See ADR 0021.
+ *
  * @param context - The CMS services and the verified author.
- * @param request - The files Decap wants written, and what it wants their status to be.
+ * @param request - The files and images Decap wants written, and what status it wants them to have.
  * @returns The branch the entry now lives on.
- * @throws {CmsPolicyError} When any path or the entry's branch is refused. Nothing is written.
+ * @throws {CmsPolicyError} When any path, image or the entry's branch is refused. Nothing is written.
+ * @throws {MediaTooLargeError} When an image is over the size limit. Nothing is written.
  */
 export async function persistEntry(
   context: DecapContext,
@@ -45,10 +54,14 @@ export async function persistEntry(
   const entry = entryFor(request);
   const branch = branchForEntry(entry, context.settings);
 
-  const files: DraftFile[] = request.dataFiles.map((file) => ({
-    path: file.newPath ?? file.path,
-    content: file.raw,
-  }));
+  const files: DraftFile[] = [
+    ...request.dataFiles.map((file) => ({
+      path: file.newPath ?? file.path,
+      content: file.raw,
+    })),
+    // Checked before the branch is even read, so an oversized image costs no upstream call.
+    ...resolveAssets(request.assets ?? [], context.settings),
+  ];
   const deletions = request.dataFiles
     .filter((file) => file.newPath !== undefined && file.newPath !== file.path)
     .map((file) => file.path);
