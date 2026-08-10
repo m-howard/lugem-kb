@@ -30,6 +30,15 @@ const GITHUB_API = 'https://api.github.com';
 const API_VERSION = '2022-11-28';
 const MS_PER_DAY = 86_400_000;
 const MAX_QUESTION_DISPLAY = 140;
+
+/**
+ * Inserted after every `@` so GitHub does not resolve it as a mention.
+ *
+ * Named rather than written inline because it is invisible in source, and a future edit that
+ * "tidies up" an apparently empty string would silently turn `@everyone` in a reader's question
+ * into an organisation-wide notification.
+ */
+const ZERO_WIDTH_SPACE = '\u200B';
 const UNPROCESSABLE = 422;
 const EXIT_FAILURE = 1;
 
@@ -208,7 +217,7 @@ function escapeForTable(text: string): string {
     .replace(/\s+/g, ' ')
     .replace(/`/g, "'")
     .replace(/\|/g, '\\|')
-    .replace(/@/g, '@​')
+    .replace(/@/g, `@${ZERO_WIDTH_SPACE}`)
     .trim();
 
   return flattened.length > MAX_QUESTION_DISPLAY
