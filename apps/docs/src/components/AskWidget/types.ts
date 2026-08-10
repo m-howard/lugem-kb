@@ -47,4 +47,17 @@ export type Turn =
       readonly feedback: FeedbackStatus;
     }
   | { readonly kind: 'not-covered'; readonly id: string; readonly message: string }
+  /**
+   * The reader must sign in first.
+   *
+   * Only reachable on a deployment that requires reader authentication, which is off by default —
+   * see ADR 0016. Its own kind rather than a failure, because it is the one refusal the reader can
+   * actually do something about.
+   */
+  | {
+      readonly kind: 'sign-in';
+      readonly id: string;
+      readonly message: string;
+      readonly signInPath: string;
+    }
   | { readonly kind: 'failed'; readonly id: string; readonly message: string };

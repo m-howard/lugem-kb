@@ -138,6 +138,14 @@ describe('loadConfig', () => {
       expect(loadConfig({ ...VALID_ENV, CMS_REPOSITORY: '  ' }).cms).toBeUndefined();
     });
 
+    it("resolves auth alongside it, now that auth is not the CMS's alone", () => {
+      expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).auth).toMatchObject({
+        mode: 'bearer',
+        emailClaim: 'email',
+        nameClaim: 'name',
+      });
+    });
+
     it('applies defaults for everything that is only tuning', () => {
       expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).cms).toMatchObject({
         repository: 'acme/handbook',
@@ -146,7 +154,6 @@ describe('loadConfig', () => {
         pathPrefixes: ['docs/'],
         apiBaseUrl: 'https://api.github.com',
         allowMergeFromCms: false,
-        auth: { mode: 'bearer', emailClaim: 'email', nameClaim: 'name' },
       });
     });
 
@@ -234,7 +241,7 @@ describe('loadConfig', () => {
 
     describe('auth modes', () => {
       it('reads the issuer and audience in bearer mode', () => {
-        expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).cms?.auth).toEqual({
+        expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).auth).toEqual({
           mode: 'bearer',
           issuer: 'https://idp.example.com/realm',
           audience: 'lugem-cms',
@@ -252,7 +259,7 @@ describe('loadConfig', () => {
           AUTH_ALB_ARN: 'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/l/1',
         });
 
-        expect(config.cms?.auth).toMatchObject({
+        expect(config.auth).toMatchObject({
           mode: 'alb',
           loadBalancerArn:
             'arn:aws:elasticloadbalancing:us-east-1:111122223333:loadbalancer/app/l/1',
@@ -275,8 +282,50 @@ describe('loadConfig', () => {
           AUTH_NAME_CLAIM: 'given_name',
         });
 
-        expect(config.cms?.auth).toMatchObject({ emailClaim: 'upn', nameClaim: 'given_name' });
+        expect(config.auth).toMatchObject({ emailClaim: 'upn', nameClaim: 'given_name' });
       });
+    });
+  });
+
+  // R22, built and switched off (ADR 0016). The switch is what decides whether readers meet a
+  // login, so its default and its fail-closed behaviour are the whole of the test.
+  describe('reader authentication', () => {
+    it('is off unless asked for, so no reader meets a login by accident', () => {
+      const config = loadConfig({ ...VALID_ENV });
+
+      expect(config.readerAuthRequired).toBe(false);
+      expect(config.auth).toBeUndefined();
+    });
+
+    it('resolves auth when readers must sign in, with no CMS configured at all', () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        READER_AUTH_REQUIRED: 'true',
+        AUTH_MODE: 'bearer',
+        AUTH_ISSUER_URL: 'https://idp.example.com/realm',
+        AUTH_AUDIENCE: 'lugem-readers',
+      });
+
+      expect(config.readerAuthRequired).toBe(true);
+      expect(config.auth).toMatchObject({ mode: 'bearer', audience: 'lugem-readers' });
+      expect(config.cms).toBeUndefined();
+    });
+
+    // ADR 0009: a service that boots believing it authenticates readers, and does not, is the
+    // exact failure fail-closed configuration exists to prevent.
+    it('refuses to start when readers must sign in but no mode is configured', () => {
+      const env = { ...VALID_ENV, READER_AUTH_REQUIRED: 'true' };
+
+      expect(() => loadConfig(env)).toThrow(ConfigError);
+      try {
+        loadConfig(env);
+      } catch (error) {
+        expect((error as ConfigError).variables).toContain('AUTH_MODE');
+      }
+    });
+
+    it.each([['1'], ['yes'], ['TRUE ']])('refuses %s rather than reading it as false', (value) => {
+      expect(() => loadConfig({ ...VALID_ENV, READER_AUTH_REQUIRED: value })).toThrow(ConfigError);
     });
   });
 

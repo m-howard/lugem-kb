@@ -70,6 +70,16 @@ export function Transcript({
             />
           );
         }
+        if (turn.kind === 'sign-in') {
+          return (
+            <p key={turn.id} className={styles.notCovered}>
+              {turn.message}{' '}
+              {/* A real link, not a fetch: following it lets the load balancer run the identity
+                  provider round trip that mints the session. */}
+              <a href={turn.signInPath}>Sign in</a>, then ask again.
+            </p>
+          );
+        }
         if (turn.kind === 'not-covered') {
           return (
             <p key={turn.id} className={styles.notCovered}>

@@ -6,7 +6,9 @@ import { Hono } from 'hono';
 import { type Logger } from 'pino';
 
 import { type AppEnv } from './app-env';
+import { createVerifier } from './auth/create-verifier';
 import { createAuthMiddleware } from './auth/middleware';
+import { type IdentityVerifier } from './auth/verifier';
 import { type CmsDependencies, createCmsDependencies } from './cms/dependencies';
 import { type Config } from './config';
 import { DynamoGapRecorder } from './feedback/recorder';
@@ -22,6 +24,7 @@ import { createCmsRoutes } from './routes/cms';
 import { createDocumentRoutes } from './routes/documents';
 import { createFeedbackRoutes } from './routes/feedback';
 import { createHealthRoutes } from './routes/health';
+import { createIdentityRoutes } from './routes/identity';
 import { createSearchRoutes } from './routes/search';
 import { createSiteRoutes } from './routes/site';
 
@@ -45,6 +48,13 @@ export interface AppDependencies {
    * mounted. Answering still works — it just produces no signal about what is missing.
    */
   readonly recorder?: GapRecorder | undefined;
+  /**
+   * Present only when `READER_AUTH_REQUIRED` is true.
+   *
+   * Absent — the default — means `/v1/ask`, `/v1/search` and `/v1/feedback` stay open exactly as
+   * they were before R22, and `/v1/identity` is never mounted. See ADR 0016.
+   */
+  readonly readerVerifier?: IdentityVerifier | undefined;
 }
 
 /**
@@ -59,6 +69,8 @@ export interface AppDependencies {
  */
 export function createDependencies(config: Config, logger: Logger): AppDependencies {
   const s3 = new S3Client({ region: config.awsRegion });
+  const verifier =
+    config.auth === undefined ? undefined : createVerifier(config.auth, config.awsRegion);
   const bedrock = new BedrockAgentRuntimeClient({ region: config.awsRegion });
 
   const corpus = new CorpusClient({
@@ -91,9 +103,11 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
     siteRoot: config.siteRoot,
     askRateLimitPerMinute: config.askRateLimitPerMinute,
     corpusPrefix: config.corpusPrefix,
-    ...(config.cms === undefined
+    ...(config.cms === undefined || verifier === undefined
       ? {}
-      : { cms: createCmsDependencies(config.cms, config.awsRegion) }),
+      : { cms: createCmsDependencies({ cms: config.cms, region: config.awsRegion, verifier }) }),
+    // Built once and shared. Two verifiers in one service could disagree about who is calling.
+    ...(config.readerAuthRequired && verifier !== undefined ? { readerVerifier: verifier } : {}),
     ...(config.feedback === undefined
       ? {}
       : {
@@ -116,7 +130,18 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
 function mountReaderRoutes(app: Hono<AppEnv>, dependencies: AppDependencies): void {
   const recorded = dependencies.recorder === undefined ? {} : { recorder: dependencies.recorder };
 
+  // Absent by default. When present it runs *before* the rate limiter on each path, so the limiter
+  // can key on the reader's subject rather than a shared office address — see rate-limit.ts.
+  const readerAuth =
+    dependencies.readerVerifier === undefined
+      ? undefined
+      : createAuthMiddleware({ verifier: dependencies.readerVerifier });
+
   app.route('/v1/documents', createDocumentRoutes({ corpus: dependencies.corpus }));
+
+  if (readerAuth !== undefined) {
+    app.use('/v1/search', readerAuth);
+  }
   app.route(
     '/v1/search',
     createSearchRoutes({
@@ -127,13 +152,19 @@ function mountReaderRoutes(app: Hono<AppEnv>, dependencies: AppDependencies): vo
   );
 
   // Only `/v1/ask` is limited. Every other route costs a constant amount to serve; this one
-  // spends money per request, and it is unauthenticated (requirements.md R22 is not met yet).
+  // spends money per request. The limit is a cost guard either way: with R22 off the endpoint is
+  // unauthenticated, and with it on the limit is still per task rather than global.
+  if (readerAuth !== undefined) {
+    app.use('/v1/ask', readerAuth);
+  }
   app.use('/v1/ask', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
   app.route('/v1/ask', createAskRoutes({ answerer: dependencies.answerer, ...recorded }));
 
-  // Mounted only when GAP_FEEDBACK_TABLE is set. Rate-limited on its own window — it writes, and
-  // it is as unauthenticated as `/v1/ask` is.
+  // Mounted only when GAP_FEEDBACK_TABLE is set. Rate-limited on its own window — it writes.
   if (dependencies.recorder !== undefined) {
+    if (readerAuth !== undefined) {
+      app.use('/v1/feedback', readerAuth);
+    }
     app.use('/v1/feedback', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
     app.route(
       '/v1/feedback',
@@ -142,6 +173,13 @@ function mountReaderRoutes(app: Hono<AppEnv>, dependencies: AppDependencies): vo
         corpusPrefix: dependencies.corpusPrefix,
       }),
     );
+  }
+
+  // The one reader path that exists to be redirected to. Mounted only alongside reader auth,
+  // because without it there is no session to establish and nothing to report.
+  if (readerAuth !== undefined) {
+    app.use('/v1/identity', readerAuth);
+    app.route('/v1/identity', createIdentityRoutes());
   }
 }
 

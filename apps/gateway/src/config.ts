@@ -95,12 +95,27 @@ export interface CmsConfig {
   readonly privateKeyPath: string | undefined;
   readonly apiBaseUrl: string;
   readonly allowMergeFromCms: boolean;
-  readonly auth: AuthConfig;
 }
 
 export type Config = BaseConfig & {
   readonly cms: CmsConfig | undefined;
   readonly feedback: FeedbackConfig | undefined;
+  /**
+   * How identity is established, when anything needs it.
+   *
+   * Absent means nothing on this deployment authenticates — valid only when the CMS is off and
+   * readers are not required to sign in, which `loadConfig` enforces.
+   */
+  readonly auth: AuthConfig | undefined;
+  /**
+   * Whether readers must authenticate for `/v1/ask`, `/v1/search` and `/v1/feedback`
+   * (requirements.md R22).
+   *
+   * **Defaults to false**, and that is a decision rather than an oversight. ADR 0013 left
+   * `/v1/ask` open because putting a login in front of every reader buys nothing until someone
+   * asks for it; ADR 0016 builds the mechanism without making that choice for every deployment.
+   */
+  readonly readerAuthRequired: boolean;
 };
 
 /**
@@ -149,12 +164,23 @@ const CMS_KEYS = {
   privateKeyPath: 'CMS_APP_PRIVATE_KEY_PATH',
   apiBaseUrl: 'GITHUB_API_BASE_URL',
   allowMerge: 'POLICY_ALLOW_MERGE_FROM_CMS',
+} as const;
+
+/**
+ * Identity, which is no longer only the CMS's concern.
+ *
+ * These names are unchanged from when they lived in `CMS_KEYS`, so lifting the block out cost no
+ * operator anything. `AUTH_MODE` is the master switch: unset means the service can establish no
+ * identity at all, which is a valid configuration only when nothing asks it to.
+ */
+const AUTH_KEYS = {
   authMode: 'AUTH_MODE',
   issuer: 'AUTH_ISSUER_URL',
   audience: 'AUTH_AUDIENCE',
   albArn: 'AUTH_ALB_ARN',
   emailClaim: 'AUTH_EMAIL_CLAIM',
   nameClaim: 'AUTH_NAME_CLAIM',
+  readerAuthRequired: 'READER_AUTH_REQUIRED',
 } as const;
 
 type Env = NodeJS.ProcessEnv;
@@ -164,12 +190,15 @@ function read(env: Env, key: string): string | undefined {
   return value === undefined || value === '' ? undefined : value;
 }
 
-function requireAll(env: Env, keys: readonly string[]): void {
+function requireAll(env: Env, keys: readonly string[], because: string): void {
   const missing = keys.filter((key) => read(env, key) === undefined);
   if (missing.length > 0) {
-    throw new ConfigError(missing, 'required once CMS_REPOSITORY is set');
+    throw new ConfigError(missing, because);
   }
 }
+
+const BECAUSE_CMS = 'required once CMS_REPOSITORY is set';
+const BECAUSE_AUTH = 'required by the configured AUTH_MODE';
 
 function resolveKeySource(env: Env): Pick<CmsConfig, 'secretArn' | 'privateKeyPath'> {
   const secretArn = read(env, CMS_KEYS.secretArn);
@@ -191,27 +220,27 @@ function resolveKeySource(env: Env): Pick<CmsConfig, 'secretArn' | 'privateKeyPa
 }
 
 function resolveAuthConfig(env: Env): AuthConfig {
-  const mode = read(env, CMS_KEYS.authMode);
+  const mode = read(env, AUTH_KEYS.authMode);
   if (mode === undefined || !AUTH_MODES.includes(mode as AuthMode)) {
-    throw new ConfigError([CMS_KEYS.authMode], `must be one of: ${AUTH_MODES.join(', ')}`);
+    throw new ConfigError([AUTH_KEYS.authMode], `must be one of: ${AUTH_MODES.join(', ')}`);
   }
 
   const claims = {
-    emailClaim: read(env, CMS_KEYS.emailClaim) ?? DEFAULT_EMAIL_CLAIM,
-    nameClaim: read(env, CMS_KEYS.nameClaim) ?? DEFAULT_NAME_CLAIM,
+    emailClaim: read(env, AUTH_KEYS.emailClaim) ?? DEFAULT_EMAIL_CLAIM,
+    nameClaim: read(env, AUTH_KEYS.nameClaim) ?? DEFAULT_NAME_CLAIM,
   };
 
   if (mode === 'alb') {
-    requireAll(env, [CMS_KEYS.albArn]);
-    return { ...claims, mode: 'alb', loadBalancerArn: read(env, CMS_KEYS.albArn) ?? '' };
+    requireAll(env, [AUTH_KEYS.albArn], BECAUSE_AUTH);
+    return { ...claims, mode: 'alb', loadBalancerArn: read(env, AUTH_KEYS.albArn) ?? '' };
   }
 
-  requireAll(env, [CMS_KEYS.issuer, CMS_KEYS.audience]);
+  requireAll(env, [AUTH_KEYS.issuer, AUTH_KEYS.audience], BECAUSE_AUTH);
   return {
     ...claims,
     mode: 'bearer',
-    issuer: read(env, CMS_KEYS.issuer) ?? '',
-    audience: read(env, CMS_KEYS.audience) ?? '',
+    issuer: read(env, AUTH_KEYS.issuer) ?? '',
+    audience: read(env, AUTH_KEYS.audience) ?? '',
   };
 }
 
@@ -278,7 +307,7 @@ function resolveCmsConfig(env: Env): CmsConfig | undefined {
     throw new ConfigError([CMS_KEYS.repository], 'must be "owner/name"');
   }
 
-  requireAll(env, [CMS_KEYS.appId, CMS_KEYS.installationId]);
+  requireAll(env, [CMS_KEYS.appId, CMS_KEYS.installationId], BECAUSE_CMS);
 
   return {
     repository,
@@ -293,7 +322,6 @@ function resolveCmsConfig(env: Env): CmsConfig | undefined {
     ...resolveKeySource(env),
     apiBaseUrl: (read(env, CMS_KEYS.apiBaseUrl) ?? DEFAULT_GITHUB_API_BASE_URL).replace(/\/+$/, ''),
     allowMergeFromCms: resolveBoolean(env, CMS_KEYS.allowMerge),
-    auth: resolveAuthConfig(env),
   };
 }
 
@@ -340,5 +368,20 @@ export function loadConfig(env: Env = process.env): Config {
     throw new ConfigError([...new Set(variables)], detail);
   }
 
-  return { ...result.data, cms: resolveCmsConfig(env), feedback: resolveFeedbackConfig(env) };
+  const cms = resolveCmsConfig(env);
+  const readerAuthRequired = resolveBoolean(env, AUTH_KEYS.readerAuthRequired);
+
+  // Resolved when either surface needs it, and only then. `READER_AUTH_REQUIRED=true` with no
+  // `AUTH_MODE` is therefore a start-up failure naming `AUTH_MODE`, rather than a service that
+  // boots believing it authenticates readers and does not — the failure ADR 0009 exists to move
+  // to start-up.
+  const auth = cms === undefined && !readerAuthRequired ? undefined : resolveAuthConfig(env);
+
+  return {
+    ...result.data,
+    cms,
+    feedback: resolveFeedbackConfig(env),
+    auth,
+    readerAuthRequired,
+  };
 }

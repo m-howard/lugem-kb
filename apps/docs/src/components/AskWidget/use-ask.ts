@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 
-import { askTheDocs } from './ask-client';
+import { askTheDocs, SIGN_IN_PATH } from './ask-client';
 import { sendUnhelpfulFeedback } from './feedback-client';
 import { type ConversationMessage, type FeedbackStatus, type Turn } from './types';
 
@@ -147,6 +147,9 @@ function startAsk(question: string, deps: AskDeps): void {
       },
       onFailure: (message) => {
         settle({ kind: 'failed', id: answerId, message });
+      },
+      onSignInRequired: (message) => {
+        settle({ kind: 'sign-in', id: answerId, message, signInPath: SIGN_IN_PATH });
       },
     },
   }).finally(() => {

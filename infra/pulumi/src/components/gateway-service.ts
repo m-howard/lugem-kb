@@ -275,6 +275,7 @@ export class GatewayService extends pulumi.ComponentResource {
               name: 'GAP_FEEDBACK_RETENTION_DAYS',
               value: String(config.gapFeedbackRetentionDays),
             },
+            { name: 'READER_AUTH_REQUIRED', value: String(config.readerAuthRequired) },
             ...cmsEnvironment(args.cms, { cmsSecretArn, repository, albArn }),
           ];
 

@@ -4,13 +4,19 @@ import { DocumentReader } from './documents';
 import { DraftService } from './drafts';
 import { type CmsSettings } from './settings';
 import { SubmissionService } from './submissions';
-import { createAlbVerifier } from '../auth/alb-verifier';
-import { createBearerVerifier } from '../auth/bearer-verifier';
 import { type IdentityVerifier } from '../auth/verifier';
-import { type AuthConfig, type CmsConfig } from '../config';
+import { type CmsConfig } from '../config';
 import { createAppKeyLoader } from '../git/app-key';
 import { GitHubClient } from '../git/github-client';
 import { InstallationTokenSource } from '../git/installation-token';
+
+export interface CmsDependencyOptions {
+  readonly cms: CmsConfig;
+  /** AWS region, for Secrets Manager. */
+  readonly region: string;
+  /** Built once by `createDependencies` and shared with the reader routes — see ADR 0016. */
+  readonly verifier: IdentityVerifier;
+}
 
 /** Everything the editorial routes need, plus the credential the readiness probe checks. */
 export interface CmsDependencies {
@@ -24,36 +30,20 @@ export interface CmsDependencies {
 }
 
 /**
- * Builds the verifier for the configured mode (requirements.md R1; ADR 0013).
- *
- * The two modes are chosen here and nowhere else, so the rest of the service is written against
- * one interface and never learns which is deployed.
- *
- * @param auth - The resolved auth configuration.
- * @param region - Region of the load balancer, used only in `alb` mode.
- * @returns The verifier.
- */
-export function createVerifier(auth: AuthConfig, region: string): IdentityVerifier {
-  const claimNames = { email: auth.emailClaim, name: auth.nameClaim };
-
-  if (auth.mode === 'alb') {
-    return createAlbVerifier({ region, loadBalancerArn: auth.loadBalancerArn, claimNames });
-  }
-  return createBearerVerifier({ issuer: auth.issuer, audience: auth.audience, claimNames });
-}
-
-/**
  * Assembles the CMS collaborators from configuration, constructing real AWS and HTTP clients.
  *
  * Separated from the routes for the same reason `createDependencies` is separated from
  * `createApp`: tests supply fakes without the HTTP surface knowing whether its collaborators talk
  * to AWS and GitHub.
  *
- * @param cms - The CMS block of the configuration.
- * @param region - AWS region, for Secrets Manager and for ALB key lookups.
+ * The verifier is passed in rather than built here. Since R22 it is also what authenticates
+ * readers, and one service must not end up with two of them disagreeing about who is calling.
+ *
+ * @param options - The CMS configuration block, the region, and the identity verifier.
  * @returns The dependencies the editorial routes and the readiness probe need.
  */
-export function createCmsDependencies(cms: CmsConfig, region: string): CmsDependencies {
+export function createCmsDependencies(options: CmsDependencyOptions): CmsDependencies {
+  const { cms, region, verifier } = options;
   const settings: CmsSettings = {
     repository: cms.repository,
     defaultBranch: cms.defaultBranch,
@@ -85,7 +75,7 @@ export function createCmsDependencies(cms: CmsConfig, region: string): CmsDepend
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),
-    verifier: createVerifier(cms.auth, region),
+    verifier,
     allowMergeFromCms: cms.allowMergeFromCms,
   };
 }

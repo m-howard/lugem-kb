@@ -128,9 +128,21 @@ const cmsAuth =
 // authenticate: `/readyz` gating editorial admission is about the credential, not the login.
 const cmsEnabled = githubConfig?.cmsApp !== undefined && cmsCredential !== undefined;
 
+// R22, and off unless asked for. Reader authentication reuses the identity provider the editorial
+// surface already configures rather than introducing a second one — recorded as a limitation in
+// ADR 0016. With `readerAuthRequired` false, which is the default, not one reader listener rule is
+// created and `pulumi preview` shows no ALB change at all.
+const readerAuth = config.readerAuthRequired ? cmsAuth : undefined;
+
 const ingress = new GatewayIngress(
   NAME,
-  { config, network, cmsEnabled, ...(cmsAuth === undefined ? {} : { cmsAuth }) },
+  {
+    config,
+    network,
+    cmsEnabled,
+    ...(cmsAuth === undefined ? {} : { cmsAuth }),
+    ...(readerAuth === undefined ? {} : { readerAuth }),
+  },
   onAws,
 );
 

@@ -18,6 +18,28 @@ async function callFrom(app: Hono<AppEnv>, address: string): Promise<Response> {
   return app.request('/', { headers: { 'x-forwarded-for': address } });
 }
 
+/** Mirrors how `createApp` mounts reader auth: identity is set before the limiter runs. */
+function appWithIdentity(limit = LIMIT): Hono<AppEnv> {
+  const app = new Hono<AppEnv>();
+  app.use('*', async (c, next) => {
+    const subject = c.req.header('x-test-subject');
+    if (subject !== undefined) {
+      c.set('identity', { subject, email: `${subject}@example.com`, name: subject });
+    }
+    await next();
+  });
+  app.use('*', createRateLimit({ limit }));
+  app.get('/', (c) => c.json({ ok: true }));
+  return app;
+}
+
+async function callAs(app: Hono<AppEnv>, subject: string): Promise<Response> {
+  return app.request('/', {
+    // One shared address, as a whole office behind one NAT would present.
+    headers: { 'x-forwarded-for': '203.0.113.7', 'x-test-subject': subject },
+  });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -105,5 +127,43 @@ describe('createRateLimit', () => {
     }
 
     expect((await callFrom(app, '203.0.113.1')).status).toBe(200);
+  });
+});
+
+// R22, once reader authentication is on (ADR 0016). Before it, everyone behind one office NAT
+// shared a window, so one enthusiastic colleague could exhaust the allowance for the floor.
+describe('createRateLimit, with an authenticated reader', () => {
+  it('gives each subject its own window, even behind one shared address', async () => {
+    const app = appWithIdentity();
+
+    for (let attempt = 0; attempt <= LIMIT; attempt += 1) {
+      await callAs(app, 'ada');
+    }
+
+    expect((await callAs(app, 'ada')).status).toBe(429);
+    expect((await callAs(app, 'grace')).status).toBe(200);
+  });
+
+  it('still counts an unauthenticated caller by address', async () => {
+    const app = appWithIdentity();
+
+    for (let attempt = 0; attempt <= LIMIT; attempt += 1) {
+      await callFrom(app, '198.51.100.5');
+    }
+
+    expect((await callFrom(app, '198.51.100.5')).status).toBe(429);
+  });
+
+  // The key spaces are prefixed so a subject called `203.0.113.7` cannot spend an address's
+  // allowance, or the other way round.
+  it('keeps subject and address keys apart', async () => {
+    const app = appWithIdentity();
+
+    for (let attempt = 0; attempt <= LIMIT; attempt += 1) {
+      await callAs(app, '203.0.113.7');
+    }
+
+    expect((await callAs(app, '203.0.113.7')).status).toBe(429);
+    expect((await callFrom(app, '203.0.113.7')).status).toBe(200);
   });
 });

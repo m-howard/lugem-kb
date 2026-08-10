@@ -323,4 +323,30 @@ describe('validateGithubConfig', () => {
       );
     });
   });
+
+  // R22 / ADR 0016. Reader authentication borrows the editorial identity provider, so requiring
+  // it without one would deploy an ALB rule pointing at nothing — and that fails at apply, long
+  // after preview said the stack was fine.
+  describe('reader authentication', () => {
+    it('is allowed alongside a configured CMS', () => {
+      const config = validateGithubConfig({
+        ...VALID,
+        ...CMS_APP,
+        cmsAuthMode: 'bearer',
+        cmsAuthIssuerUrl: ISSUER,
+        cmsAuthAudience: AUDIENCE,
+        readerAuthRequired: true,
+      });
+
+      expect(config?.cmsGateway?.authMode).toBe('bearer');
+    });
+
+    it('is refused on a stack with no CMS configured', () => {
+      expectKeys({ ...VALID, readerAuthRequired: true }, 'readerAuthRequired');
+    });
+
+    it('is not required by default, so no stack is broken by its existence', () => {
+      expect(validateGithubConfig({ ...VALID })).toMatchObject({ fullName: 'm-howard/lugem-kb' });
+    });
+  });
 });

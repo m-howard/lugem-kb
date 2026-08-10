@@ -3,6 +3,17 @@ import { type Citation, type ConversationMessage } from './types';
 const ASK_ENDPOINT = '/v1/ask';
 const FRAME_SEPARATOR = '\n\n';
 const TOO_MANY_REQUESTS = 429;
+const UNAUTHORIZED = 401;
+
+/**
+ * Where a reader goes to sign in.
+ *
+ * Only reachable when the deployment requires reader authentication (ADR 0016), which is off by
+ * default — so on most deployments this branch never fires. Following the link trips the one ALB
+ * rule that redirects to the identity provider and mints a session, after which the reader can ask
+ * again.
+ */
+export const SIGN_IN_PATH = '/v1/identity';
 
 /** The citations frame's payload: the sources, and the handle for rating what they produced. */
 export interface CitationsFrame {
@@ -15,6 +26,8 @@ export interface AskHandlers {
   readonly onToken: (text: string) => void;
   readonly onNotCovered: (message: string) => void;
   readonly onFailure: (message: string) => void;
+  /** Only ever called on a deployment that requires reader authentication — see ADR 0016. */
+  readonly onSignInRequired: (message: string) => void;
 }
 
 export interface AskOptions {
@@ -26,6 +39,7 @@ export interface AskOptions {
 
 const RATE_LIMITED_MESSAGE = 'Too many questions in a short time. Wait a moment and try again.';
 const GENERIC_FAILURE_MESSAGE = 'Something went wrong reaching the documentation assistant.';
+const SIGN_IN_MESSAGE = 'You need to sign in before asking the documentation.';
 
 function dispatchFrame(frame: string, handlers: AskHandlers): void {
   const lines = frame.split('\n');
@@ -88,7 +102,9 @@ async function readFrames(body: ReadableStream<Uint8Array>, handlers: AskHandler
  * it would land in access logs. The gateway refuses GET on this path for the same reason.
  *
  * The endpoint is a relative path. The gateway serves this site, so the API is always same-origin
- * in production — there is no base URL to configure and no CORS to arrange.
+ * in production — there is no base URL to configure and no CORS to arrange. That is also what
+ * carries an ALB session cookie when reader authentication is switched on; `credentials` is stated
+ * explicitly rather than relying on the same-origin default.
  *
  * Two response shapes are expected, and they are distinguished by content type rather than by
  * guessing: `application/json` means nothing in the corpus covered the question, and no answer is
@@ -104,6 +120,7 @@ export async function askTheDocs(options: AskOptions): Promise<void> {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ question: options.question, history: options.history }),
+      credentials: 'same-origin',
       signal: options.signal,
     });
   } catch (error) {
@@ -111,6 +128,11 @@ export async function askTheDocs(options: AskOptions): Promise<void> {
       options.handlers.onFailure(GENERIC_FAILURE_MESSAGE);
     }
     void error;
+    return;
+  }
+
+  if (response.status === UNAUTHORIZED) {
+    options.handlers.onSignInRequired(SIGN_IN_MESSAGE);
     return;
   }
 

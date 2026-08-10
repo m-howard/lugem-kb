@@ -31,6 +31,7 @@ describe('validateStackConfig', () => {
       askRateLimitPerMinute: 20,
       retrievalScoreThreshold: 0.4,
       gapFeedbackRetentionDays: 90,
+      readerAuthRequired: false,
     });
   });
 

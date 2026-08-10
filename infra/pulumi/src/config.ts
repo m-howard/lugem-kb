@@ -84,6 +84,7 @@ export interface StackConfigInput {
   readonly askRateLimitPerMinute?: number | undefined;
   readonly retrievalScoreThreshold?: number | undefined;
   readonly gapFeedbackRetentionDays?: number | undefined;
+  readonly readerAuthRequired?: boolean | undefined;
 }
 
 export interface StackConfig {
@@ -113,6 +114,13 @@ export interface StackConfig {
   readonly askRateLimitPerMinute: number;
   readonly retrievalScoreThreshold: number;
   readonly gapFeedbackRetentionDays: number;
+  /**
+   * Whether readers must authenticate for `/v1/ask`, `/v1/search` and `/v1/feedback` (R22).
+   *
+   * Defaults to false. Turning it on in `alb` mode adds two listener rules and inherits the same
+   * certificate prerequisite `cmsAuthMode: alb` already has — see ADR 0016.
+   */
+  readonly readerAuthRequired: boolean;
 }
 
 /**
@@ -336,5 +344,6 @@ export function validateStackConfig(input: StackConfigInput): StackConfig {
       ),
       'gapFeedbackRetentionDays',
     ),
+    readerAuthRequired: input.readerAuthRequired ?? false,
   };
 }
