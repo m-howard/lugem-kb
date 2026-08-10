@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildTestApp, type TestAppOptions } from '../helpers/build-test-app';
+import { collectingRecorder } from '../helpers/fake-feedback';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+const WEAK_MATCH = {
+  text: 'Unrelated passage about something else entirely.',
+  uri: 's3://test-corpus/docs/adr/0003-serve-the-site-from-ecs.md',
+  score: 0.12,
+};
 
 const STRONG_MATCH = {
   text: 'The stack consumes an existing VPC and never creates one.',
@@ -62,16 +71,21 @@ describe('POST /v1/ask', () => {
     const frames = parseFrames(await response.text());
 
     expect(frames.map((frame) => frame.event)).toEqual(['citations', 'token', 'token', 'done']);
-    expect(frames[0]?.data).toEqual([
-      {
-        sourceUri: STRONG_MATCH.uri,
-        path: 'adr/0006-existing-vpc.md',
-        url: '/adr/0006-existing-vpc',
-        text: STRONG_MATCH.text,
-        score: 0.87,
-        lastReviewed: '2026-08-09',
-      },
-    ]);
+    // The citations frame also carries the answer id the reader posts back to `/v1/feedback` —
+    // a handle for rating this answer, not a session, and nothing arrives before it.
+    expect(frames[0]?.data).toEqual({
+      answerId: expect.stringMatching(UUID_PATTERN) as unknown,
+      citations: [
+        {
+          sourceUri: STRONG_MATCH.uri,
+          path: 'adr/0006-existing-vpc.md',
+          url: '/adr/0006-existing-vpc',
+          text: STRONG_MATCH.text,
+          score: 0.87,
+          lastReviewed: '2026-08-09',
+        },
+      ],
+    });
     expect(
       frames
         .slice(1, -1)
@@ -129,6 +143,56 @@ describe('POST /v1/ask', () => {
       );
 
       await expect(response.json()).resolves.toMatchObject({ covered: false });
+    });
+  });
+
+  // R23. A question the corpus cannot answer is the demand signal the whole feedback loop exists
+  // to collect — and the retention promise in ADR 0015 is the other half: an answered question is
+  // never written anywhere, so these two tests have to hold together.
+  describe('recording gaps', () => {
+    it('records the declined question with the page it came closest to', async () => {
+      const feedback = collectingRecorder();
+
+      await ask(
+        { retrievalResults: [WEAK_MATCH], feedback },
+        { question: 'what is the travel per diem?' },
+      );
+
+      expect(feedback.events).toEqual([
+        {
+          kind: 'no-coverage',
+          route: '/v1/ask',
+          answerId: expect.stringMatching(UUID_PATTERN) as unknown,
+          question: 'what is the travel per diem?',
+          nearestSourceUri: WEAK_MATCH.uri,
+          nearestScore: WEAK_MATCH.score,
+        },
+      ]);
+    });
+
+    // THE retention test. If this ever fails, every question a reader asks is being stored, and
+    // the answer to Q11 recorded in ADR 0015 has quietly become untrue.
+    it('records nothing at all when the question was answered', async () => {
+      const feedback = collectingRecorder();
+
+      await ask({ ...COVERED, feedback }, QUESTION);
+
+      expect(feedback.events).toEqual([]);
+    });
+
+    it('still answers when the recorder is broken', async () => {
+      const feedback = collectingRecorder({ failWith: 'table gone' });
+
+      const response = await ask({ retrievalResults: [], feedback }, { question: 'anything?' });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({ covered: false });
+    });
+
+    it('records nothing when no feedback table is configured', async () => {
+      const response = await ask({ retrievalResults: [WEAK_MATCH] }, { question: 'anything?' });
+
+      expect(response.status).toBe(200);
     });
   });
 

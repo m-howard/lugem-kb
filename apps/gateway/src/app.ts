@@ -1,5 +1,6 @@
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { S3Client } from '@aws-sdk/client-s3';
 import { Hono } from 'hono';
 import { type Logger } from 'pino';
@@ -8,6 +9,8 @@ import { type AppEnv } from './app-env';
 import { createAuthMiddleware } from './auth/middleware';
 import { type CmsDependencies, createCmsDependencies } from './cms/dependencies';
 import { type Config } from './config';
+import { DynamoGapRecorder } from './feedback/recorder';
+import { type GapRecorder } from './feedback/types';
 import { Answerer } from './kb/answer';
 import { CitationViewer } from './kb/citation-view';
 import { CorpusClient } from './kb/corpus-client';
@@ -17,6 +20,7 @@ import { createApiNotFoundRoutes } from './routes/api-not-found';
 import { createAskRoutes } from './routes/ask';
 import { createCmsRoutes } from './routes/cms';
 import { createDocumentRoutes } from './routes/documents';
+import { createFeedbackRoutes } from './routes/feedback';
 import { createHealthRoutes } from './routes/health';
 import { createSearchRoutes } from './routes/search';
 import { createSiteRoutes } from './routes/site';
@@ -32,8 +36,15 @@ export interface AppDependencies {
   readonly siteRoot: string;
   /** Requests per client per minute on `/v1/ask`, the one route that bills per call. */
   readonly askRateLimitPerMinute: number;
+  /** Corpus prefix, so `/v1/feedback` can refuse cited paths from outside the corpus. */
+  readonly corpusPrefix: string;
   /** Absent when `CMS_REPOSITORY` is unset: the editorial routes are then never mounted. */
   readonly cms?: CmsDependencies | undefined;
+  /**
+   * Absent when `GAP_FEEDBACK_TABLE` is unset: no gap is recorded and `/v1/feedback` is never
+   * mounted. Answering still works — it just produces no signal about what is missing.
+   */
+  readonly recorder?: GapRecorder | undefined;
 }
 
 /**
@@ -79,10 +90,59 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
     logger,
     siteRoot: config.siteRoot,
     askRateLimitPerMinute: config.askRateLimitPerMinute,
+    corpusPrefix: config.corpusPrefix,
     ...(config.cms === undefined
       ? {}
       : { cms: createCmsDependencies(config.cms, config.awsRegion) }),
+    ...(config.feedback === undefined
+      ? {}
+      : {
+          recorder: new DynamoGapRecorder({
+            client: new DynamoDBClient({ region: config.awsRegion }),
+            tableName: config.feedback.tableName,
+            retentionDays: config.feedback.retentionDays,
+            location: { bucket: config.corpusBucket, prefix: config.corpusPrefix },
+          }),
+        }),
   };
+}
+
+/**
+ * The routes a reader uses: documents, search, ask, and the gap feedback they can send back.
+ *
+ * Kept together because their order relative to one another is the part that matters — and all of
+ * it must still land before the `/v1` terminator and the site catch-all that `createApp` mounts.
+ */
+function mountReaderRoutes(app: Hono<AppEnv>, dependencies: AppDependencies): void {
+  const recorded = dependencies.recorder === undefined ? {} : { recorder: dependencies.recorder };
+
+  app.route('/v1/documents', createDocumentRoutes({ corpus: dependencies.corpus }));
+  app.route(
+    '/v1/search',
+    createSearchRoutes({
+      retriever: dependencies.retriever,
+      viewer: dependencies.viewer,
+      ...recorded,
+    }),
+  );
+
+  // Only `/v1/ask` is limited. Every other route costs a constant amount to serve; this one
+  // spends money per request, and it is unauthenticated (requirements.md R22 is not met yet).
+  app.use('/v1/ask', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
+  app.route('/v1/ask', createAskRoutes({ answerer: dependencies.answerer, ...recorded }));
+
+  // Mounted only when GAP_FEEDBACK_TABLE is set. Rate-limited on its own window — it writes, and
+  // it is as unauthenticated as `/v1/ask` is.
+  if (dependencies.recorder !== undefined) {
+    app.use('/v1/feedback', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
+    app.route(
+      '/v1/feedback',
+      createFeedbackRoutes({
+        recorder: dependencies.recorder,
+        corpusPrefix: dependencies.corpusPrefix,
+      }),
+    );
+  }
 }
 
 /**
@@ -118,16 +178,8 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
       ...(dependencies.cms === undefined ? {} : { tokens: dependencies.cms.tokens }),
     }),
   );
-  app.route('/v1/documents', createDocumentRoutes({ corpus: dependencies.corpus }));
-  app.route(
-    '/v1/search',
-    createSearchRoutes({ retriever: dependencies.retriever, viewer: dependencies.viewer }),
-  );
 
-  // Only `/v1/ask` is limited. Every other route costs a constant amount to serve; this one
-  // spends money per request, and it is unauthenticated (requirements.md R22 is not met yet).
-  app.use('/v1/ask', createRateLimit({ limit: dependencies.askRateLimitPerMinute }));
-  app.route('/v1/ask', createAskRoutes({ answerer: dependencies.answerer }));
+  mountReaderRoutes(app, dependencies);
 
   // Mounted only when CMS_REPOSITORY is set. An unconfigured deployment has no editorial surface
   // at all, rather than one that answers 500 — see resolveCmsConfig in config.ts.

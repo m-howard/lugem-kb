@@ -134,6 +134,7 @@ const app = createApp({
   logger: createLogger({ level: 'silent' }),
   siteRoot: 'apps/docs/build',
   askRateLimitPerMinute: ASK_RATE_LIMIT_PER_MINUTE,
+  corpusPrefix: PREFIX,
 });
 
 Bun.serve({ port, fetch: app.fetch });

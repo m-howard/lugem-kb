@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildTestApp } from '../helpers/build-test-app';
+import { collectingRecorder } from '../helpers/fake-feedback';
 
 const STRONG_MATCH = {
   text: 'Submit leave requests in Workday at least two weeks in advance.',
@@ -93,6 +94,39 @@ describe('POST /v1/search', () => {
       const response = await post(app, { question: 'unrelated question' });
 
       await expect(response.json()).resolves.toMatchObject({ covered: false });
+    });
+
+    // R23. This route generates no answer, so it takes no part in unhelpful feedback — but a
+    // question it cannot serve is the same gap `/v1/ask` would have recorded, and worth the same.
+    it('records the gap, naming this route', async () => {
+      const feedback = collectingRecorder();
+      const app = buildTestApp({ retrievalResults: [], feedback });
+
+      await post(app, { question: 'what is our policy on unicorns?' });
+
+      expect(feedback.events).toEqual([
+        {
+          kind: 'no-coverage',
+          route: '/v1/search',
+          answerId: expect.any(String) as unknown,
+          question: 'what is our policy on unicorns?',
+          nearestSourceUri: undefined,
+          nearestScore: undefined,
+        },
+      ]);
+    });
+
+    it('records nothing when passages were found', async () => {
+      const feedback = collectingRecorder();
+      const app = buildTestApp({
+        retrievalResults: [STRONG_MATCH],
+        objects: { 'docs/people/leave.md': LEAVE_PAGE },
+        feedback,
+      });
+
+      await post(app, { question: 'how do I book leave?' });
+
+      expect(feedback.events).toEqual([]);
     });
   });
 

@@ -9,6 +9,7 @@ import {
   type FakeRetrievalResult,
   fakeS3Client,
 } from './fake-aws';
+import { type CollectingRecorder } from './fake-feedback';
 import { type FakeGitHub, type FakeGitHubRoute, fakeGitHub } from './fake-github';
 import { type FakeIdp, fakeIdp } from './fake-idp';
 import { createApp } from '../../src/app';
@@ -66,6 +67,12 @@ export interface TestAppOptions {
   readonly askRateLimitPerMinute?: number;
   /** Present only when a test switches the CMS on, mirroring the CMS_REPOSITORY master switch. */
   readonly cms?: CmsDependencies | undefined;
+  /**
+   * Present only when a test switches gap recording on, mirroring the GAP_FEEDBACK_TABLE master
+   * switch. Absent means `/v1/feedback` is not mounted and no gap is recorded — see
+   * `collectingRecorder` in `fake-feedback.ts`.
+   */
+  readonly feedback?: CollectingRecorder | undefined;
   /** Collects log records instead of discarding them, for tests that assert on audit output. */
   readonly captureLogs?: Record<string, unknown>[] | undefined;
 }
@@ -198,6 +205,8 @@ export function buildTestApp(options: TestAppOptions = {}): Hono<AppEnv> {
     logger: createTestLogger(options.captureLogs),
     siteRoot: options.siteRoot ?? TEST_SITE_ROOT,
     askRateLimitPerMinute: options.askRateLimitPerMinute ?? TEST_ASK_RATE_LIMIT,
+    corpusPrefix: TEST_PREFIX,
     ...(options.cms === undefined ? {} : { cms: options.cms }),
+    ...(options.feedback === undefined ? {} : { recorder: options.feedback.recorder }),
   });
 }

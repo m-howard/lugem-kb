@@ -15,9 +15,29 @@ export interface Citation {
   readonly score: number;
 }
 
+/**
+ * The best result that did not clear the threshold.
+ *
+ * A question the corpus does not cover has no citations, which leaves a gap report with nothing to
+ * attribute it to. The highest-scoring near miss is the honest approximation of "which part of the
+ * documentation should have answered this" — it names an area without claiming to answer anything
+ * (requirements.md R23).
+ *
+ * Absent when retrieval returned no usable result at all, which is a different and less
+ * actionable kind of gap.
+ */
+export interface NearestMiss {
+  readonly sourceUri: string;
+  readonly score: number;
+}
+
 export type RetrievalOutcome =
   | { readonly covered: true; readonly citations: readonly Citation[] }
-  | { readonly covered: false; readonly reason: 'no-documentation-covers-this' };
+  | {
+      readonly covered: false;
+      readonly reason: 'no-documentation-covers-this';
+      readonly nearestMiss: NearestMiss | undefined;
+    };
 
 export interface RetrieverOptions {
   readonly client: BedrockAgentRuntimeClient;
@@ -34,6 +54,20 @@ function toCitation(result: KnowledgeBaseRetrievalResult): Citation | undefined 
     return undefined;
   }
   return { sourceUri, text, score: result.score ?? 0 };
+}
+
+/**
+ * Bedrock returns results in descending score order, but the contract does not promise it and a
+ * gap report attributing questions to the wrong page is worse than no attribution. Cheap to be sure.
+ */
+function toNearestMiss(retrieved: readonly Citation[]): NearestMiss | undefined {
+  const best = retrieved.reduce<Citation | undefined>(
+    (highest, citation) =>
+      highest === undefined || citation.score > highest.score ? citation : highest,
+    undefined,
+  );
+
+  return best === undefined ? undefined : { sourceUri: best.sourceUri, score: best.score };
 }
 
 /**
@@ -69,8 +103,12 @@ export class Retriever {
    * than an empty success. A caller cannot accidentally render "here is your answer" over an
    * empty array — the type forces the no-coverage case to be handled (requirements.md R20).
    *
+   * The no-coverage outcome carries the highest-scoring result that missed the threshold, where
+   * there was one. Nothing renders it — it exists so a gap can be attributed to a documentation
+   * area later (requirements.md R23).
+   *
    * @param question - The reader's question, in natural language.
-   * @returns Citations above the threshold, or an explicit no-coverage outcome.
+   * @returns Citations above the threshold, or an explicit no-coverage outcome with the near miss.
    *
    * @example
    * ```ts
@@ -91,13 +129,18 @@ export class Retriever {
       }),
     );
 
-    const citations = (response.retrievalResults ?? [])
+    const retrieved = (response.retrievalResults ?? [])
       .map(toCitation)
-      .filter((citation): citation is Citation => citation !== undefined)
-      .filter((citation) => citation.score >= this.#scoreThreshold);
+      .filter((citation): citation is Citation => citation !== undefined);
+
+    const citations = retrieved.filter((citation) => citation.score >= this.#scoreThreshold);
 
     if (citations.length === 0) {
-      return { covered: false, reason: 'no-documentation-covers-this' };
+      return {
+        covered: false,
+        reason: 'no-documentation-covers-this',
+        nearestMiss: toNearestMiss(retrieved),
+      };
     }
 
     return { covered: true, citations };

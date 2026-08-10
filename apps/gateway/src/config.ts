@@ -15,6 +15,14 @@ const MAX_ANSWER_MAX_TOKENS = 4096;
 const DEFAULT_ASK_RATE_LIMIT_PER_MINUTE = 20;
 const MAX_ASK_RATE_LIMIT_PER_MINUTE = 10_000;
 
+/**
+ * How long a recorded gap survives. Ninety days is long enough to see a pattern across a quarter's
+ * reports and short enough that a question asked once does not sit in a table forever — see
+ * docs/adr/0015-recording-documentation-gaps.md and requirements.md open question Q11.
+ */
+const DEFAULT_GAP_FEEDBACK_RETENTION_DAYS = 90;
+const MAX_GAP_FEEDBACK_RETENTION_DAYS = 3650;
+
 const DEFAULT_CMS_BRANCH = 'main';
 const DEFAULT_CMS_BRANCH_PREFIX = 'cms/';
 const DEFAULT_CMS_PATH_PREFIXES = 'docs/';
@@ -66,6 +74,15 @@ export type AuthConfig = {
   | { readonly mode: 'alb'; readonly loadBalancerArn: string }
 );
 
+/**
+ * Present only when a feedback table is configured. Absent means gaps are not recorded and
+ * `/v1/feedback` is never mounted — answering still works, it just produces no demand signal.
+ */
+export interface FeedbackConfig {
+  readonly tableName: string;
+  readonly retentionDays: number;
+}
+
 /** Present only when the CMS is switched on. Absent means no editorial routes are mounted at all. */
 export interface CmsConfig {
   readonly repository: string;
@@ -81,7 +98,10 @@ export interface CmsConfig {
   readonly auth: AuthConfig;
 }
 
-export type Config = BaseConfig & { readonly cms: CmsConfig | undefined };
+export type Config = BaseConfig & {
+  readonly cms: CmsConfig | undefined;
+  readonly feedback: FeedbackConfig | undefined;
+};
 
 /**
  * Thrown when the environment cannot produce a valid configuration. Carries the offending
@@ -112,6 +132,11 @@ const ENV_KEYS = {
   answerMaxTokens: 'ANSWER_MAX_TOKENS',
   askRateLimitPerMinute: 'ASK_RATE_LIMIT_PER_MINUTE',
 } as const satisfies Record<keyof BaseConfig, string>;
+
+const FEEDBACK_KEYS = {
+  tableName: 'GAP_FEEDBACK_TABLE',
+  retentionDays: 'GAP_FEEDBACK_RETENTION_DAYS',
+} as const;
 
 const CMS_KEYS = {
   repository: 'CMS_REPOSITORY',
@@ -202,6 +227,40 @@ function resolveBoolean(env: Env, key: string): boolean {
 }
 
 /**
+ * Reads the gap feedback block, or returns `undefined` when no table is configured.
+ *
+ * `GAP_FEEDBACK_TABLE` is the master switch, following `CMS_REPOSITORY`. Unset means the recorder
+ * is never built and `/v1/feedback` is never mounted, so a deployment that does not want to store
+ * reader questions gets that by doing nothing — which is the right default for the one store in
+ * this service holding personal data (requirements.md Q11).
+ */
+function resolveFeedbackConfig(env: Env): FeedbackConfig | undefined {
+  const tableName = read(env, FEEDBACK_KEYS.tableName);
+  if (tableName === undefined) {
+    return undefined;
+  }
+
+  const raw = read(env, FEEDBACK_KEYS.retentionDays);
+  if (raw === undefined) {
+    return { tableName, retentionDays: DEFAULT_GAP_FEEDBACK_RETENTION_DAYS };
+  }
+
+  const retentionDays = Number(raw);
+  if (
+    !Number.isInteger(retentionDays) ||
+    retentionDays < 1 ||
+    retentionDays > MAX_GAP_FEEDBACK_RETENTION_DAYS
+  ) {
+    throw new ConfigError(
+      [FEEDBACK_KEYS.retentionDays],
+      `must be a whole number of days between 1 and ${String(MAX_GAP_FEEDBACK_RETENTION_DAYS)}`,
+    );
+  }
+
+  return { tableName, retentionDays };
+}
+
+/**
  * Reads the CMS block, or returns `undefined` when the CMS is switched off.
  *
  * `CMS_REPOSITORY` is the master switch, mirroring `corpusRepository` in the Pulumi program: unset
@@ -281,5 +340,5 @@ export function loadConfig(env: Env = process.env): Config {
     throw new ConfigError([...new Set(variables)], detail);
   }
 
-  return { ...result.data, cms: resolveCmsConfig(env) };
+  return { ...result.data, cms: resolveCmsConfig(env), feedback: resolveFeedbackConfig(env) };
 }

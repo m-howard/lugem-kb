@@ -279,4 +279,46 @@ describe('loadConfig', () => {
       });
     });
   });
+
+  // R23 needs somewhere to put a gap; Q11 says that somewhere must have a retention policy. The
+  // table name is the master switch, so a deployment that does not want to hold reader questions
+  // gets that by doing nothing.
+  describe('gap feedback', () => {
+    it('is absent when no table is configured', () => {
+      expect(loadConfig({ ...VALID_ENV }).feedback).toBeUndefined();
+    });
+
+    it('defaults retention to ninety days', () => {
+      const config = loadConfig({ ...VALID_ENV, GAP_FEEDBACK_TABLE: 'gaps' });
+
+      expect(config.feedback).toEqual({ tableName: 'gaps', retentionDays: 90 });
+    });
+
+    it('takes retention from configuration', () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        GAP_FEEDBACK_TABLE: 'gaps',
+        GAP_FEEDBACK_RETENTION_DAYS: '30',
+      });
+
+      expect(config.feedback?.retentionDays).toBe(30);
+    });
+
+    it.each([
+      ['zero', '0'],
+      ['negative', '-1'],
+      ['fractional', '1.5'],
+      ['not a number', 'ninety'],
+      ['beyond ten years', '3651'],
+    ])('rejects a %s retention and names the variable', (_case, value) => {
+      const env = { ...VALID_ENV, GAP_FEEDBACK_TABLE: 'gaps', GAP_FEEDBACK_RETENTION_DAYS: value };
+
+      expect(() => loadConfig(env)).toThrow(ConfigError);
+      try {
+        loadConfig(env);
+      } catch (error) {
+        expect((error as ConfigError).variables).toContain('GAP_FEEDBACK_RETENTION_DAYS');
+      }
+    });
+  });
 });
