@@ -1,0 +1,190 @@
+name: Preview
+
+# requirements.md R12: every pull request publishes a rendered preview to an isolated URL, the link
+# is visible on the pull request and on the CMS workflow card, and the artifacts are deleted on
+# merge or close.
+#
+# The preview is served by the gateway at `/previews/pr-<number>/`, from a private bucket, rather
+# than from a CDN of its own — it renders unmerged changes to a corpus holding people and finance
+# content, so it stays behind whatever already guards the published site. See
+# docs/adr/0018-previews-behind-the-gateway.md.
+#
+# R21 is why that bucket is not the corpus bucket: preview builds must never be ingested, and a
+# bucket the knowledge base has never been pointed at cannot be.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'docs/**'
+      - 'apps/docs/**'
+      - 'scripts/build/**'
+      - '.github/workflows/preview.yml'
+
+# One preview per pull request, and a superseded build is simply stale — unlike the publish queue,
+# where a cancelled run is a retraction that never happened.
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Published by `pulumi up` (see infra/pulumi/src/components/preview-site.ts), so a fork or a clone
+  # whose stack has never been deployed skips cleanly instead of failing for a reason the
+  # contributor cannot fix.
+  check-configuration:
+    name: Check preview configuration
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          ROLE_ARN: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
+          BUCKET: ${{ vars.PREVIEW_BUCKET }}
+          BASE_URL: ${{ vars.PREVIEW_BASE_URL }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "${HEAD_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            # A fork's `pull_request` token carries the fork's OIDC subject and no write scope, so
+            # it can neither assume the preview role nor comment. Saying so beats a red X.
+            echo "::notice::Skipping the preview — pull requests from forks cannot publish one."
+          elif [ -n "${ROLE_ARN}" ] && [ -n "${BUCKET}" ] && [ -n "${BASE_URL}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping the preview — Pulumi has not published AWS_PREVIEW_ROLE_ARN, PREVIEW_BUCKET and PREVIEW_BASE_URL to this repository."
+          fi
+
+  publish:
+    name: Publish the preview
+    needs: check-configuration
+    if: needs.check-configuration.outputs.configured == 'true' && github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: bun install --frozen-lockfile
+
+      # The base path has to be baked in: Docusaurus writes it into every asset reference at build
+      # time, so a preview built at `/` would ask for its stylesheets at the site root and render
+      # unstyled. It must match the path the gateway serves — see `PREVIEW_MOUNT_PATH`.
+      - name: Build the site for this pull request
+        run: bun run docs:build
+        env:
+          DOCUSAURUS_BASE_URL: /previews/pr-${{ github.event.number }}/
+
+      # `--delete` so a page removed in a later push disappears from the preview too. Without it a
+      # reviewer can open a page the pull request has already deleted.
+      - name: Upload the preview
+        run: |
+          aws s3 sync apps/docs/build "s3://${PREVIEW_BUCKET}/pr-${PR_NUMBER}/" \
+            --delete --only-show-errors
+        env:
+          PREVIEW_BUCKET: ${{ vars.PREVIEW_BUCKET }}
+          PR_NUMBER: ${{ github.event.number }}
+
+      # R12's second criterion, half of it. The other half is the CMS workflow card, which the
+      # gateway answers for directly — see `getDeployPreview` in apps/gateway/src/cms/decap/.
+      - name: Comment with the preview link
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ vars.PREVIEW_BASE_URL }}/pr-${{ github.event.number }}/
+        with:
+          script: |
+            // Keyed on a hidden marker so each push updates the comment rather than adding one.
+            const marker = '<!-- lugem-preview -->';
+            const body = [
+              marker,
+              '### Documentation preview',
+              '',
+              `This pull request renders at ${process.env.PREVIEW_URL}`,
+              '',
+              'It is rebuilt on every push, and deleted when this pull request is merged or',
+              "closed. The same link is on the entry's card in the CMS at `/admin`.",
+            ].join('\n');
+
+            const scope = { owner: context.repo.owner, repo: context.repo.repo };
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...scope,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ ...scope, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({
+                ...scope,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+  remove:
+    name: Remove the preview
+    needs: check-configuration
+    if: needs.check-configuration.outputs.configured == 'true' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # R12's third criterion. The bucket's lifecycle rule is only a backstop for the run that never
+      # happens; this is the mechanism, and it runs on close as well as on merge.
+      - name: Delete the preview
+        run: aws s3 rm "s3://${PREVIEW_BUCKET}/pr-${PR_NUMBER}/" --recursive --only-show-errors
+        env:
+          PREVIEW_BUCKET: ${{ vars.PREVIEW_BUCKET }}
+          PR_NUMBER: ${{ github.event.number }}
+
+      # Rewritten rather than left in place: a comment offering a link to a preview that has been
+      # deleted is worse than no comment. Never created here — a pull request that never had one
+      # does not need to be told that it still does not.
+      - name: Say that the preview is gone
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = '<!-- lugem-preview -->';
+            const scope = { owner: context.repo.owner, repo: context.repo.repo };
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...scope,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...scope,
+                comment_id: existing.id,
+                body: [
+                  marker,
+                  '### Documentation preview',
+                  '',
+                  'Removed — this pull request is closed.',
+                ].join('\n'),
+              });
+            }

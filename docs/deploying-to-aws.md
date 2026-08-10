@@ -90,7 +90,10 @@ cp Pulumi.dev.yaml.example Pulumi.dev.yaml   # then edit it
 
 The GitHub half has several more keys of its own; they live in
 [the corpus repository guide](./corpus-repository.md) rather than here, because setting any of them
-also means supplying an admin token this stack otherwise never needs. The keys that configure the
+also means supplying an admin token this stack otherwise never needs. Setting `corpusRepository`
+also creates the pull request preview bucket and its publishing role — previews have no key of
+their own, because a preview is published by a workflow in a repository this stack manages, and
+without one there is nothing to publish it. The keys that configure the
 authoring gateway itself — how authors authenticate, and what the CMS may write — are in
 [the authoring gateway guide](./authoring-gateway.md#configure-it).
 
@@ -205,16 +208,17 @@ intended behaviour, not a failure. Confirm it in CloudWatch: the log line reads
 
 ## What this costs
 
-| Resource                             | Idle cost                      |
-| ------------------------------------ | ------------------------------ |
-| ECS Fargate, 0.5 vCPU / 1 GB, 1 task | ~$15/month                     |
-| Application Load Balancer            | ~$18/month                     |
-| S3 corpus bucket                     | cents                          |
-| DynamoDB gap feedback table          | pay-per-request, no idle floor |
-| **S3 Vectors index**                 | **pay-per-use, no idle floor** |
-| Bedrock embeddings                   | per token, at ingestion        |
-| **Bedrock answer generation**        | **per token, per question**    |
-| CloudWatch Logs                      | per GB ingested                |
+| Resource                             | Idle cost                        |
+| ------------------------------------ | -------------------------------- |
+| ECS Fargate, 0.5 vCPU / 1 GB, 1 task | ~$15/month                       |
+| Application Load Balancer            | ~$18/month                       |
+| S3 corpus bucket                     | cents                            |
+| S3 preview bucket                    | cents, and expires after 30 days |
+| DynamoDB gap feedback table          | pay-per-request, no idle floor   |
+| **S3 Vectors index**                 | **pay-per-use, no idle floor**   |
+| Bedrock embeddings                   | per token, at ingestion          |
+| **Bedrock answer generation**        | **per token, per question**      |
+| CloudWatch Logs                      | per GB ingested                  |
 
 Two lines are worth noting.
 

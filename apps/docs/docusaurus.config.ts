@@ -16,13 +16,23 @@ const EDIT_BASE = `https://github.com/${ORGANIZATION}/${PROJECT}/tree/main/`;
  */
 const CONTENT_ROOT = '../../docs';
 
+/**
+ * Where this build will be served from.
+ *
+ * `/` for the published site, and `/previews/pr-42/` for a pull request preview — the workflow in
+ * `.github/workflows/preview.yml` sets it per build (requirements.md R12). Docusaurus bakes the
+ * base path into every asset URL at build time, so a preview built with the default would ask for
+ * its stylesheets at the site root and render unstyled.
+ */
+const BASE_URL = process.env.DOCUSAURUS_BASE_URL ?? '/';
+
 const config: Config = {
   title: 'Lugem Knowledge Base',
   tagline: 'Documentation that publishes itself and answers questions',
   favicon: 'img/favicon.svg',
 
   url: 'https://lugem-kb.example.com',
-  baseUrl: '/',
+  baseUrl: BASE_URL,
 
   organizationName: ORGANIZATION,
   projectName: PROJECT,

@@ -96,6 +96,23 @@ export interface FeedbackConfig {
   readonly retentionDays: number;
 }
 
+/**
+ * Present only when a preview bucket is configured (requirements.md R12). Absent means `/previews`
+ * is never mounted and the CMS workflow card offers no preview link — the state of every
+ * deployment before Phase 3's second half.
+ */
+export interface PreviewConfig {
+  readonly bucket: string;
+  /**
+   * Absolute base URL the preview surface is reachable at, e.g. `https://kb.internal/previews`.
+   *
+   * Configured rather than derived from the request. The gateway sits behind a load balancer and
+   * cannot trust `Host` to tell it its own public name — and the CMS workflow card needs a link an
+   * author can send to a reviewer, not one that only works from the tab it was rendered in.
+   */
+  readonly baseUrl: string;
+}
+
 /** Present only when the CMS is switched on. Absent means no editorial routes are mounted at all. */
 export interface CmsConfig {
   readonly repository: string;
@@ -113,6 +130,8 @@ export interface CmsConfig {
 export type Config = BaseConfig & {
   readonly cms: CmsConfig | undefined;
   readonly feedback: FeedbackConfig | undefined;
+  /** Absent when `PREVIEW_BUCKET` is unset: `/previews` is then never mounted. */
+  readonly previews: PreviewConfig | undefined;
   /**
    * How identity is established, when anything needs it.
    *
@@ -164,6 +183,11 @@ const ENV_KEYS = {
 const FEEDBACK_KEYS = {
   tableName: 'GAP_FEEDBACK_TABLE',
   retentionDays: 'GAP_FEEDBACK_RETENTION_DAYS',
+} as const;
+
+const PREVIEW_KEYS = {
+  bucket: 'PREVIEW_BUCKET',
+  baseUrl: 'PREVIEW_BASE_URL',
 } as const;
 
 const CMS_KEYS = {
@@ -305,6 +329,36 @@ function resolveFeedbackConfig(env: Env): FeedbackConfig | undefined {
 }
 
 /**
+ * Reads the preview block, or returns `undefined` when previews are switched off.
+ *
+ * `PREVIEW_BUCKET` is the master switch, following `CMS_REPOSITORY` and `GAP_FEEDBACK_TABLE`. Set
+ * it and `PREVIEW_BASE_URL` becomes required, because a preview nobody can be sent a link to is
+ * not a preview — the CMS workflow card and the pull request comment both need an absolute URL,
+ * and a service that boots with half the pair would offer authors a broken link rather than none.
+ * ADR 0009: move that failure to start-up.
+ */
+function resolvePreviewConfig(env: Env): PreviewConfig | undefined {
+  const bucket = read(env, PREVIEW_KEYS.bucket);
+  if (bucket === undefined) {
+    return undefined;
+  }
+
+  const baseUrl = read(env, PREVIEW_KEYS.baseUrl);
+  if (baseUrl === undefined) {
+    throw new ConfigError([PREVIEW_KEYS.baseUrl], `required once ${PREVIEW_KEYS.bucket} is set`);
+  }
+  if (!/^https?:\/\/\S+$/.test(baseUrl)) {
+    throw new ConfigError(
+      [PREVIEW_KEYS.baseUrl],
+      'must be an absolute http(s) URL, for example https://kb.internal/previews',
+    );
+  }
+
+  // Stored without a trailing slash so every caller builds `${baseUrl}/pr-42/` the same way.
+  return { bucket, baseUrl: baseUrl.replace(/\/+$/, '') };
+}
+
+/**
  * Reads the CMS block, or returns `undefined` when the CMS is switched off.
  *
  * `CMS_REPOSITORY` is the master switch, mirroring `corpusRepository` in the Pulumi program: unset
@@ -396,6 +450,7 @@ export function loadConfig(env: Env = process.env): Config {
     ...result.data,
     cms,
     feedback: resolveFeedbackConfig(env),
+    previews: resolvePreviewConfig(env),
     auth,
     readerAuthRequired,
   };

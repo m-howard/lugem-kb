@@ -9,6 +9,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Pull request previews** — R12, so an author sees their page rendered before anybody approves
+  it, and a reviewer reads the change rather than the diff.
+  - The gateway serves `/previews/pr-<number>/` from a private S3 bucket, behind whatever already
+    guards the documentation site. Not a CloudFront distribution: a preview renders unmerged
+    changes to a corpus holding people and finance content, and a public URL in front of that is a
+    second authentication story to build. See
+    [ADR 0018](docs/adr/0018-previews-behind-the-gateway.md).
+  - A bucket of its own, never the corpus bucket, so R21's "preview builds are never ingested" is
+    true by construction rather than resting on a prefix filter somebody could edit.
+  - `.github/workflows/preview.yml` builds with `DOCUSAURUS_BASE_URL=/previews/pr-<n>/`, syncs with
+    `--delete`, and comments the link. On `closed` — merged or abandoned — it deletes the prefix and
+    rewrites the comment. A 30-day lifecycle rule is the backstop, not the mechanism.
+  - Decap's `getDeployPreview` is answered from the entry's newest submission, so the link appears
+    on the workflow card without anything telling the CMS what the workflow did.
+  - `resolvePreviewRequest` refuses any path that could resolve outside the requested pull
+    request's prefix before any S3 call, mirroring `kb/key-policy.ts`. Pure, and its whole refusal
+    table is a unit test.
+  - Off unless `PREVIEW_BUCKET` is set, and `PREVIEW_BASE_URL` becomes required with it.
+- **Content quality gates** — R13, run as their own CI job and reported where an author will see
+  them. `bun run docs:check`.
+  - Frontmatter must carry `title`, `owner` and a real `last_reviewed` calendar date; every page
+    must match a `CODEOWNERS` entry, reusing the same matcher the gap report uses; every relative
+    markdown link and `#anchor` must resolve.
+  - Failures arrive as `::error` annotations pinned to the line in the diff and as a table posted
+    on the pull request, updated in place on each push and corrected when the problems are fixed.
+    That is the criterion the Docusaurus build could not meet — it already fails on a broken link,
+    but a stack trace in an Actions log is not a message an author who has never seen this
+    repository can act on. See [ADR 0019](docs/adr/0019-content-quality-gates.md).
 - **The documentation CMS at `/admin`** — the CMS half of Phase 3, so an author writes and submits
   a page without a git host account or any knowledge of markdown. See
   [Editing in the CMS](docs/editing-in-the-cms.md).
@@ -142,6 +170,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `kb/retrieve.ts` is superseded by [ADR 0012](docs/adr/0012-grounded-generation-behind-retrieval.md).
   `RetrieveAndGenerate` is still not used: retrieval and generation are composed here, so the
   score threshold and the citation set stay in this repository where they are tested.
+- **The gateway's container contract is resolved by name, not by position.** `GatewayService` built
+  its environment and its task policy from `pulumi.all([...])` tuples destructured positionally,
+  with a comment warning that inserting a value anywhere but the end shifts every later binding.
+  `allStrings` keeps the names, and has no eight-value ceiling.
 - `docs:start` binds port 3001, leaving 3000 to the gateway so both can run at once.
 - The ALB idle timeout is set to 120 seconds, up from the AWS default of 60, for streamed answers.
 - Root `typecheck` now includes `apps/docs`, which nothing had been running. This required
@@ -155,6 +187,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Indentation set to two spaces for JS/TS, down from four.
 - Docusaurus keeps numeric filename prefixes in URLs, so an ADR's number survives into the route
   a citation resolves to.
+
+### Fixed
+
+- **`bun run docs:build` failed on a clean clone.** `apps/docs/package.json` runs
+  `scripts/build/build-admin.ts` as its `prebuild` hook, and that file had never been committed:
+  `.gitignore`'s bare `build/` pattern matches `scripts/build/` as well as the Docusaurus and
+  container output, so `git add` reported nothing and the file was only ever on one machine. CI's
+  **Build** and **E2E** jobs were failing on `main` as a result, and no preview could have been
+  built at all. The bundler is restored, and all three ignore files — `.gitignore`,
+  `.prettierignore` and `eslint.config.mjs` — now un-ignore `scripts/build/` explicitly.
 
 ### Removed
 

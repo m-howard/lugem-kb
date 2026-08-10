@@ -4,6 +4,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { answerModelArns, type StackConfig } from '../config';
 import { type CmsAppConfig, type CmsGatewayConfig } from '../github-config';
 import { type Network } from '../network';
+import { allStrings } from '../resolve-strings';
 import { reparentedChild } from './child-options';
 
 const CONTAINER_NAME = 'gateway';
@@ -53,6 +54,20 @@ export interface GatewayServiceArgs {
   readonly cms?: GatewayCmsArgs | undefined;
   readonly gapFeedbackTableName: pulumi.Output<string>;
   readonly gapFeedbackTableArn: pulumi.Output<string>;
+  /**
+   * The pull request preview bucket and where it is served from (requirements.md R12).
+   *
+   * Absent means `/previews` is never mounted and the CMS workflow card offers no link — the state
+   * of every deployment that does not manage a GitHub repository. See ADR 0018.
+   */
+  readonly previews?: GatewayPreviewArgs | undefined;
+}
+
+/** Both halves, or neither: `resolvePreviewConfig` refuses a bucket with no base URL. */
+export interface GatewayPreviewArgs {
+  readonly bucketName: pulumi.Output<string>;
+  readonly bucketArn: pulumi.Output<string>;
+  readonly baseUrl: pulumi.Output<string>;
 }
 
 /** Everything `apps/gateway/src/config.ts` needs to switch its CMS block on — requirements.md R10. */
@@ -234,70 +249,55 @@ export class GatewayService extends pulumi.ComponentResource {
   ): pulumi.Output<string> {
     const { config } = args;
 
-    return pulumi
-      .all([
-        args.imageUri,
-        args.corpusBucketName,
-        args.knowledgeBaseId,
-        logGroupName,
-        args.cmsSecretArn ?? pulumi.output(''),
-        args.cms?.repository ?? pulumi.output(''),
-        args.cms?.loadBalancerArn ?? pulumi.output(''),
-        // Appended, never inserted. This tuple is destructured positionally below, so adding an
-        // entry anywhere but the end silently shifts every later binding — and the failure looks
-        // like a container whose CORPUS_BUCKET holds a knowledge base id.
-        args.gapFeedbackTableName,
-      ])
-      .apply(
-        ([
-          imageUri,
-          corpusBucket,
-          knowledgeBaseId,
-          logGroup,
-          cmsSecretArn,
-          repository,
-          albArn,
-          gapFeedbackTable,
-        ]) => {
-          const environment: ContainerEnvironmentEntry[] = [
-            { name: 'PORT', value: String(config.containerPort) },
-            { name: 'AWS_REGION', value: config.region },
-            { name: 'CORPUS_BUCKET', value: corpusBucket },
-            { name: 'CORPUS_PREFIX', value: config.corpusPrefix },
-            { name: 'KNOWLEDGE_BASE_ID', value: knowledgeBaseId },
-            { name: 'SITE_ROOT', value: '/app/site' },
-            { name: 'ANSWER_MODEL_ID', value: config.answerModelId },
-            { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
-            { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
-            { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
-            { name: 'GAP_FEEDBACK_TABLE', value: gapFeedbackTable },
-            {
-              name: 'GAP_FEEDBACK_RETENTION_DAYS',
-              value: String(config.gapFeedbackRetentionDays),
-            },
-            { name: 'READER_AUTH_REQUIRED', value: String(config.readerAuthRequired) },
-            ...cmsEnvironment(args.cms, { cmsSecretArn, repository, albArn }),
-          ];
+    // Resolved by name rather than by position — see `allStrings` for what that replaced.
+    return allStrings({
+      imageUri: args.imageUri,
+      corpusBucket: args.corpusBucketName,
+      knowledgeBaseId: args.knowledgeBaseId,
+      logGroup: logGroupName,
+      cmsSecretArn: args.cmsSecretArn ?? pulumi.output(''),
+      repository: args.cms?.repository ?? pulumi.output(''),
+      albArn: args.cms?.loadBalancerArn ?? pulumi.output(''),
+      gapFeedbackTable: args.gapFeedbackTableName,
+      previewBucket: args.previews?.bucketName ?? pulumi.output(''),
+      previewBaseUrl: args.previews?.baseUrl ?? pulumi.output(''),
+    }).apply((resolved) => {
+      const environment: ContainerEnvironmentEntry[] = [
+        { name: 'PORT', value: String(config.containerPort) },
+        { name: 'AWS_REGION', value: config.region },
+        { name: 'CORPUS_BUCKET', value: resolved.corpusBucket },
+        { name: 'CORPUS_PREFIX', value: config.corpusPrefix },
+        { name: 'KNOWLEDGE_BASE_ID', value: resolved.knowledgeBaseId },
+        { name: 'SITE_ROOT', value: '/app/site' },
+        { name: 'ANSWER_MODEL_ID', value: config.answerModelId },
+        { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
+        { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
+        { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
+        { name: 'GAP_FEEDBACK_TABLE', value: resolved.gapFeedbackTable },
+        { name: 'GAP_FEEDBACK_RETENTION_DAYS', value: String(config.gapFeedbackRetentionDays) },
+        { name: 'READER_AUTH_REQUIRED', value: String(config.readerAuthRequired) },
+        ...cmsEnvironment(args.cms, resolved),
+        ...previewEnvironment(resolved),
+      ];
 
-          return JSON.stringify([
-            {
-              name: CONTAINER_NAME,
-              image: imageUri,
-              essential: true,
-              portMappings: [{ containerPort: config.containerPort, protocol: 'tcp' }],
-              environment,
-              logConfiguration: {
-                logDriver: 'awslogs',
-                options: {
-                  'awslogs-group': logGroup,
-                  'awslogs-region': config.region,
-                  'awslogs-stream-prefix': CONTAINER_NAME,
-                },
-              },
+      return JSON.stringify([
+        {
+          name: CONTAINER_NAME,
+          image: resolved.imageUri,
+          essential: true,
+          portMappings: [{ containerPort: config.containerPort, protocol: 'tcp' }],
+          environment,
+          logConfiguration: {
+            logDriver: 'awslogs',
+            options: {
+              'awslogs-group': resolved.logGroup,
+              'awslogs-region': config.region,
+              'awslogs-stream-prefix': CONTAINER_NAME,
             },
-          ]);
+          },
         },
-      );
+      ]);
+    });
   }
 }
 
@@ -330,16 +330,23 @@ interface PolicyStatement {
 function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
   const { config } = args;
 
-  return pulumi
-    .all([
-      args.corpusBucketArn,
-      args.knowledgeBaseArn,
-      args.accountId,
-      args.cmsSecretArn ?? pulumi.output(''),
-      // Appended at the end for the same reason the container tuple is — see the note there.
-      args.gapFeedbackTableArn,
-    ])
-    .apply(([bucketArn, knowledgeBaseArn, accountId, cmsSecretArn, gapFeedbackTableArn]) => {
+  // By name, for the reason `containerDefinitions` gives.
+  return allStrings({
+    bucketArn: args.corpusBucketArn,
+    knowledgeBaseArn: args.knowledgeBaseArn,
+    accountId: args.accountId,
+    cmsSecretArn: args.cmsSecretArn ?? pulumi.output(''),
+    gapFeedbackTableArn: args.gapFeedbackTableArn,
+    previewBucketArn: args.previews?.bucketArn ?? pulumi.output(''),
+  }).apply(
+    ({
+      bucketArn,
+      knowledgeBaseArn,
+      accountId,
+      cmsSecretArn,
+      gapFeedbackTableArn,
+      previewBucketArn,
+    }) => {
       const statements: PolicyStatement[] = [
         {
           Sid: 'ListCorpusPrefixOnly',
@@ -391,8 +398,42 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
         });
       }
 
+      // Read, on the preview bucket only, under `pr-*` only. No list: the preview route asks for
+      // named keys and treats a miss as a 404, so listing would grant a way to enumerate every
+      // open pull request's draft content for nothing the route uses.
+      if (previewBucketArn !== '') {
+        statements.push({
+          Sid: 'ReadPreviewsOnly',
+          Effect: 'Allow',
+          Action: ['s3:GetObject'],
+          Resource: [`${previewBucketArn}/pr-*`],
+        });
+      }
+
       return JSON.stringify({ Version: '2012-10-17', Statement: statements });
-    });
+    },
+  );
+}
+
+/**
+ * The preview half of the container contract (requirements.md R12).
+ *
+ * Emits the whole block or none of it, for the reason `cmsEnvironment` documents: `PREVIEW_BUCKET`
+ * is a master switch in `apps/gateway/src/config.ts` and `PREVIEW_BASE_URL` becomes required with
+ * it, so half a block is a start-up failure rather than a degraded service.
+ */
+function previewEnvironment(resolved: {
+  readonly previewBucket: string;
+  readonly previewBaseUrl: string;
+}): ContainerEnvironmentEntry[] {
+  if (resolved.previewBucket === '' || resolved.previewBaseUrl === '') {
+    return [];
+  }
+
+  return [
+    { name: 'PREVIEW_BUCKET', value: resolved.previewBucket },
+    { name: 'PREVIEW_BASE_URL', value: resolved.previewBaseUrl },
+  ];
 }
 
 /**

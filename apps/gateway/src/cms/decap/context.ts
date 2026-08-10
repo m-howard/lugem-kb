@@ -25,4 +25,11 @@ export interface DecapContext {
    * else — the protocol has no field an editor could use to name someone else (requirements.md R6).
    */
   readonly identity: Identity;
+  /**
+   * Where pull request previews are served from, e.g. `https://kb.internal/previews`.
+   *
+   * Absent when `PREVIEW_BUCKET` is unset, which is what makes previews optional: `getDeployPreview`
+   * then answers `null` and the workflow card offers no link, exactly as it did before R12.
+   */
+  readonly previewBaseUrl?: string | undefined;
 }

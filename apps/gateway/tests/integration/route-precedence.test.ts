@@ -104,6 +104,38 @@ describe('route precedence', () => {
     expect(response.status).toBe(404);
   });
 
+  // `/previews/*` is mounted before the catch-all. Getting that order wrong is quiet in the same
+  // way the `/v1` case is: every preview URL would answer 200 with the published site's HTML, so
+  // a reviewer following the link from a pull request would read the unchanged page and approve it.
+  describe('previews are mounted ahead of the site', () => {
+    const PREVIEW = { 'pr-7/index.html': '<html><body>Preview of pull request 7</body></html>' };
+
+    it('serves the preview rather than the site', async () => {
+      const response = await buildTestApp({ objects: CORPUS, previewObjects: PREVIEW }).request(
+        '/previews/pr-7/',
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.text()).resolves.toContain('Preview of pull request 7');
+    });
+
+    it('does not shadow a site path that merely starts with the same letters', async () => {
+      const response = await buildTestApp({ objects: CORPUS, previewObjects: PREVIEW }).request(
+        '/previewsomething',
+      );
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('text/html');
+    });
+
+    it('leaves /previews to the site when no preview bucket is configured', async () => {
+      const response = await buildTestApp({ objects: CORPUS }).request('/previews/pr-7/');
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('text/html');
+    });
+  });
+
   // Without a terminator on `/v1`, an unknown API path falls through to the catch-all and answers
   // 200 with HTML — a JSON client sees a success it cannot parse, and a typo in a route looks
   // like a rendering bug. It also breaks R5's "an unmatched path is refused and logged".

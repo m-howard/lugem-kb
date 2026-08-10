@@ -27,10 +27,13 @@ import { Answerer } from '../../src/kb/answer';
 import { CitationViewer } from '../../src/kb/citation-view';
 import { CorpusClient } from '../../src/kb/corpus-client';
 import { Retriever } from '../../src/kb/retrieve';
+import { PreviewClient } from '../../src/previews/preview-client';
 
 export const TEST_BUCKET = 'test-corpus';
 export const TEST_PREFIX = 'docs/';
 export const TEST_SITE_ROOT = 'apps/gateway/tests/fixtures/site';
+export const TEST_PREVIEW_BUCKET = 'test-previews';
+export const TEST_PREVIEW_BASE_URL = 'https://kb.test/previews';
 
 export const TEST_REPOSITORY = 'acme/handbook';
 export const TEST_GITHUB_API = 'https://api.github.test';
@@ -80,6 +83,11 @@ export interface TestAppOptions {
    * Absent means the reader routes are open, which is the default deployment — see ADR 0017.
    */
   readonly readerVerifier?: IdentityVerifier | undefined;
+  /**
+   * Present only when a test switches previews on, mirroring the PREVIEW_BUCKET master switch.
+   * Keys are relative to the preview bucket root, e.g. `pr-42/index.html`.
+   */
+  readonly previewObjects?: Readonly<Record<string, string>> | undefined;
   /** Collects log records instead of discarding them, for tests that assert on audit output. */
   readonly captureLogs?: Record<string, unknown>[] | undefined;
 }
@@ -101,6 +109,11 @@ export interface TestCmsOptions {
   readonly mintStatus?: number;
   /** Collects the audit records the app writes, so R9 can be asserted rather than assumed. */
   readonly captureLogs?: Record<string, unknown>[];
+  /**
+   * Where previews are served from, when a test wants the CMS workflow card to offer one.
+   * Undefined — the default — is a deployment with no preview bucket, where R12's link is absent.
+   */
+  readonly previewBaseUrl?: string;
 }
 
 /**
@@ -163,6 +176,7 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
       nameClaim: 'name',
     },
     allowMergeFromCms: options.allowMergeFromCms ?? false,
+    previewBaseUrl: options.previewBaseUrl,
   };
 
   return {
@@ -225,5 +239,15 @@ export function buildTestApp(options: TestAppOptions = {}): Hono<AppEnv> {
     ...(options.cms === undefined ? {} : { cms: options.cms }),
     ...(options.feedback === undefined ? {} : { recorder: options.feedback.recorder }),
     ...(options.readerVerifier === undefined ? {} : { readerVerifier: options.readerVerifier }),
+    // A second bucket, not a second prefix on the corpus one — the same separation production has,
+    // so a preview key can never be reached through the corpus client by accident. See ADR 0018.
+    ...(options.previewObjects === undefined
+      ? {}
+      : {
+          previews: new PreviewClient({
+            s3: fakeS3Client({ objects: options.previewObjects }),
+            bucket: TEST_PREVIEW_BUCKET,
+          }),
+        }),
   });
 }

@@ -68,7 +68,12 @@ export function fakeS3Client(options: FakeCorpusOptions): S3Client {
         return Promise.reject(new NoSuchKeyError());
       }
       return Promise.resolve({
-        Body: { transformToString: () => Promise.resolve(body) },
+        // Both transforms, as the real SDK offers: the corpus reads text, the preview surface
+        // reads bytes because a build holds fonts and images that a UTF-8 round trip would corrupt.
+        Body: {
+          transformToString: () => Promise.resolve(body),
+          transformToByteArray: () => Promise.resolve(new TextEncoder().encode(body)),
+        },
         LastModified: new Date('2026-08-01T00:00:00.000Z'),
       });
     }

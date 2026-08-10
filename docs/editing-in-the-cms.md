@@ -70,6 +70,23 @@ reload — the third column has no meaning here.
 To take a change back out of review, drag it to **Drafts**. Your work is kept; only the review
 request is withdrawn.
 
+## See it rendered before anybody else does
+
+Once you have submitted a change, it gets its own copy of the whole documentation site with your
+edit in it. Your card gains a **Check for preview** button; click it and the link appears.
+
+The preview is rebuilt every time you save, so it always shows your latest draft. It is a normal
+copy of the site, so you can click around it — your new page in the sidebar, the links you added,
+the way a long table wraps. Nobody outside the review sees it, and it disappears when the change is
+published or withdrawn.
+
+The same link is posted as a comment on your change, so a reviewer can open it without going
+through the editor.
+
+If the button keeps saying **Check for preview**, the build is still running — it takes a couple of
+minutes after a save. If it never resolves, the deployment may not have previews switched on; ask a
+platform engineer.
+
 ## Your name on your work
 
 Every change records you as its author — your name and your email, from the login you signed in
@@ -102,6 +119,10 @@ editing. Reload the page, check their change, and save again.
 
 **A message about a path or a branch.** The change touched something outside the documentation.
 Usually a page title that produced an unusable file name — try a simpler one, without punctuation.
+
+**A comment saying the documentation checks failed.** Something on the page needs fixing before it
+can be published — a missing owner, or a link pointing at a page that is not there. The comment
+lists each one with the line it is on. Fix them and save again; the comment updates itself.
 
 **Anything else.** The message the editor shows comes from the gateway and is written to be acted
 on. If it is not, that is worth reporting: send it to a platform engineer with what you were doing.
