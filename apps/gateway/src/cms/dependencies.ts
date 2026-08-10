@@ -22,6 +22,11 @@ export interface CmsDependencyOptions {
    * `createDependencies` that resolves it now, from the same config the verifier is built from.
    */
   readonly auth: AuthConfig;
+  /**
+   * Where pull request previews are served from (requirements.md R12), when previews are
+   * configured. Carried here so the editorial routes can hand it to the Decap adapter.
+   */
+  readonly previewBaseUrl?: string | undefined;
 }
 
 /** Everything the editorial routes need, plus the credential the readiness probe checks. */
@@ -44,6 +49,8 @@ export interface CmsDependencies {
    * is — this is published for the browser's benefit, and grants nothing.
    */
   readonly auth: AuthConfig;
+  /** Base URL for pull request previews, absent when none are configured. See ADR 0018. */
+  readonly previewBaseUrl: string | undefined;
 }
 
 /**
@@ -60,7 +67,7 @@ export interface CmsDependencies {
  * @returns The dependencies the editorial routes and the readiness probe need.
  */
 export function createCmsDependencies(options: CmsDependencyOptions): CmsDependencies {
-  const { cms, region, verifier, auth } = options;
+  const { cms, region, verifier, auth, previewBaseUrl } = options;
   const settings: CmsSettings = {
     repository: cms.repository,
     defaultBranch: cms.defaultBranch,
@@ -91,6 +98,7 @@ export function createCmsDependencies(options: CmsDependencyOptions): CmsDepende
     tokens,
     client,
     auth,
+    previewBaseUrl,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),

@@ -64,6 +64,11 @@ export interface CmsRoutesOptions {
   readonly tokens: InstallationTokenSource;
   /** Passed to the Decap adapter, which enumerates draft branches. See `cms/decap/context.ts`. */
   readonly client: GitHubClient;
+  /**
+   * Where pull request previews are served from (requirements.md R12). Absent when no preview
+   * bucket is configured, in which case the workflow card offers no preview link.
+   */
+  readonly previewBaseUrl?: string | undefined;
 }
 
 interface Refusal {
@@ -382,6 +387,7 @@ function registerProxyRoute(app: Hono<AppEnv>, options: CmsRoutesOptions): void 
         settings: options.settings,
         client: options.client,
         identity: c.get('identity'),
+        previewBaseUrl: options.previewBaseUrl,
       });
 
       return c.json(result ?? null);

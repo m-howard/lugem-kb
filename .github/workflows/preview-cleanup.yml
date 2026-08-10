@@ -1,0 +1,78 @@
+name: Preview cleanup
+
+# requirements.md R12's third criterion: a preview is deleted when its pull request is merged or
+# closed. Split out of `preview.yml` on purpose. That workflow filters on `paths`, and a `paths`
+# filter applies to every event its trigger names — so a pull request whose last push reverted its
+# documentation changes would never fire a matching `closed` event, and its drafts would survive
+# until the 30-day lifecycle rule. Deletion has to happen for every closed pull request, whatever
+# the final diff touches, so this trigger has no filter at all.
+on:
+  pull_request:
+    types: [closed]
+
+# The same group `preview.yml` uses, so closing a pull request cancels a publish still in flight
+# rather than racing it. A sync that finished after the delete would restore the whole preview.
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # No `check-configuration` job here, unlike `preview.yml`. That job exists to explain a skip to
+  # the contributor waiting on a preview; nobody is waiting on a deletion, so the same conditions
+  # are a plain `if` and a skipped job is the whole message. A fork never published anything —
+  # its token cannot assume the role — so there is nothing to remove.
+  remove:
+    name: Remove the preview
+    if: >-
+      vars.AWS_PREVIEW_ROLE_ARN != '' && vars.PREVIEW_BUCKET != '' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # The bucket's lifecycle rule is only a backstop for the run that never happens; this is the
+      # mechanism, and it runs on close as well as on merge. Deleting a prefix that was never
+      # written is a no-op, which is what makes the unfiltered trigger safe.
+      - name: Delete the preview
+        run: aws s3 rm "s3://${PREVIEW_BUCKET}/pr-${PR_NUMBER}/" --recursive --only-show-errors
+        env:
+          PREVIEW_BUCKET: ${{ vars.PREVIEW_BUCKET }}
+          PR_NUMBER: ${{ github.event.number }}
+
+      # Rewritten rather than left in place: a comment offering a link to a preview that has been
+      # deleted is worse than no comment. Never created here — a pull request that never had one
+      # does not need to be told that it still does not.
+      - name: Say that the preview is gone
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = '<!-- lugem-preview -->';
+            const scope = { owner: context.repo.owner, repo: context.repo.repo };
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...scope,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...scope,
+                comment_id: existing.id,
+                body: [
+                  marker,
+                  '### Documentation preview',
+                  '',
+                  'Removed — this pull request is closed.',
+                ].join('\n'),
+              });
+            }

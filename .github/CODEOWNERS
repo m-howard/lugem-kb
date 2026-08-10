@@ -28,9 +28,16 @@
 # Who may push to the corpus, and under what review.
 /infra/pulumi/src/components/corpus-repository.ts  @m-howard
 
-# Path handling: both files resolve untrusted input to a location.
+# Path handling: all of these resolve untrusted input to a location.
 /apps/gateway/src/kb/key-policy.ts    @m-howard
 /apps/gateway/src/routes/site.ts      @m-howard
+/apps/gateway/src/previews/           @m-howard
+/apps/gateway/src/routes/previews.ts  @m-howard
+
+# Where unmerged drafts live, and who may write them. A widening change here puts unreviewed
+# handbook content somewhere it was not meant to be — see docs/adr/0018-previews-behind-the-gateway.md.
+/infra/pulumi/src/components/preview-site.ts  @m-howard
+/.github/workflows/preview.yml                @m-howard
 
 # The authoring gateway. Everything here decides who may write what, with a credential no author
 # holds — a widening change is the one worth catching in review rather than in an audit log.

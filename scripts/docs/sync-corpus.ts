@@ -15,8 +15,8 @@
  *   CORPUS_BUCKET=... KNOWLEDGE_BASE_ID=... DATA_SOURCE_ID=... bun run corpus:sync
  *   ... --dry-run    # report what would change, touch nothing
  */
-import { readdir, readFile } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import {
   BedrockAgentClient,
@@ -30,8 +30,9 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 
+import { findMarkdownFiles } from './corpus-files';
+
 const DOCS_ROOT = 'docs';
-const MARKDOWN_EXTENSIONS = ['.md', '.mdx'];
 const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 900_000;
 const DELETE_BATCH_SIZE = 1000;
@@ -62,23 +63,6 @@ function readSyncConfig(): SyncConfig {
     region: process.env['AWS_REGION'] ?? 'us-east-1',
     dryRun: process.argv.includes('--dry-run'),
   };
-}
-
-/** Walks the docs tree, returning POSIX-style paths relative to it. */
-async function findMarkdownFiles(root: string, base = root): Promise<string[]> {
-  const entries = await readdir(root, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const full = join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await findMarkdownFiles(full, base)));
-    } else if (MARKDOWN_EXTENSIONS.some((extension) => entry.name.endsWith(extension))) {
-      files.push(relative(base, full).split(sep).join('/'));
-    }
-  }
-
-  return files.sort();
 }
 
 async function listRemoteKeys(s3: S3Client, config: SyncConfig): Promise<Set<string>> {

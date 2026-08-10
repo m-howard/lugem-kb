@@ -376,4 +376,65 @@ describe('loadConfig', () => {
       }
     });
   });
+
+  // requirements.md R12. `PREVIEW_BUCKET` is the master switch, following the CMS and gap blocks.
+  describe('pull request previews', () => {
+    it('is absent when no preview bucket is configured', () => {
+      expect(loadConfig({ ...VALID_ENV }).previews).toBeUndefined();
+    });
+
+    it('reads the bucket and the base URL', () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        PREVIEW_BUCKET: 'lugem-previews',
+        PREVIEW_BASE_URL: 'https://kb.internal/previews',
+      });
+
+      expect(config.previews).toEqual({
+        bucket: 'lugem-previews',
+        baseUrl: 'https://kb.internal/previews',
+      });
+    });
+
+    // Every caller builds `${baseUrl}/pr-42/`, so the trailing slash is normalised away once here
+    // rather than guarded against in each of them.
+    it('drops a trailing slash from the base URL', () => {
+      const config = loadConfig({
+        ...VALID_ENV,
+        PREVIEW_BUCKET: 'lugem-previews',
+        PREVIEW_BASE_URL: 'https://kb.internal/previews/',
+      });
+
+      expect(config.previews?.baseUrl).toBe('https://kb.internal/previews');
+    });
+
+    // A bucket with no base URL would boot, serve previews, and offer authors no link to one —
+    // exactly the half-configured state ADR 0009 moves to start-up.
+    it('refuses a bucket with no base URL, naming the variable', () => {
+      const env = { ...VALID_ENV, PREVIEW_BUCKET: 'lugem-previews' };
+
+      expect(() => loadConfig(env)).toThrow(ConfigError);
+      try {
+        loadConfig(env);
+      } catch (error) {
+        expect((error as ConfigError).variables).toEqual(['PREVIEW_BASE_URL']);
+      }
+    });
+
+    it.each([
+      ['relative', '/previews'],
+      ['schemeless', 'kb.internal/previews'],
+      ['not a URL at all', 'yes please'],
+    ])('refuses a %s base URL', (_case, value) => {
+      const env = { ...VALID_ENV, PREVIEW_BUCKET: 'lugem-previews', PREVIEW_BASE_URL: value };
+
+      expect(() => loadConfig(env)).toThrow(ConfigError);
+    });
+
+    it('does not require a base URL when previews are off', () => {
+      expect(() =>
+        loadConfig({ ...VALID_ENV, PREVIEW_BASE_URL: 'https://kb.internal/previews' }),
+      ).not.toThrow();
+    });
+  });
 });

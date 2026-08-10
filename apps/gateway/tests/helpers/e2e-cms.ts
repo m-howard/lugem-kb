@@ -189,6 +189,9 @@ export async function createE2eCms(origin: string): Promise<E2eCms> {
         nameClaim: 'name',
       },
       allowMergeFromCms: false,
+      // The e2e stack has no preview bucket, so the workflow card offers no preview link — the
+      // same shape as a deployment that has not configured R12.
+      previewBaseUrl: undefined,
     },
   };
 }

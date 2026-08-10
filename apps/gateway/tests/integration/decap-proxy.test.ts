@@ -124,6 +124,8 @@ interface ProxyCallOptions {
   readonly allowMergeFromCms?: boolean;
   readonly captureLogs?: Record<string, unknown>[];
   readonly authorize?: boolean;
+  /** Set to give the deployment a preview surface. Absent is a deployment with none — R12 off. */
+  readonly previewBaseUrl?: string;
 }
 
 async function callProxy(
@@ -137,6 +139,7 @@ async function callProxy(
       ? {}
       : { allowMergeFromCms: options.allowMergeFromCms }),
     ...(options.captureLogs === undefined ? {} : { captureLogs: options.captureLogs }),
+    ...(options.previewBaseUrl === undefined ? {} : { previewBaseUrl: options.previewBaseUrl }),
   });
 
   const response = await cms.app.request(PROXY, {
@@ -612,6 +615,56 @@ describe('the Decap adapter', () => {
     });
   });
 
+  // requirements.md R12: "the preview link is visible on the CMS workflow card". Decap polls this
+  // action per card and renders whatever URL it gets, so `null` is a real answer rather than a
+  // failure — it keeps the card offering to check instead of linking at a build that is not there.
+  describe('preview links (R12)', () => {
+    const PREVIEW_BASE_URL = 'https://kb.test/previews';
+    const ENTRY = { collection: 'guides', slug: 'leave-policy' };
+
+    it('links the card to the preview for the open submission', async () => {
+      const { status, body } = await callProxy('getDeployPreview', ENTRY, {
+        routes: [pullsRoute([OPEN_PULL])],
+        previewBaseUrl: PREVIEW_BASE_URL,
+      });
+
+      expect(status).toBe(200);
+      expect(body).toEqual({ url: 'https://kb.test/previews/pr-42/', status: 'SUCCESS' });
+    });
+
+    it('offers no preview for a draft nobody has submitted yet', async () => {
+      const { status, body } = await callProxy('getDeployPreview', ENTRY, {
+        routes: [pullsRoute([])],
+        previewBaseUrl: PREVIEW_BASE_URL,
+      });
+
+      expect(status).toBe(200);
+      expect(body).toBeNull();
+    });
+
+    // The default deployment. No preview bucket means no preview surface, and the card must say
+    // so rather than linking at a URL that would 404.
+    it('offers no preview when the deployment has no preview surface', async () => {
+      const { status, body } = await callProxy('getDeployPreview', ENTRY, {
+        routes: [pullsRoute([OPEN_PULL])],
+      });
+
+      expect(status).toBe(200);
+      expect(body).toBeNull();
+    });
+
+    it('refuses a request that names no entry', async () => {
+      const { status, body } = await callProxy(
+        'getDeployPreview',
+        {},
+        { previewBaseUrl: PREVIEW_BASE_URL },
+      );
+
+      expect(status).toBe(403);
+      expect(body).toMatchObject({ reason: 'invalid-entry' });
+    });
+  });
+
   describe('what it does not do', () => {
     it('offers an empty media library rather than a broken one', async () => {
       const { status, body } = await callProxy('getMedia', { mediaFolder: 'docs/img' });
@@ -630,13 +683,6 @@ describe('the Decap adapter', () => {
         expect((body as { error: string }).error).toContain('markdown');
       },
     );
-
-    it('answers no deploy preview, which is where R12 will plug in', async () => {
-      const { status, body } = await callProxy('getDeployPreview', {});
-
-      expect(status).toBe(200);
-      expect(body).toBeNull();
-    });
 
     it('refuses an action it does not implement', async () => {
       const { status, body } = await callProxy('dropDatabase', {});

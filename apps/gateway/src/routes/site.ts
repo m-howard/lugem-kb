@@ -3,6 +3,7 @@ import { isAbsolute, join, normalize, resolve, sep } from 'node:path';
 
 import { Hono } from 'hono';
 
+import { contentTypeFor, HTML_CONTENT_TYPE } from './content-types';
 import { type AppEnv } from '../app-env';
 
 const OK = 200;
@@ -10,37 +11,9 @@ const NOT_FOUND = 404;
 const INDEX_FILE = 'index.html';
 const NOT_FOUND_FILE = '404.html';
 
-/** Content types for what a Docusaurus build actually emits. Unknown extensions download rather than render. */
-const CONTENT_TYPES: Readonly<Record<string, string>> = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.map': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.ico': 'image/x-icon',
-  '.webp': 'image/webp',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.txt': 'text/plain; charset=utf-8',
-  '.xml': 'application/xml; charset=utf-8',
-};
-
 export interface SiteRoutesOptions {
   /** Directory holding the built Docusaurus output. */
   readonly root: string;
-}
-
-function contentTypeFor(filePath: string): string {
-  const dot = filePath.lastIndexOf('.');
-  const extension = dot === -1 ? '' : filePath.slice(dot).toLowerCase();
-  return CONTENT_TYPES[extension] ?? 'application/octet-stream';
 }
 
 /**
@@ -137,9 +110,7 @@ export function createSiteRoutes(options: SiteRoutesOptions): Hono<AppEnv> {
       const notFoundPage = await readIfFile(join(resolve(options.root), NOT_FOUND_FILE));
       return notFoundPage === undefined
         ? c.text('Not found', NOT_FOUND)
-        : c.body(new Uint8Array(notFoundPage), NOT_FOUND, {
-            'content-type': CONTENT_TYPES['.html'] ?? 'text/html',
-          });
+        : c.body(new Uint8Array(notFoundPage), NOT_FOUND, { 'content-type': HTML_CONTENT_TYPE });
     }
 
     const contents = await readFile(filePath);

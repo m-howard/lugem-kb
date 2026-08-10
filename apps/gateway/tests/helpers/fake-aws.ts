@@ -23,12 +23,25 @@ export interface FakeCorpusOptions {
   readonly objects: Readonly<Record<string, string>>;
   /** When true, every call rejects — used to exercise the readiness path. */
   readonly unreachable?: boolean;
+  /**
+   * When true, a `GetObject` on a key that is not here answers `AccessDenied` instead of
+   * `NoSuchKey` — a role, bucket policy or encryption grant that is wrong rather than a key that
+   * is absent. The two must not look the same to a caller.
+   */
+  readonly refuseMissing?: boolean;
 }
 
 class NoSuchKeyError extends Error {
   constructor() {
     super('The specified key does not exist.');
     this.name = 'NoSuchKey';
+  }
+}
+
+class AccessDeniedError extends Error {
+  constructor() {
+    super('Access Denied');
+    this.name = 'AccessDenied';
   }
 }
 
@@ -65,10 +78,17 @@ export function fakeS3Client(options: FakeCorpusOptions): S3Client {
       const key = command.input.Key ?? '';
       const body = options.objects[key];
       if (body === undefined) {
-        return Promise.reject(new NoSuchKeyError());
+        return Promise.reject(
+          options.refuseMissing === true ? new AccessDeniedError() : new NoSuchKeyError(),
+        );
       }
       return Promise.resolve({
-        Body: { transformToString: () => Promise.resolve(body) },
+        // Both transforms, as the real SDK offers: the corpus reads text, the preview surface
+        // reads bytes because a build holds fonts and images that a UTF-8 round trip would corrupt.
+        Body: {
+          transformToString: () => Promise.resolve(body),
+          transformToByteArray: () => Promise.resolve(new TextEncoder().encode(body)),
+        },
         LastModified: new Date('2026-08-01T00:00:00.000Z'),
       });
     }
