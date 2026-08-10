@@ -11,8 +11,8 @@ import { createAppKeyLoader, toPkcs8 } from './app-key';
 const SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:111122223333:secret:lugem-cms-app-abc123';
 
 const KEY_PAIR = generateKeyPairSync('rsa', { modulusLength: 2048 });
-const PKCS1_PEM = KEY_PAIR.privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
-const PKCS8_PEM = KEY_PAIR.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
+const PKCS1_PEM = KEY_PAIR.privateKey.export({ type: 'pkcs1', format: 'pem' });
+const PKCS8_PEM = KEY_PAIR.privateKey.export({ type: 'pkcs8', format: 'pem' });
 
 /** A Secrets Manager stand-in that fails loudly on any command but the one expected. */
 function fakeSecrets(secretString: string | undefined) {

@@ -35,7 +35,7 @@ export function toPkcs8(pem: string): string {
   if (!pem.includes(PKCS1_HEADER)) {
     return pem;
   }
-  return createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem' }).toString();
+  return createPrivateKey(pem).export({ type: 'pkcs8', format: 'pem' });
 }
 
 async function readPem(options: AppKeyOptions): Promise<string> {
