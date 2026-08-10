@@ -473,6 +473,11 @@ function cmsEnvironment(
     { name: 'CMS_DEFAULT_BRANCH', value: cms.defaultBranch },
     { name: 'CMS_BRANCH_PREFIX', value: gateway.branchPrefix },
     { name: 'CMS_PATH_PREFIXES', value: gateway.pathPrefixes.join(',') },
+    // requirements.md R15. The folder must stay inside CMS_PATH_PREFIXES and match the static
+    // directory `apps/docs` publishes; `resolveMediaFolder` fails the preview if the first is
+    // wrong, and ADR 0021 records why the second is not derivable here.
+    { name: 'CMS_MEDIA_FOLDER', value: gateway.mediaFolder },
+    { name: 'CMS_MAX_UPLOAD_BYTES', value: String(gateway.maxUploadBytes) },
     { name: 'CMS_APP_SECRET_ARN', value: resolved.cmsSecretArn },
     { name: 'GITHUB_APP_ID', value: cms.app.appId },
     { name: 'GITHUB_APP_INSTALLATION_ID', value: cms.app.installationId },

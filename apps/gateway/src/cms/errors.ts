@@ -15,6 +15,24 @@ export class CmsPolicyError extends Error {
 }
 
 /**
+ * Thrown when an upload is over the configured size limit (requirements.md R15).
+ *
+ * Its own class rather than a {@link CmsPolicyError} because the two deserve different answers. A
+ * policy refusal is 403 — "you may not do that" — while an oversized image is 413: the author is
+ * entitled to add images, and this one is simply too big. An operator reading the audit log should
+ * be able to tell "authors keep hitting the limit, consider raising it" from "somebody is trying to
+ * write outside the documentation", and one status covering both would hide that.
+ */
+export class MediaTooLargeError extends Error {
+  public readonly reason = 'media-too-large';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'MediaTooLargeError';
+  }
+}
+
+/**
  * Thrown when an entry is not under editorial workflow — it has no draft branch, or its draft has
  * already been published.
  *

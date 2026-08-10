@@ -1,5 +1,6 @@
 import { type DecapContext } from './context';
 import { entriesByFiles, entriesByFolder } from './entries';
+import { listMedia, readMediaFile, readUnpublishedMediaFile } from './media';
 import { persistEntry } from './persist';
 import { deployPreviewFor } from './preview';
 import {
@@ -8,9 +9,13 @@ import {
   entriesByFolderParams,
   entryKeyParams,
   getEntryParams,
+  getMediaParams,
+  mediaFileParams,
   persistEntryParams,
+  persistMediaParams,
   type ProxyRequest,
   unpublishedEntryDataFileParams,
+  unpublishedEntryMediaFileParams,
   unpublishedEntryParams,
   updateUnpublishedEntryStatusParams,
 } from './protocol';
@@ -75,10 +80,41 @@ const ACTIONS: Readonly<Record<string, ActionHandler>> = {
     return null;
   },
 
-  // The media library is shown but empty. `PERMITTED_EXTENSIONS` is markdown only, so there is
-  // nothing this could list — and answering with a list rather than an error keeps the editor's
-  // media button from looking broken (requirements.md R15 is a separate, later change).
-  getMedia: () => Promise.resolve([]),
+  // requirements.md R15. The media library, listing the configured folder on the published corpus.
+  getMedia: async (params, context) => {
+    getMediaParams.parse(params);
+    return listMedia(context);
+  },
+
+  getMediaFile: async (params, context) => readMediaFile(context, mediaFileParams.parse(params)),
+
+  // Read from the draft's own branch, which is what keeps an image visible after a reload — the
+  // published corpus does not have it yet.
+  unpublishedEntryMediaFile: async (params, context) =>
+    readUnpublishedMediaFile(context, unpublishedEntryMediaFileParams.parse(params)),
+
+  // Decap sends this only for an upload made from the standalone media library, outside any entry —
+  // and its own git backends answer it by committing straight to the default branch, which branch
+  // policy and branch protection both refuse here. Refused with somewhere to go instead: an image
+  // added from inside a page travels with it (ADR 0021).
+  persistMedia: (params) => {
+    persistMediaParams.parse(params);
+    throw new UnsupportedActionError(
+      'persistMedia',
+      'Add the image from inside the page that will show it, rather than from the media library. ' +
+        'An image is reviewed and published with its page, so it has to travel with one.',
+    );
+  },
+
+  // Decap's proxy backend does not implement deletion, so this is defence rather than a live path.
+  // Removing a published image is a change to the corpus, exactly as removing a page is.
+  deleteMedia: () => {
+    throw new UnsupportedActionError(
+      'deleteMedia',
+      'Removing a published image is a reviewed change. Take it out of the page in a draft and ' +
+        'submit that for review.',
+    );
+  },
 
   // requirements.md R12. Answers `null` — Decap's spelling of "no preview for this entry" — for a
   // draft with no open submission, and on any deployment with no preview bucket configured.
@@ -97,13 +133,6 @@ const ACTIONS: Readonly<Record<string, ActionHandler>> = {
     );
   },
 };
-
-const MEDIA_ACTIONS: readonly string[] = [
-  'getMediaFile',
-  'persistMedia',
-  'deleteMedia',
-  'unpublishedEntryMediaFile',
-];
 
 /**
  * Runs one Decap action against the CMS services.
@@ -124,13 +153,6 @@ export async function dispatch(request: ProxyRequest, context: DecapContext): Pr
   const handler = ACTIONS[request.action];
   if (handler !== undefined) {
     return handler(request.params, context);
-  }
-
-  if (MEDIA_ACTIONS.includes(request.action)) {
-    throw new UnsupportedActionError(
-      request.action,
-      'This documentation CMS stores markdown only, so it cannot hold images or other media.',
-    );
   }
 
   throw new UnsupportedActionError(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ConfigError, loadConfig } from './config';
+import { ConfigError, loadConfig, MAX_ASSETS_PER_SAVE, proxyBodyLimitBytes } from './config';
 
 const VALID_ENV = {
   AWS_REGION: 'us-east-1',
@@ -153,8 +153,89 @@ describe('loadConfig', () => {
         defaultBranch: 'main',
         branchPrefix: 'cms/',
         pathPrefixes: ['docs/'],
+        mediaFolder: 'docs/assets/media/',
+        maxUploadBytes: 2_097_152,
         apiBaseUrl: 'https://api.github.com',
         allowMergeFromCms: false,
+      });
+    });
+
+    describe('the media folder — requirements.md R15', () => {
+      it('normalises a folder written without a trailing slash', () => {
+        const config = loadConfig({
+          ...VALID_ENV,
+          ...CMS_ENV,
+          CMS_MEDIA_FOLDER: 'docs/uploads',
+        });
+
+        expect(config.cms?.mediaFolder).toBe('docs/uploads/');
+      });
+
+      it('accepts a folder under any of the configured write prefixes', () => {
+        const config = loadConfig({
+          ...VALID_ENV,
+          ...CMS_ENV,
+          CMS_PATH_PREFIXES: 'docs/,handbook/',
+          CMS_MEDIA_FOLDER: 'handbook/media/',
+        });
+
+        expect(config.cms?.mediaFolder).toBe('handbook/media/');
+      });
+
+      // A folder the CMS may not write to would let the task boot, pass /healthz, and then refuse
+      // every upload with a path refusal about a folder the author never chose — ADR 0009.
+      it('rejects a folder outside every write prefix, naming both variables', () => {
+        const env = { ...VALID_ENV, ...CMS_ENV, CMS_MEDIA_FOLDER: 'static/img/' };
+
+        try {
+          loadConfig(env);
+          expect.unreachable('loadConfig should have thrown');
+        } catch (error) {
+          expect((error as ConfigError).variables).toEqual([
+            'CMS_MEDIA_FOLDER',
+            'CMS_PATH_PREFIXES',
+          ]);
+        }
+      });
+
+      // Surrounding slashes are normalised away rather than refused, exactly as they are for
+      // CMS_PATH_PREFIXES — one rule about where a directory boundary is, in `normalisePrefix`.
+      it('normalises a leading slash away', () => {
+        const config = loadConfig({
+          ...VALID_ENV,
+          ...CMS_ENV,
+          CMS_MEDIA_FOLDER: '/docs/media/',
+        });
+
+        expect(config.cms?.mediaFolder).toBe('docs/media/');
+      });
+
+      it.each([
+        ['a blank folder, which would mean anywhere', '   /  '],
+        ['a traversal', 'docs/../.github/'],
+        ['a backslash', 'docs\\media\\'],
+      ])('rejects %s', (_case, folder) => {
+        expect(() => loadConfig({ ...VALID_ENV, ...CMS_ENV, CMS_MEDIA_FOLDER: folder })).toThrow(
+          ConfigError,
+        );
+      });
+    });
+
+    describe('the upload limit — requirements.md R15', () => {
+      it('reads a whole number of bytes', () => {
+        const config = loadConfig({
+          ...VALID_ENV,
+          ...CMS_ENV,
+          CMS_MAX_UPLOAD_BYTES: '512000',
+        });
+
+        expect(config.cms?.maxUploadBytes).toBe(512_000);
+      });
+
+      it.each([['0'], ['-1'], ['1.5'], ['2mb'], ['26214401']])('rejects %s', (value) => {
+        expect(() => loadConfig({ ...VALID_ENV, ...CMS_ENV, CMS_MAX_UPLOAD_BYTES: value })).toThrow(
+          ConfigError,
+        );
       });
     });
 
@@ -436,5 +517,20 @@ describe('loadConfig', () => {
         loadConfig({ ...VALID_ENV, PREVIEW_BASE_URL: 'https://kb.internal/previews' }),
       ).not.toThrow();
     });
+  });
+});
+
+describe('proxyBodyLimitBytes', () => {
+  // The limit has to admit a full save, or a middleware would drop a request the policy would have
+  // accepted — and the author would get a worse message than the one R15 asks for.
+  it('leaves room for the maximum number of images at the maximum size, base64 encoded', () => {
+    const perImage = 2_097_152;
+    const encoded = Math.ceil((perImage * 4) / 3) * MAX_ASSETS_PER_SAVE;
+
+    expect(proxyBodyLimitBytes(perImage)).toBeGreaterThan(encoded);
+  });
+
+  it('scales with the configured limit', () => {
+    expect(proxyBodyLimitBytes(4_194_304)).toBeGreaterThan(proxyBodyLimitBytes(2_097_152));
   });
 });

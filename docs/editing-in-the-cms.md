@@ -51,6 +51,40 @@ Every page has four fields above the text:
 Fill in the owning team even when it feels obvious. It is how a reviewer is found, and a page
 without one cannot be published.
 
+## Add an image
+
+Screenshots, org charts, diagrams of a process — put them straight in the page.
+
+1. Open the page you want the image on, and put the cursor where it should go.
+2. Use the image button in the editor's toolbar.
+3. Choose **Upload** and pick your file.
+
+The image appears in the page as you write. It is saved when the page is saved, and it travels with
+the page from then on: the same draft, the same review, the same moment of publication. Nobody sees
+it on the live site before they see the page it belongs to.
+
+| What                | Limit                                               |
+| ------------------- | --------------------------------------------------- |
+| Formats             | PNG, JPEG, GIF, WebP                                |
+| Size, per image     | 2 MB by default — your deployment may allow more    |
+| Where they are kept | One shared folder, so you can reuse one on any page |
+
+Choosing **Upload** while a page is open is the way in. The media library on its own — reached from
+the top of the editor rather than from inside a page — will show you every image already uploaded,
+and you can insert one of those into your page, but it will not accept a _new_ upload. An image has
+to arrive with a page, because that is what gets it reviewed.
+
+Two things are worth knowing before you pick a file:
+
+- **Write alternative text.** The editor asks for it. Readers using a screen reader get nothing else,
+  and the assistant cannot describe a picture to somebody who asks about it.
+- **A screenshot straight off a modern laptop is often several megabytes.** If yours is refused,
+  crop it to the part that matters and export it again — that usually solves both the size and the
+  readability.
+
+SVG files are not accepted. They can contain code as well as pictures, and the documentation site is
+not a safe place to run somebody's code. Export the diagram as PNG instead.
+
 ## Save, then submit
 
 These are two separate actions, on purpose.
@@ -120,12 +154,14 @@ You cannot write a change under somebody else's name. There is no field for it.
 
 ## What it will not do
 
-| You try to                              | What happens                                  |
-| --------------------------------------- | --------------------------------------------- |
-| Upload an image                         | Refused. The CMS holds markdown pages only.   |
-| Delete a page that is already published | Refused. Ask a platform engineer.             |
-| Edit anything outside the documentation | Not offered. You will not see those files.    |
-| Publish your own change                 | Refused. Approval happens in the review step. |
+| You try to                                | What happens                                                 |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| Upload from the media library on its own  | Refused. Add the image from inside a page instead.           |
+| Upload anything that is not an image      | Refused. PNG, JPEG, GIF and WebP only.                       |
+| Delete a page that is already published   | Refused. Ask a platform engineer.                            |
+| Delete an image that is already published | Refused. Take it out of the page in a draft and submit that. |
+| Edit anything outside the documentation   | Not offered. You will not see those files.                   |
+| Publish your own change                   | Refused. Approval happens in the review step.                |
 
 None of these are faults to report. They are the boundaries the CMS was built with, so that a
 documentation editor can never change anything but documentation.
@@ -144,6 +180,17 @@ editing. Reload the page, check their change, and save again.
 **A message about a path or a branch.** The change touched something outside the documentation.
 Usually a page title that produced an unusable file name — try a simpler one, without punctuation.
 
+**"… is 4.2 MB, over the 2.1 MB limit for an image."** The image is too big. Crop or compress it and
+add it again. The message names your file and both sizes, so you know how much to save. Nothing else
+in your page was lost — the save was refused whole, so try again once the image is smaller.
+
+**"… is not PNG data, whatever its name says."** The file's contents do not match its extension,
+which usually means it was renamed rather than exported. Open it in whatever made it and export it
+again as PNG or JPEG.
+
+**"That save is larger than … this editor accepts at once."** Several large images in one save. Save
+the page with a couple of them, then add the rest and save again.
+
 **A comment saying the documentation checks failed.** Something on the page needs fixing before it
 can be published — a missing owner, or a link pointing at a page that is not there. The comment
 lists each one with the line it is on. Fix them and save again; the comment updates itself.
@@ -155,4 +202,5 @@ on. If it is not, that is worth reporting: send it to a platform engineer with w
 
 - [The authoring gateway](./authoring-gateway.md) — how this works, for whoever operates it
 - [ADR 0015](./adr/0015-decap-adapter-in-the-gateway.md) — why the editor works the way it does
+- [ADR 0021](./adr/0021-images-travel-with-the-draft.md) — why an image is saved with its page
 - [Requirements](./requirements.md) — the user stories this page implements

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { AUTH_MODES, type AuthMode } from './auth/verifier';
+import { checkPathSyntax, normalisePrefix } from './kb/key-policy';
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_LOG_LEVEL = 'info';
@@ -26,6 +27,35 @@ const MAX_GAP_FEEDBACK_RETENTION_DAYS = 3650;
 const DEFAULT_CMS_BRANCH = 'main';
 const DEFAULT_CMS_BRANCH_PREFIX = 'cms/';
 const DEFAULT_CMS_PATH_PREFIXES = 'docs/';
+
+/**
+ * Where CMS uploads live, and why one level inside `docs/assets/` (requirements.md R15).
+ *
+ * `apps/docs/docusaurus.config.ts` publishes `docs/assets/` as a static directory, and Docusaurus
+ * copies a static directory's *contents* to the site root — so a folder named `media` inside it is
+ * served at `/media/`, which is the public path Decap writes into the markdown. See ADR 0021.
+ */
+const DEFAULT_CMS_MEDIA_FOLDER = 'docs/assets/media/';
+
+/** 2 MiB. Generous for a screenshot or a diagram; small enough that a base64 body stays sane. */
+const DEFAULT_CMS_MAX_UPLOAD_BYTES = 2_097_152;
+const MAX_CMS_MAX_UPLOAD_BYTES = 26_214_400;
+
+/**
+ * How many images one save may carry.
+ *
+ * Decap sends every image added since the entry was opened in a single `persistEntry`, so this is
+ * a bound on one author's editing session rather than on a page. It exists to keep the proxy's
+ * request-body limit finite — see {@link proxyBodyLimitBytes}.
+ */
+export const MAX_ASSETS_PER_SAVE = 8;
+
+/** Room for the markdown, the JSON envelope and base64 padding on top of the images themselves. */
+const PROXY_BODY_SLACK_BYTES = 524_288;
+
+/** Base64 spends four characters per three bytes. */
+const BASE64_NUMERATOR = 4;
+const BASE64_DENOMINATOR = 3;
 const DEFAULT_GITHUB_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_EMAIL_CLAIM = 'email';
 const DEFAULT_NAME_CLAIM = 'name';
@@ -113,12 +143,39 @@ export interface PreviewConfig {
   readonly baseUrl: string;
 }
 
+/**
+ * The proxy endpoint's request-body limit, from the per-image limit.
+ *
+ * A body over this never reaches a handler, so the number has to be derived from the same value the
+ * handler enforces rather than picked: an author whose save is dropped by a middleware would
+ * otherwise get a different, worse message than one whose image is refused by policy.
+ *
+ * Base64 costs a third on top of the bytes, and one save may carry
+ * {@link MAX_ASSETS_PER_SAVE} images.
+ *
+ * @param maxUploadBytes - The per-image limit.
+ * @returns The request-body limit in bytes.
+ *
+ * @example
+ * ```ts
+ * proxyBodyLimitBytes(2_097_152); // → 22_893_397
+ * ```
+ */
+export function proxyBodyLimitBytes(maxUploadBytes: number): number {
+  const encoded = Math.ceil((maxUploadBytes * BASE64_NUMERATOR) / BASE64_DENOMINATOR);
+  return encoded * MAX_ASSETS_PER_SAVE + PROXY_BODY_SLACK_BYTES;
+}
+
 /** Present only when the CMS is switched on. Absent means no editorial routes are mounted at all. */
 export interface CmsConfig {
   readonly repository: string;
   readonly defaultBranch: string;
   readonly branchPrefix: string;
   readonly pathPrefixes: readonly string[];
+  /** Repository folder authors upload images into — requirements.md R15, ADR 0021. */
+  readonly mediaFolder: string;
+  /** Largest single upload, in bytes. */
+  readonly maxUploadBytes: number;
   readonly appId: string;
   readonly installationId: string;
   readonly secretArn: string | undefined;
@@ -195,6 +252,8 @@ const CMS_KEYS = {
   defaultBranch: 'CMS_DEFAULT_BRANCH',
   branchPrefix: 'CMS_BRANCH_PREFIX',
   pathPrefixes: 'CMS_PATH_PREFIXES',
+  mediaFolder: 'CMS_MEDIA_FOLDER',
+  maxUploadBytes: 'CMS_MAX_UPLOAD_BYTES',
   appId: 'GITHUB_APP_ID',
   installationId: 'GITHUB_APP_INSTALLATION_ID',
   secretArn: 'CMS_APP_SECRET_ARN',
@@ -255,6 +314,67 @@ function resolveKeySource(env: Env): Pick<CmsConfig, 'secretArn' | 'privateKeyPa
     );
   }
   return { secretArn, privateKeyPath };
+}
+
+/**
+ * Resolves the media folder, refusing one the CMS could never write to (requirements.md R15).
+ *
+ * The containment check is the point. A folder outside the write prefixes would let the task boot,
+ * pass `/healthz`, join the target group, and then refuse every upload with a path refusal about a
+ * folder the author never chose — the failure ADR 0009 exists to move to start-up.
+ *
+ * @param env - Environment to read from.
+ * @param pathPrefixes - The already-resolved write prefixes.
+ * @returns The folder, with exactly one trailing slash.
+ * @throws {ConfigError} When the folder is malformed or outside every write prefix.
+ */
+function resolveMediaFolder(env: Env, pathPrefixes: readonly string[]): string {
+  const configured = read(env, CMS_KEYS.mediaFolder) ?? DEFAULT_CMS_MEDIA_FOLDER;
+  const folder = normalisePrefix(configured);
+
+  if (folder === '') {
+    throw new ConfigError(
+      [CMS_KEYS.mediaFolder],
+      'must name a folder inside the documentation tree. An empty folder would let an upload be ' +
+        'written anywhere the CMS may write',
+    );
+  }
+
+  const syntax = checkPathSyntax(folder.slice(0, -1));
+  if (syntax !== undefined) {
+    throw new ConfigError(
+      [CMS_KEYS.mediaFolder],
+      `must be a plain repository folder such as ${DEFAULT_CMS_MEDIA_FOLDER} (${syntax.reason})`,
+    );
+  }
+
+  const prefixes = pathPrefixes.map(normalisePrefix).filter((prefix) => prefix !== '');
+  if (!prefixes.some((prefix) => folder.startsWith(prefix))) {
+    throw new ConfigError(
+      [CMS_KEYS.mediaFolder, CMS_KEYS.pathPrefixes],
+      `disagree: uploads would go to ${folder}, which is outside ${prefixes.join(', ') || '(none configured)'}. ` +
+        'Every upload would be refused',
+    );
+  }
+
+  return folder;
+}
+
+function resolveMaxUploadBytes(env: Env): number {
+  const raw = read(env, CMS_KEYS.maxUploadBytes);
+  if (raw === undefined) {
+    return DEFAULT_CMS_MAX_UPLOAD_BYTES;
+  }
+
+  const bytes = Number(raw);
+  if (!Number.isInteger(bytes) || bytes < 1 || bytes > MAX_CMS_MAX_UPLOAD_BYTES) {
+    throw new ConfigError(
+      [CMS_KEYS.maxUploadBytes],
+      `must be a whole number of bytes between 1 and ${String(MAX_CMS_MAX_UPLOAD_BYTES)}`,
+    );
+  }
+
+  return bytes;
 }
 
 function resolveAuthConfig(env: Env): AuthConfig {
@@ -378,14 +498,18 @@ function resolveCmsConfig(env: Env): CmsConfig | undefined {
 
   requireAll(env, [CMS_KEYS.appId, CMS_KEYS.installationId], BECAUSE_CMS);
 
+  const pathPrefixes = (read(env, CMS_KEYS.pathPrefixes) ?? DEFAULT_CMS_PATH_PREFIXES)
+    .split(',')
+    .map((prefix) => prefix.trim())
+    .filter((prefix) => prefix !== '');
+
   return {
     repository,
     defaultBranch: read(env, CMS_KEYS.defaultBranch) ?? DEFAULT_CMS_BRANCH,
     branchPrefix: read(env, CMS_KEYS.branchPrefix) ?? DEFAULT_CMS_BRANCH_PREFIX,
-    pathPrefixes: (read(env, CMS_KEYS.pathPrefixes) ?? DEFAULT_CMS_PATH_PREFIXES)
-      .split(',')
-      .map((prefix) => prefix.trim())
-      .filter((prefix) => prefix !== ''),
+    pathPrefixes,
+    mediaFolder: resolveMediaFolder(env, pathPrefixes),
+    maxUploadBytes: resolveMaxUploadBytes(env),
     appId: read(env, CMS_KEYS.appId) ?? '',
     installationId: read(env, CMS_KEYS.installationId) ?? '',
     ...resolveKeySource(env),

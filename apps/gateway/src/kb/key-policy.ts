@@ -40,6 +40,54 @@ function hasPermittedExtension(path: string): boolean {
 }
 
 /**
+ * Checks the rules that hold for every repository path, whatever it is allowed to contain.
+ *
+ * Extension is deliberately **not** among them. What a path may end in depends on what it is for —
+ * the corpus holds markdown, the media folder holds images — while null bytes, backslashes, absolute
+ * paths, empty segments and traversal are refused everywhere. Splitting the two apart is what lets
+ * `git/media-policy.ts` share these rules without widening {@link PERMITTED_EXTENSIONS}, which would
+ * have let an image into the S3 corpus reader as well.
+ *
+ * @param requestedPath - Path as supplied by the client.
+ * @returns The reason it is refused, or `undefined` when it is syntactically fine.
+ *
+ * @example
+ * ```ts
+ * checkPathSyntax('docs/a/../b.md'); // → { reason: 'traversal', message: '...' }
+ * checkPathSyntax('docs/index.md');  // → undefined
+ * ```
+ */
+export function checkPathSyntax(
+  requestedPath: string,
+): { readonly reason: KeyPolicyViolation; readonly message: string } | undefined {
+  if (requestedPath.trim() === '') {
+    return { reason: 'empty-path', message: 'Document path is empty.' };
+  }
+  if (requestedPath.includes('\0')) {
+    return { reason: 'null-byte', message: 'Document path contains a null byte.' };
+  }
+  if (requestedPath.includes('\\')) {
+    return { reason: 'backslash', message: 'Document path contains a backslash.' };
+  }
+  if (requestedPath.startsWith('/')) {
+    return {
+      reason: 'absolute-path',
+      message: 'Document path must be relative to the corpus prefix.',
+    };
+  }
+
+  const segments = requestedPath.split('/');
+  if (segments.some((segment) => segment === '')) {
+    return { reason: 'empty-segment', message: 'Document path contains an empty segment.' };
+  }
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    return { reason: 'traversal', message: 'Document path contains a relative traversal segment.' };
+  }
+
+  return undefined;
+}
+
+/**
  * Turns a client-supplied document path into an S3 key confined to the corpus prefix, or refuses it.
  *
  * Every refusal happens here, before any upstream call, so a policy failure can never partially
@@ -67,25 +115,9 @@ export function resolveDocumentKey(
   requestedPath: string,
   options: { readonly prefix: string },
 ): ResolvedKey {
-  if (requestedPath.trim() === '') {
-    return refuse('empty-path', 'Document path is empty.');
-  }
-  if (requestedPath.includes('\0')) {
-    return refuse('null-byte', 'Document path contains a null byte.');
-  }
-  if (requestedPath.includes('\\')) {
-    return refuse('backslash', 'Document path contains a backslash.');
-  }
-  if (requestedPath.startsWith('/')) {
-    return refuse('absolute-path', 'Document path must be relative to the corpus prefix.');
-  }
-
-  const segments = requestedPath.split('/');
-  if (segments.some((segment) => segment === '')) {
-    return refuse('empty-segment', 'Document path contains an empty segment.');
-  }
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
-    return refuse('traversal', 'Document path contains a relative traversal segment.');
+  const syntax = checkPathSyntax(requestedPath);
+  if (syntax !== undefined) {
+    return refuse(syntax.reason, syntax.message);
   }
   if (!hasPermittedExtension(requestedPath)) {
     return refuse(

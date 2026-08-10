@@ -1,3 +1,4 @@
+import { type MediaPolicyViolation, resolveMediaPath } from './media-policy';
 import { type KeyPolicyViolation, normalisePrefix, resolveDocumentKey } from '../kb/key-policy';
 
 /** A path that is syntactically fine but reaches outside every documentation prefix. */
@@ -90,5 +91,66 @@ export function resolveWritePaths(
     }
     paths.push(resolved.path);
   }
+  return { ok: true, paths };
+}
+
+export interface DraftPathPolicyOptions extends PathPolicyOptions {
+  /** Folder uploads are confined to — requirements.md R15. */
+  readonly mediaFolder: string;
+}
+
+export interface DraftPathRefusal {
+  readonly ok: false;
+  readonly reason: PathPolicyViolation | MediaPolicyViolation;
+  readonly message: string;
+}
+
+/**
+ * Resolves everything one draft commit touches: pages under the documentation prefixes, and images
+ * under the media folder (requirements.md R3, R15).
+ *
+ * A path is accepted if **either** rule accepts it, and the refusal reported is the page rule's
+ * unless the path is plainly aimed at the media folder. That ordering matters for the message an
+ * author sees: `docs/guides/leave.txt` is a page with the wrong extension, not a misplaced image,
+ * and telling them it "must be one of: .png, .jpg" would send them off in the wrong direction.
+ *
+ * Reads are deliberately not routed through here. `resolveWritePath` stays markdown-only, so
+ * `DocumentReader.list` cannot start returning images as entries because uploads became possible.
+ *
+ * @param requestedPaths - Every path the commit touches, writes and deletions alike.
+ * @param options - The page prefixes and the media folder.
+ * @returns Every accepted path, or the first refusal.
+ *
+ * @example
+ * ```ts
+ * resolveDraftPaths(['docs/a.md', 'docs/assets/media/x.png'], {
+ *   prefixes: ['docs/'],
+ *   mediaFolder: 'docs/assets/media/',
+ * });
+ * // → { ok: true, paths: ['docs/a.md', 'docs/assets/media/x.png'] }
+ * ```
+ */
+export function resolveDraftPaths(
+  requestedPaths: readonly string[],
+  options: DraftPathPolicyOptions,
+): { readonly ok: true; readonly paths: readonly string[] } | DraftPathRefusal {
+  const paths: string[] = [];
+
+  for (const requestedPath of requestedPaths) {
+    const asPage = resolveWritePath(requestedPath, options);
+    if (asPage.ok) {
+      paths.push(asPage.path);
+      continue;
+    }
+
+    const asMedia = resolveMediaPath(requestedPath, { folder: options.mediaFolder });
+    if (asMedia.ok) {
+      paths.push(asMedia.path);
+      continue;
+    }
+
+    return requestedPath.startsWith(normalisePrefix(options.mediaFolder)) ? asMedia : asPage;
+  }
+
   return { ok: true, paths };
 }

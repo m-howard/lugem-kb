@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { type PathPolicyViolation, resolveWritePath, resolveWritePaths } from './path-policy';
+import {
+  type PathPolicyViolation,
+  resolveDraftPaths,
+  resolveWritePath,
+  resolveWritePaths,
+} from './path-policy';
 
 const PREFIXES = ['docs/'];
+const MEDIA_FOLDER = 'docs/assets/media/';
 
 describe('resolveWritePath', () => {
   it.each([
@@ -94,5 +100,53 @@ describe('resolveWritePaths', () => {
 
   it('accepts an empty change set without inventing a refusal', () => {
     expect(resolveWritePaths([], { prefixes: PREFIXES })).toEqual({ ok: true, paths: [] });
+  });
+});
+
+describe('resolveDraftPaths', () => {
+  const options = { prefixes: PREFIXES, mediaFolder: MEDIA_FOLDER };
+
+  it('accepts a page and an image in one commit — requirements.md R15', () => {
+    const paths = ['docs/guides/leave.md', `${MEDIA_FOLDER}org-chart.png`];
+
+    expect(resolveDraftPaths(paths, options)).toEqual({ ok: true, paths });
+  });
+
+  it('still refuses an image outside the media folder', () => {
+    expect(resolveDraftPaths(['docs/guides/org-chart.png'], options)).toMatchObject({
+      ok: false,
+      reason: 'extension',
+    });
+  });
+
+  it('refuses the whole commit when one image is not permitted', () => {
+    const result = resolveDraftPaths(
+      ['docs/guides/leave.md', `${MEDIA_FOLDER}payload.exe`, `${MEDIA_FOLDER}fine.png`],
+      options,
+    );
+
+    expect(result).toMatchObject({ ok: false, reason: 'media-extension' });
+  });
+
+  // The message has to point the author at the right mistake. A `.txt` under `docs/guides` is a page
+  // with the wrong extension; telling them it must be a PNG would send them off in the wrong
+  // direction, and vice versa inside the media folder.
+  it('reports the page rule outside the media folder and the media rule inside it', () => {
+    expect(resolveDraftPaths(['docs/guides/notes.txt'], options)).toMatchObject({
+      reason: 'extension',
+    });
+    expect(resolveDraftPaths([`${MEDIA_FOLDER}notes.txt`], options)).toMatchObject({
+      reason: 'media-extension',
+    });
+  });
+
+  it('refuses a media path that escapes the folder by traversal', () => {
+    expect(
+      resolveDraftPaths([`${MEDIA_FOLDER}../../../.github/workflows/ci.png`], options),
+    ).toMatchObject({ ok: false, reason: 'traversal' });
+  });
+
+  it('accepts an empty change set', () => {
+    expect(resolveDraftPaths([], options)).toEqual({ ok: true, paths: [] });
   });
 });

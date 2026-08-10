@@ -5,7 +5,7 @@ import { type Identity } from '../auth/claims';
 import { buildCommitPayload } from '../git/attribution';
 import { type BranchOperation, encodeRefPath, resolveBranch } from '../git/branch-policy';
 import { type GitHubClient } from '../git/github-client';
-import { resolveWritePaths } from '../git/path-policy';
+import { resolveDraftPaths } from '../git/path-policy';
 
 /** Regular, non-executable file. The CMS writes prose; nothing it saves is a program. */
 const BLOB_MODE = '100644';
@@ -13,6 +13,14 @@ const BLOB_MODE = '100644';
 export interface DraftFile {
   readonly path: string;
   readonly content: string;
+  /**
+   * How `content` is encoded. Defaults to `utf8` — a page is text.
+   *
+   * `base64` is how an image arrives (requirements.md R15): the editor sends it that way and the git
+   * host accepts blobs that way, so the bytes are never decoded in between. Re-encoding a 2 MB
+   * screenshot through a UTF-8 string would corrupt it, not just cost time.
+   */
+  readonly encoding?: 'utf8' | 'base64';
 }
 
 export interface SaveDraftRequest {
@@ -57,6 +65,10 @@ export interface DraftServiceOptions {
  * requirement, not an optimisation: a change set validated file by file as it was written would
  * apply its good half and fail on the rest, leaving the repository in a state nobody asked for and
  * no one reviewed.
+ *
+ * A commit may carry pages and images alike (requirements.md R15). That is one commit rather than
+ * two on purpose: an image belongs to the page that shows it, and splitting them would let a
+ * reviewer see a page referring to a file that is not there yet. See ADR 0021.
  */
 export class DraftService {
   readonly #client: GitHubClient;
@@ -78,8 +90,9 @@ export class DraftService {
   async save(request: SaveDraftRequest, identity: Identity): Promise<SavedDraft> {
     const deletions = request.deletions ?? [];
     const branch = this.#resolveBranch(request.branch, 'update');
-    const paths = resolveWritePaths([...request.files.map((file) => file.path), ...deletions], {
+    const paths = resolveDraftPaths([...request.files.map((file) => file.path), ...deletions], {
       prefixes: this.#settings.pathPrefixes,
+      mediaFolder: this.#settings.mediaFolder,
     });
     if (!paths.ok) {
       throw new CmsPolicyError(paths.reason, paths.message);
@@ -168,8 +181,12 @@ export class DraftService {
   }
 
   async #blobEntry(file: DraftFile): Promise<TreeEntryPayload> {
+    const content =
+      file.encoding === 'base64'
+        ? file.content
+        : Buffer.from(file.content, 'utf8').toString('base64');
     const blob = await this.#client.request<ShaResponse>('POST', this.#client.path('/git/blobs'), {
-      content: Buffer.from(file.content, 'utf8').toString('base64'),
+      content,
       encoding: 'base64',
     });
 

@@ -1,4 +1,5 @@
 import { type Context, Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { type ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 
@@ -10,11 +11,19 @@ import { dispatch } from '../cms/decap/dispatch';
 import { proxyRequestSchema } from '../cms/decap/protocol';
 import { DocumentMissingError, type DocumentReader } from '../cms/documents';
 import { type DraftService } from '../cms/drafts';
-import { CmsPolicyError, DraftMissingError, UnsupportedActionError } from '../cms/errors';
+import {
+  CmsPolicyError,
+  DraftMissingError,
+  MediaTooLargeError,
+  UnsupportedActionError,
+} from '../cms/errors';
+import { type MediaService } from '../cms/media';
 import { type CmsSettings } from '../cms/settings';
 import { type SubmissionService } from '../cms/submissions';
+import { proxyBodyLimitBytes } from '../config';
 import { EndpointPolicyError, type GitHubClient, GitHubError } from '../git/github-client';
 import { type InstallationTokenSource } from '../git/installation-token';
+import { formatBytes, MEDIA_EXTENSIONS } from '../git/media-policy';
 import { PERMITTED_EXTENSIONS } from '../kb/key-policy';
 
 const BAD_REQUEST: ContentfulStatusCode = 400;
@@ -22,6 +31,7 @@ const FORBIDDEN: ContentfulStatusCode = 403;
 const NOT_FOUND: ContentfulStatusCode = 404;
 const CONFLICT: ContentfulStatusCode = 409;
 const UNPROCESSABLE = 422;
+const PAYLOAD_TOO_LARGE: ContentfulStatusCode = 413;
 const BAD_GATEWAY: ContentfulStatusCode = 502;
 const CREATED: ContentfulStatusCode = 201;
 const OK: ContentfulStatusCode = 200;
@@ -57,6 +67,8 @@ export interface CmsRoutesOptions {
   readonly reader: DocumentReader;
   readonly drafts: DraftService;
   readonly submissions: SubmissionService;
+  /** Reads uploaded images for the Decap adapter — requirements.md R15. */
+  readonly media: MediaService;
   readonly settings: CmsSettings;
   readonly allowMergeFromCms: boolean;
   readonly auth: ReturnType<typeof createAuthMiddleware>;
@@ -80,18 +92,28 @@ interface Refusal {
 }
 
 /**
- * Maps a thrown error onto the response and the audit decision, or `undefined` to rethrow.
+ * What the gateway itself decided about the request: forbidden, too large, or not there.
  *
- * Refusals and absences are answered distinctly and on purpose: an operator reviewing the audit
- * log needs "someone asked for something forbidden" and "someone asked for something absent" to be
- * different signals, which is the same reason `routes/documents.ts` never answers 404 for a policy
- * refusal.
+ * Each is answered distinctly and on purpose: an operator reviewing the audit log needs "someone
+ * asked for something forbidden", "someone attached something too big" and "someone asked for
+ * something absent" to be different signals, which is the same reason `routes/documents.ts` never
+ * answers 404 for a policy refusal.
  */
-function refusalFor(error: unknown): Refusal | undefined {
+function refusalFromPolicy(error: unknown): Refusal | undefined {
   if (error instanceof CmsPolicyError || error instanceof EndpointPolicyError) {
     return {
       status: FORBIDDEN,
       body: { error: 'forbidden', reason: error.reason, message: error.message },
+      decision: 'refused',
+      reason: error.reason,
+    };
+  }
+  // Its own status rather than the 403 a policy refusal gets: an author is entitled to add images,
+  // and this one is simply too big. See `MediaTooLargeError` for why that distinction is kept.
+  if (error instanceof MediaTooLargeError) {
+    return {
+      status: PAYLOAD_TOO_LARGE,
+      body: { error: 'too_large', reason: error.reason, message: error.message },
       decision: 'refused',
       reason: error.reason,
     };
@@ -104,6 +126,12 @@ function refusalFor(error: unknown): Refusal | undefined {
       reason: 'not-found',
     };
   }
+
+  return undefined;
+}
+
+/** What somebody else decided: the git host refused, or the request never parsed. */
+function refusalFromRequestOrUpstream(error: unknown): Refusal | undefined {
   if (error instanceof GitHubError) {
     return {
       status: STATUS_FROM_UPSTREAM[error.status] ?? BAD_GATEWAY,
@@ -133,6 +161,16 @@ function refusalFor(error: unknown): Refusal | undefined {
     };
   }
   return undefined;
+}
+
+/**
+ * Maps a thrown error onto the response and the audit decision, or `undefined` to rethrow.
+ *
+ * @param error - Whatever the route body threw.
+ * @returns The response and audit decision, or `undefined` when nothing here recognises it.
+ */
+function refusalFor(error: unknown): Refusal | undefined {
+  return refusalFromPolicy(error) ?? refusalFromRequestOrUpstream(error);
 }
 
 type CmsHandler = (c: Context<AppEnv>) => Promise<Response>;
@@ -274,6 +312,23 @@ function handle(handler: CmsHandler, mapRefusal: RefusalMapper = refusalFor): Cm
   };
 }
 
+/**
+ * The site path an uploaded image is served from, derived from where it is stored.
+ *
+ * Derived rather than configured separately, because the two are one fact. `apps/docs` publishes the
+ * media folder's **parent** as a static directory, and Docusaurus copies a static directory's
+ * contents to the site root — so a folder stored at `docs/assets/media/` is served at `/media/`, and
+ * the URL is always the folder's own name. Deriving it here means the browser cannot hold a different
+ * answer from the gateway; see ADR 0021.
+ *
+ * @param mediaFolder - The configured folder, with a trailing slash.
+ * @returns The public path Decap writes into the markdown, e.g. `/media`.
+ */
+function publicFolderFor(mediaFolder: string): string {
+  const segments = mediaFolder.split('/').filter((segment) => segment !== '');
+  return `/${segments[segments.length - 1] ?? ''}`;
+}
+
 function registerReadRoutes(app: Hono<AppEnv>, options: CmsRoutesOptions): void {
   app.get(
     '/config',
@@ -286,6 +341,10 @@ function registerReadRoutes(app: Hono<AppEnv>, options: CmsRoutesOptions): void 
           pathPrefixes: options.settings.pathPrefixes,
           permittedExtensions: PERMITTED_EXTENSIONS,
           allowMergeFromCms: options.allowMergeFromCms,
+          mediaFolder: options.settings.mediaFolder,
+          publicFolder: publicFolderFor(options.settings.mediaFolder),
+          maxUploadBytes: options.settings.maxUploadBytes,
+          permittedMediaExtensions: MEDIA_EXTENSIONS,
         }),
       ),
     ),
@@ -373,8 +432,28 @@ function registerSubmissionRoutes(app: Hono<AppEnv>, options: CmsRoutesOptions):
  * no upstream call.
  */
 function registerProxyRoute(app: Hono<AppEnv>, options: CmsRoutesOptions): void {
+  const maxBodyBytes = proxyBodyLimitBytes(options.settings.maxUploadBytes);
+
   app.post(
     '/proxy',
+    // A save carrying images is the only request to this service whose size is set by what the
+    // author attached rather than what they typed, so it is the only one that needs a ceiling. The
+    // limit is derived from the per-image limit, and says so — a body dropped here never reaches
+    // `resolveAssets`, so this is the only place that refusal can be worded (requirements.md R15).
+    bodyLimit({
+      maxSize: maxBodyBytes,
+      onError: (c) =>
+        c.json(
+          {
+            error:
+              `That save is larger than the ${formatBytes(maxBodyBytes)} this editor accepts at ` +
+              `once. Each image may be up to ${formatBytes(options.settings.maxUploadBytes)}; ` +
+              'add fewer of them at a time, or make them smaller.',
+            reason: 'body-too-large',
+          },
+          PAYLOAD_TOO_LARGE,
+        ),
+    }),
     handle(async (c) => {
       const request = proxyRequestSchema.parse(await c.req.json());
       // Recorded before the action runs, so a refusal is still attributable to what was asked.
@@ -384,6 +463,7 @@ function registerProxyRoute(app: Hono<AppEnv>, options: CmsRoutesOptions): void 
         reader: options.reader,
         drafts: options.drafts,
         submissions: options.submissions,
+        media: options.media,
         settings: options.settings,
         client: options.client,
         identity: c.get('identity'),

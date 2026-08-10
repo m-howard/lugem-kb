@@ -2,6 +2,7 @@ import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 
 import { DocumentReader } from './documents';
 import { DraftService } from './drafts';
+import { MediaService } from './media';
 import { type CmsSettings } from './settings';
 import { SubmissionService } from './submissions';
 import { type IdentityVerifier } from '../auth/verifier';
@@ -34,6 +35,8 @@ export interface CmsDependencies {
   readonly reader: DocumentReader;
   readonly drafts: DraftService;
   readonly submissions: SubmissionService;
+  /** Reads uploaded images — requirements.md R15. Writes go through `drafts`, with the page. */
+  readonly media: MediaService;
   readonly settings: CmsSettings;
   readonly verifier: IdentityVerifier;
   readonly tokens: InstallationTokenSource;
@@ -73,6 +76,8 @@ export function createCmsDependencies(options: CmsDependencyOptions): CmsDepende
     defaultBranch: cms.defaultBranch,
     branchPrefix: cms.branchPrefix,
     pathPrefixes: cms.pathPrefixes,
+    mediaFolder: cms.mediaFolder,
+    maxUploadBytes: cms.maxUploadBytes,
   };
 
   const tokens = new InstallationTokenSource({
@@ -101,6 +106,7 @@ export function createCmsDependencies(options: CmsDependencyOptions): CmsDepende
     previewBaseUrl,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
+    media: new MediaService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),
     verifier,
     allowMergeFromCms: cms.allowMergeFromCms,

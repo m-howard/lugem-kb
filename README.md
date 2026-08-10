@@ -276,7 +276,10 @@ half of Phase 4.
   public CDN, because a preview renders unmerged people and finance content
   ([ADR 0018](docs/adr/0018-previews-behind-the-gateway.md)). `bun run docs:check` gates
   frontmatter, ownership and internal links, and reports a failure as a comment on the pull request
-  rather than a stack trace in a log ([ADR 0019](docs/adr/0019-content-quality-gates.md)). R12, R13.
+  rather than a stack trace in a log ([ADR 0019](docs/adr/0019-content-quality-gates.md)). Authors
+  add images while writing, and each one is committed to the page's own draft branch in the same
+  commit as the markdown, so a screenshot is reviewed and published with the page rather than reaching
+  the live site by itself ([ADR 0021](docs/adr/0021-images-travel-with-the-draft.md)). R12, R13, R15.
 - **Phase 4 (partial) — Rollout.** Review notifications by email — R14. Owners hear when a page
   they own is waiting for review, authors hear when their submission is published or has changes
   requested, and the recipient comes from `CODEOWNERS` and the pull request body rather than from
@@ -290,8 +293,7 @@ half of Phase 4.
   the owning team — R20, R21, R23. R22 is built and switched off, see below.
 
 **Not built yet:** the rest of Phase 4 — onboarding the remaining departments, which is
-organisational rather than engineering work. Image upload through the CMS (R15) is a P1 requirement
-and is not built: the corpus holds markdown only.
+organisational rather than engineering work.
 
 Five known gaps, each recorded where it belongs:
 

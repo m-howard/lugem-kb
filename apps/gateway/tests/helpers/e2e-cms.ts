@@ -15,6 +15,7 @@ import { createBearerVerifier } from '../../src/auth/bearer-verifier';
 import { type CmsDependencies } from '../../src/cms/dependencies';
 import { DocumentReader } from '../../src/cms/documents';
 import { DraftService } from '../../src/cms/drafts';
+import { MediaService } from '../../src/cms/media';
 import { type CmsSettings } from '../../src/cms/settings';
 import { SubmissionService } from '../../src/cms/submissions';
 import { GitHubClient } from '../../src/git/github-client';
@@ -28,18 +29,29 @@ const TOKEN_LIFETIME_SECONDS = 3600;
 const MS_PER_SECOND = 1000;
 const FOUND = 302;
 
+const MEDIA_FOLDER = 'docs/assets/media/';
+
 const SETTINGS: CmsSettings = {
   repository: REPOSITORY,
   defaultBranch: 'main',
   branchPrefix: 'cms/',
   pathPrefixes: ['docs/'],
+  mediaFolder: MEDIA_FOLDER,
+  maxUploadBytes: 2_097_152,
 };
 
 function base64(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64');
 }
 
-/** A corpus of one page, which is enough for the editor to list a collection and open an entry. */
+/** A one-pixel PNG. The media library needs real image bytes, not a placeholder string. */
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAd8s6BwAAAABJRU5ErkJggg==';
+
+/**
+ * A corpus of one page and one image, which is enough for the editor to list a collection, open an
+ * entry, and show a media library with something in it (requirements.md R15).
+ */
 const GIT_ROUTES: readonly FakeGitHubRoute[] = [
   {
     method: 'GET',
@@ -55,8 +67,16 @@ const GIT_ROUTES: readonly FakeGitHubRoute[] = [
     method: 'GET',
     path: `${REPO}/git/trees/tree-main`,
     respond: {
-      tree: [{ path: 'docs/leave-policy.md', type: 'blob', sha: 'blob-leave', size: 30 }],
+      tree: [
+        { path: 'docs/leave-policy.md', type: 'blob', sha: 'blob-leave', size: 30 },
+        { path: `${MEDIA_FOLDER}org-chart.png`, type: 'blob', sha: 'blob-chart', size: 68 },
+      ],
     },
+  },
+  {
+    method: 'GET',
+    path: `${REPO}/git/blobs/blob-chart`,
+    respond: { content: PNG_BASE64, encoding: 'base64' },
   },
   {
     method: 'GET',
@@ -173,6 +193,7 @@ export async function createE2eCms(origin: string): Promise<E2eCms> {
       client,
       reader: new DocumentReader({ client, settings: SETTINGS }),
       drafts: new DraftService({ client, settings: SETTINGS }),
+      media: new MediaService({ client, settings: SETTINGS }),
       submissions: new SubmissionService({ client, settings: SETTINGS, allowMerge: false }),
       verifier: createBearerVerifier({
         issuer,

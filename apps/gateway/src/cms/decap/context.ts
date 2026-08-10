@@ -2,6 +2,7 @@ import { type Identity } from '../../auth/claims';
 import { type GitHubClient } from '../../git/github-client';
 import { type DocumentReader } from '../documents';
 import { type DraftService } from '../drafts';
+import { type MediaService } from '../media';
 import { type CmsSettings } from '../settings';
 import { type SubmissionService } from '../submissions';
 
@@ -16,6 +17,8 @@ export interface DecapContext {
   readonly reader: DocumentReader;
   readonly drafts: DraftService;
   readonly submissions: SubmissionService;
+  /** Reads uploaded images — requirements.md R15. Writing them is `drafts`, with the page. */
+  readonly media: MediaService;
   readonly settings: CmsSettings;
   /** Only for enumerating draft branches — the one read the services do not express. */
   readonly client: GitHubClient;

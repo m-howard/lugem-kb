@@ -63,5 +63,7 @@ account or any knowledge of markdown. Every submission then gets a rendered prev
 — linked from the card and from the pull request, served by the gateway rather than a public CDN
 ([ADR 0018](./adr/0018-previews-behind-the-gateway.md)) — and a content check that reports a
 missing owner or a broken link as a comment the author can act on
-([ADR 0019](./adr/0019-content-quality-gates.md)). Image upload through the CMS (R15) is still not
-built: the corpus holds markdown only.
+([ADR 0019](./adr/0019-content-quality-gates.md)). Authors add images to a page as they write it, and
+each one is committed to the same draft branch in the same commit as the markdown, so a screenshot is
+reviewed and published with the words around it rather than landing on the live site by itself
+([ADR 0021](./adr/0021-images-travel-with-the-draft.md)).

@@ -10,6 +10,8 @@ const SETTINGS: CmsSettings = {
   defaultBranch: 'main',
   branchPrefix: 'cms/',
   pathPrefixes: ['docs/'],
+  mediaFolder: 'docs/assets/media/',
+  maxUploadBytes: 2_097_152,
 };
 
 const ENTRY = { collection: 'docs', slug: 'leave-policy' };

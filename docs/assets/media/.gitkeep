@@ -1,0 +1,5 @@
+Images uploaded through the CMS land here — requirements.md R15, docs/adr/0021-images-travel-with-the-draft.md.
+
+The folder has to exist before the first upload, because `apps/docs/docusaurus.config.ts` publishes
+its parent as a static directory and Docusaurus reads that directory at build time. Everything in
+here is served from the site root: a file at `docs/assets/media/org-chart.png` is `/media/org-chart.png`.
