@@ -120,6 +120,18 @@ const retriever = new Retriever({
   scoreThreshold: SCORE_THRESHOLD,
 });
 
+/**
+ * Collects gaps in memory so the e2e suite can drive the feedback control end to end without a
+ * DynamoDB table. It is the one dependency an e2e run cannot stub with a network fake.
+ */
+const recordedGaps: unknown[] = [];
+const stubRecorder = {
+  record: (event: unknown): Promise<void> => {
+    recordedGaps.push(event);
+    return Promise.resolve();
+  },
+};
+
 const app = createApp({
   corpus,
   retriever,
@@ -135,6 +147,7 @@ const app = createApp({
   siteRoot: 'apps/docs/build',
   askRateLimitPerMinute: ASK_RATE_LIMIT_PER_MINUTE,
   corpusPrefix: PREFIX,
+  recorder: stubRecorder,
 });
 
 Bun.serve({ port, fetch: app.fetch });
