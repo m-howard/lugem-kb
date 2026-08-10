@@ -23,6 +23,13 @@ dist/
 .docusaurus/
 .tsbuild/
 
+# ...but `scripts/build/` holds the tooling that *produces* build output, not the output itself.
+# Without this negation the pattern above swallows it silently: `git add` reports nothing, the file
+# never lands, and the first clean clone discovers it when `bun run docs:build` cannot find its
+# prebuild step. The same trap exists in .prettierignore and eslint.config.mjs; all three are
+# negated together.
+!scripts/build/
+
 # Pulumi — stack config carries account-specific VPC and subnet IDs; only the example is tracked.
 infra/*/Pulumi.*.yaml
 !infra/*/Pulumi.yaml

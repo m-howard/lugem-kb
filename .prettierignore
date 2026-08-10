@@ -2,6 +2,8 @@ node_modules
 dist
 bin
 build
+# Tooling that produces build output, not build output. See the matching note in .gitignore.
+!scripts/build
 .docusaurus
 coverage
 test-results

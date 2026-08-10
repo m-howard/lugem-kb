@@ -40,6 +40,10 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/build/**',
+      // Tooling that produces build output, not build output. Order matters — ESLint applies
+      // ignore patterns in sequence, so the negation has to follow the pattern it undoes. See the
+      // matching note in .gitignore.
+      '!scripts/build/**',
       '**/.docusaurus/**',
       '**/coverage/**',
       '**/test-results/**',
