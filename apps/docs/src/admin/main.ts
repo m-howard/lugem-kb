@@ -1,3 +1,5 @@
+import CMS from 'decap-cms-app';
+
 import { discover, exchangeCode, SignInError } from './oidc-client';
 import {
   buildAuthorizeUrl,
@@ -33,13 +35,9 @@ interface AdminConfig {
   readonly signInPath?: string;
 }
 
-interface CmsConfig {
+interface GatewayCmsConfig {
   readonly repository: string;
   readonly defaultBranch: string;
-}
-
-interface DecapCms {
-  init(options: { config: Record<string, unknown> }): void;
 }
 
 function status(message: string): void {
@@ -49,8 +47,17 @@ function status(message: string): void {
   }
 }
 
+/**
+ * Decap's own configuration type, derived from `init` rather than imported.
+ *
+ * `decap-cms-app` re-exports only the `CMS` interface, so this is how the shape is named without
+ * reaching into `decap-cms-core`'s internals — and it means a Decap upgrade that changes the
+ * config fails this build rather than the editor.
+ */
+type DecapConfig = NonNullable<NonNullable<Parameters<typeof CMS.init>[0]>['config']>;
+
 /** The Decap configuration, built once the gateway has said what repository it serves. */
-function decapConfig(cms: CmsConfig): Record<string, unknown> {
+function decapConfig(cms: GatewayCmsConfig): DecapConfig {
   return {
     backend: { name: 'proxy', proxy_url: PROXY_PATH, branch: cms.defaultBranch },
     // Not a choice. Decap's simple mode commits straight to the configured branch, which branch
@@ -158,15 +165,27 @@ async function ensureAlbSession(config: AdminConfig): Promise<boolean> {
   return response.ok;
 }
 
-async function startEditor(): Promise<void> {
-  const response = await fetch(CMS_CONFIG_PATH);
+/**
+ * Asks the gateway what repository it serves, then starts the editor.
+ *
+ * The token is attached here rather than left to the `fetch` wrapper. That wrapper authorises the
+ * adapter endpoint and nothing else, because it is installed globally and Decap is not the only
+ * thing on the page that calls `fetch`; this request knows its own credential and can say so.
+ * In `alb` mode there is no token and the session cookie travels by itself.
+ *
+ * @param token - The author's access token, when there is one.
+ */
+async function startEditor(token: string | undefined): Promise<void> {
+  const response = await fetch(CMS_CONFIG_PATH, {
+    headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+  });
   if (!response.ok) {
     throw new SignInError('Signed in, but the gateway would not describe its repository.');
   }
 
-  const cms = (await response.json()) as CmsConfig;
+  const cms = (await response.json()) as GatewayCmsConfig;
   status('');
-  (globalThis as unknown as { CMS: DecapCms }).CMS.init({ config: decapConfig(cms) });
+  CMS.init({ config: decapConfig(cms) });
 }
 
 async function main(): Promise<void> {
@@ -180,7 +199,7 @@ async function main(): Promise<void> {
 
   if (config.authMode === 'alb') {
     if (await ensureAlbSession(config)) {
-      await startEditor();
+      await startEditor(undefined);
     }
     return;
   }
@@ -203,7 +222,7 @@ async function main(): Promise<void> {
     }
   }
 
-  await startEditor();
+  await startEditor(session.readToken()?.token);
 }
 
 main().catch((error: unknown) => {
