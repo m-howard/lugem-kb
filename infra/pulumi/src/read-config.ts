@@ -36,6 +36,8 @@ export function readStackConfig(): StackConfig {
     answerMaxTokens: config.getNumber('answerMaxTokens'),
     askRateLimitPerMinute: config.getNumber('askRateLimitPerMinute'),
     retrievalScoreThreshold: config.getNumber('retrievalScoreThreshold'),
+    gapFeedbackRetentionDays: config.getNumber('gapFeedbackRetentionDays'),
+    readerAuthRequired: config.getBoolean('readerAuthRequired'),
   });
 }
 
@@ -79,5 +81,6 @@ export function readGithubConfig(): GithubConfig | undefined {
     // Read from the AWS half so `cmsAuthMode: alb` can be refused without a certificate. Both
     // readers see the same `pulumi.Config`, so they cannot disagree about its value.
     certificateArn: config.get('certificateArn'),
+    readerAuthRequired: config.getBoolean('readerAuthRequired'),
   });
 }

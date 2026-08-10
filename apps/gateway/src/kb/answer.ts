@@ -7,7 +7,7 @@ import {
 
 import { type CitationView, type CitationViewer } from './citation-view';
 import { buildGroundingPrompt } from './grounding-prompt';
-import { type Retriever } from './retrieve';
+import { type NearestMiss, type Retriever } from './retrieve';
 
 export interface ConversationMessage {
   readonly role: 'user' | 'assistant';
@@ -26,7 +26,12 @@ export interface AnswerStats {
 }
 
 export type AnswerOutcome =
-  | { readonly covered: false; readonly reason: 'no-documentation-covers-this' }
+  | {
+      readonly covered: false;
+      readonly reason: 'no-documentation-covers-this';
+      /** Passed through from retrieval so the route can attribute the gap — requirements.md R23. */
+      readonly nearestMiss: NearestMiss | undefined;
+    }
   | {
       readonly covered: true;
       readonly citations: readonly CitationView[];
@@ -137,7 +142,7 @@ export class Answerer {
   async answer(request: AnswerRequest, signal?: AbortSignal): Promise<AnswerOutcome> {
     const retrieved = await this.#retriever.retrieve(request.question);
     if (!retrieved.covered) {
-      return { covered: false, reason: retrieved.reason };
+      return { covered: false, reason: retrieved.reason, nearestMiss: retrieved.nearestMiss };
     }
 
     const citations = await this.#viewer.present(retrieved.citations);

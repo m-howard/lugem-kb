@@ -107,8 +107,21 @@ describe('Answerer', () => {
 
     const outcome = await answerer.answer({ question: 'unicorn policy?', history: [] });
 
-    expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+    expect(outcome).toMatchObject({ covered: false, reason: 'no-documentation-covers-this' });
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // R23: the route records the gap, and it can only name a documentation area if the near miss
+  // survives the trip through the answerer rather than being dropped at this boundary.
+  it('passes the nearest miss through, so the gap can be attributed', async () => {
+    const { answerer } = build({ score: 0.1 });
+
+    const outcome = await answerer.answer({ question: 'unicorn policy?', history: [] });
+
+    expect(outcome).toMatchObject({
+      covered: false,
+      nearestMiss: { sourceUri: SOURCE_URI, score: 0.1 },
+    });
   });
 
   // The model call lives inside the generator, so obtaining an outcome does not start it. A

@@ -61,6 +61,52 @@ test.describe('the ask widget', () => {
     await expect(panel.getByText('Sources')).toBeVisible();
   });
 
+  // R23's reader half, end to end. The unit tests cover the state machine and the route; this is
+  // the seam between them — that the id from the citations frame survives into the POST.
+  test('reports an unhelpful answer, and says so once it lands', async ({ page }) => {
+    await page.goto('/adr/0001-bun-workspace-monorepo');
+    await page.getByRole('button', { name: 'Ask the docs' }).click();
+
+    const panel = page.getByRole('dialog', { name: 'Ask the documentation' });
+    await panel.getByLabel('Your question').fill(COVERED_QUESTION);
+    await panel.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(panel.getByText('existing VPC')).toBeVisible();
+
+    const posted = page.waitForRequest(
+      (request) => request.url().endsWith('/v1/feedback') && request.method() === 'POST',
+    );
+
+    await panel.getByRole('button', { name: 'This did not help' }).click();
+    await panel
+      .getByLabel('What were you looking for? (optional)')
+      .fill('It answered the wrong thing.');
+    await panel.getByRole('button', { name: 'Send' }).click();
+
+    const request = await posted;
+    expect(request.postDataJSON()).toMatchObject({
+      question: COVERED_QUESTION,
+      reason: 'It answered the wrong thing.',
+    });
+
+    await expect(panel.getByText('Thanks — we have recorded this gap.')).toBeVisible();
+  });
+
+  // Nothing to rate when there was no answer, and the gap is already recorded server-side.
+  test('offers no feedback control when nothing covered the question', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Ask the docs' }).click();
+
+    const panel = page.getByRole('dialog', { name: 'Ask the documentation' });
+    await panel.getByLabel('Your question').fill(UNCOVERED_QUESTION);
+    await panel.getByRole('button', { name: 'Ask', exact: true }).click();
+
+    // Scoped to the transcript. The same sentence also reaches the visually hidden status region,
+    // which is how a screen reader hears it — asserting on both at once is a strict-mode clash.
+    const transcript = panel.getByRole('log');
+    await expect(transcript.getByText('No documentation covers this question.')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'This did not help' })).toHaveCount(0);
+  });
+
   // The citation is only evidence if the reader can reach it. This is the assertion that catches
   // a source-URI-to-route mapping that drifts away from what the site actually builds.
   test('a citation links to a page the site really has', async ({ page }) => {

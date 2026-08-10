@@ -1,10 +1,16 @@
 import { type ReactElement } from 'react';
 
 import { Citations } from './Citations';
+import { FeedbackControl } from './FeedbackControl';
 import styles from './styles.module.css';
 import { type Turn } from './types';
 
-function AnswerTurn({ turn }: { readonly turn: Extract<Turn, { kind: 'answer' }> }): ReactElement {
+interface AnswerTurnProps {
+  readonly turn: Extract<Turn, { kind: 'answer' }>;
+  readonly onUnhelpful: (reason?: string) => void;
+}
+
+function AnswerTurn({ turn, onUnhelpful }: AnswerTurnProps): ReactElement {
   return (
     <div className={styles.answer}>
       {/*
@@ -18,6 +24,13 @@ function AnswerTurn({ turn }: { readonly turn: Extract<Turn, { kind: 'answer' }>
         {turn.status === 'streaming' && <span className={styles.caret} aria-hidden="true" />}
       </p>
       {turn.citations.length > 0 && <Citations citations={turn.citations} />}
+      {/*
+        Only once the answer has finished. Asking a reader to judge a half-written answer would
+        collect a complaint about the streaming, not about the documentation.
+      */}
+      {turn.status === 'complete' && turn.answerId !== '' && (
+        <FeedbackControl status={turn.feedback} onSubmit={onUnhelpful} />
+      )}
     </div>
   );
 }
@@ -29,7 +42,13 @@ function AnswerTurn({ turn }: { readonly turn: Extract<Turn, { kind: 'answer' }>
  * API gives that case a distinct response shape so a client cannot render it as an answer; this
  * is the client keeping that bargain.
  */
-export function Transcript({ turns }: { readonly turns: readonly Turn[] }): ReactElement {
+export function Transcript({
+  turns,
+  markUnhelpful,
+}: {
+  readonly turns: readonly Turn[];
+  readonly markUnhelpful: (turnId: string, reason?: string) => void;
+}): ReactElement {
   return (
     <div className={styles.transcript} role="log">
       {turns.map((turn) => {
@@ -41,7 +60,25 @@ export function Transcript({ turns }: { readonly turns: readonly Turn[] }): Reac
           );
         }
         if (turn.kind === 'answer') {
-          return <AnswerTurn key={turn.id} turn={turn} />;
+          return (
+            <AnswerTurn
+              key={turn.id}
+              turn={turn}
+              onUnhelpful={(reason) => {
+                markUnhelpful(turn.id, reason);
+              }}
+            />
+          );
+        }
+        if (turn.kind === 'sign-in') {
+          return (
+            <p key={turn.id} className={styles.notCovered}>
+              {turn.message}{' '}
+              {/* A real link, not a fetch: following it lets the load balancer run the identity
+                  provider round trip that mints the session. */}
+              <a href={turn.signInPath}>Sign in</a>, then ask again.
+            </p>
+          );
         }
         if (turn.kind === 'not-covered') {
           return (

@@ -3,6 +3,7 @@ import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 
 import { type AppEnv } from '../app-env';
+import { type GapRecorder } from '../feedback/types';
 import { type AnswerOutcome, type Answerer } from '../kb/answer';
 
 const BAD_REQUEST = 400;
@@ -38,11 +39,14 @@ const askRequestSchema = z.object({
 
 export interface AskRoutesOptions {
   readonly answerer: Answerer;
+  /** Absent when no feedback table is configured — gaps are then simply not recorded. */
+  readonly recorder?: GapRecorder | undefined;
 }
 
 function streamAnswer(
   c: Context<AppEnv>,
   outcome: Extract<AnswerOutcome, { covered: true }>,
+  answerId: string,
 ): Response {
   const logger = c.get('logger');
   const startedAt = Date.now();
@@ -52,7 +56,14 @@ function streamAnswer(
     // structural rather than hopeful, lets the reader see the sources while the prose is still
     // arriving, and puts a byte on the wire before the model's time-to-first-token can run down
     // the ALB idle timer.
-    await stream.writeSSE({ event: 'citations', data: JSON.stringify(outcome.citations) });
+    //
+    // The answer id rides in this frame rather than a header or a frame of its own: it is the
+    // handle the reader posts back to `/v1/feedback`, and nothing should arrive before the
+    // citations do.
+    await stream.writeSSE({
+      event: 'citations',
+      data: JSON.stringify({ answerId, citations: outcome.citations }),
+    });
 
     try {
       for await (const chunk of outcome.chunks) {
@@ -62,7 +73,11 @@ function streamAnswer(
       // The status line went out with the citations frame, so this cannot be a 500. The client
       // learns from the event type instead.
       logger.error(
-        { err: error instanceof Error ? error.message : String(error), decision: 'answer-failed' },
+        {
+          err: error instanceof Error ? error.message : String(error),
+          decision: 'answer-failed',
+          answerId,
+        },
         'answer generation failed mid-stream',
       );
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'answer_failed' }) });
@@ -72,6 +87,7 @@ function streamAnswer(
     logger.info(
       {
         decision: 'answered',
+        answerId,
         citationCount: outcome.citations.length,
         inputTokens: outcome.stats.inputTokens,
         outputTokens: outcome.stats.outputTokens,
@@ -93,10 +109,18 @@ function streamAnswer(
  *
  * Question text, history and answer text are never logged. The corpus contains people-ops
  * content, so "how do I report my manager" is a disclosure about the asker even though the page
- * it retrieves is internally public (requirements.md R22, open question Q11). Counts and timings
- * are logged; content is not.
+ * it retrieves is internally public (requirements.md R22). Counts and timings are logged; content
+ * is not, and that is still true.
  *
- * @param options - The answerer backing the route.
+ * One question does now leave the request: a question this route *declines* is recorded to the
+ * feedback table, because a gap nobody can see is a gap nobody fixes (R23). An answered question is
+ * never recorded, and no record carries who asked. See
+ * docs/adr/0016-recording-documentation-gaps.md, which settles open question Q11.
+ *
+ * The answer id is minted here rather than reusing the request id, which is client-supplied and so
+ * cannot be trusted as the key a reader later posts feedback against.
+ *
+ * @param options - The answerer backing the route, and the recorder gaps are written through.
  * @returns A Hono app exposing `POST /`.
  */
 export function createAskRoutes(options: AskRoutesOptions): Hono<AppEnv> {
@@ -111,17 +135,33 @@ export function createAskRoutes(options: AskRoutesOptions): Hono<AppEnv> {
       );
     }
 
+    const answerId = crypto.randomUUID();
     const outcome = await options.answerer.answer(parsed.data, c.req.raw.signal);
 
     if (!outcome.covered) {
       c.get('logger').info(
-        { decision: 'no-coverage' },
+        { decision: 'no-coverage', answerId },
         'retrieval returned nothing above the relevance threshold',
       );
+      // Belt and braces. The recorder is documented never to reject and its own test pins that,
+      // but a reader must not lose their reply because a later implementation broke the promise.
+      await options.recorder
+        ?.record(
+          {
+            kind: 'no-coverage',
+            route: '/v1/ask',
+            answerId,
+            question: parsed.data.question,
+            nearestSourceUri: outcome.nearestMiss?.sourceUri,
+            nearestScore: outcome.nearestMiss?.score,
+          },
+          c.get('logger'),
+        )
+        .catch(() => undefined);
       return c.json({ covered: false, message: 'No documentation covers this question.' });
     }
 
-    return streamAnswer(c, outcome);
+    return streamAnswer(c, outcome, answerId);
   });
 
   return app;

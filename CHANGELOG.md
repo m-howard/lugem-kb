@@ -31,6 +31,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     log an operator can read (R9).
   - Image upload is not supported: the corpus holds markdown only, so the media library lists
     nothing and uploads are refused with an explanation. R15 is a separate change.
+- **The gap feedback loop** — Phase 5 of [the requirements](docs/requirements.md), so the
+  documentation learns what it is missing. Off unless `GAP_FEEDBACK_TABLE` is set.
+  - A question the corpus cannot answer is recorded, and readers can mark an answer unhelpful with
+    an optional reason. An answered question is never recorded, and no record carries who asked.
+  - Retention is a per-item DynamoDB TTL, defaulting to ninety days, rather than a policy someone
+    has to remember. This settles open question Q11 — see
+    [ADR 0016](docs/adr/0016-recording-documentation-gaps.md).
+  - The gateway task role holds `dynamodb:PutItem` and nothing else, so the service collecting
+    reader questions cannot read one back. A separate role, in its own deployment environment, holds
+    the read.
+  - A weekly workflow groups the gaps, attributes each to the documentation area it came closest to,
+    and keeps one rolling GitHub issue up to date naming the CODEOWNERS owner — so a gap arrives as
+    an assignable authoring task. Run it on demand with `bun run gaps:report -- --dry-run`.
+  - Retrieval now keeps the highest-scoring result that missed the relevance threshold, so a
+    no-coverage question can name an area instead of arriving unattributed. No behaviour a reader
+    sees changes.
+- **Reader authentication, built and switched off** — `READER_AUTH_REQUIRED` requires readers to
+  sign in for `/v1/ask`, `/v1/search` and `/v1/feedback`, and defaults to `false`. With it off,
+  those routes behave exactly as before and no ALB listener rule is created. Auth configuration is
+  lifted out of the CMS block so a deployment can authenticate readers without running a CMS; the
+  environment variable names are unchanged. The rate limiter keys on the reader's subject when
+  there is one, so an office behind a single NAT no longer shares one allowance. See
+  [ADR 0017](docs/adr/0017-reader-authentication.md).
 
 - **The authoring gateway** — Phase 2 of [the requirements](docs/requirements.md), so that someone
   without a git host account can publish. Off unless `CMS_REPOSITORY` is set; with it set, every

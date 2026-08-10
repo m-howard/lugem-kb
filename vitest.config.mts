@@ -13,7 +13,13 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['apps/*/src/**/*.test.ts', 'infra/*/src/**/*.test.ts'],
+          include: [
+            'apps/*/src/**/*.test.ts',
+            'infra/*/src/**/*.test.ts',
+            // Most of `scripts/` is I/O orchestration, but the CODEOWNERS parser is pure logic
+            // that decides who hears about a documentation gap. It is tested like any other.
+            'scripts/**/*.test.ts',
+          ],
           environment: 'node',
         },
       },
@@ -33,6 +39,7 @@ export default defineConfig({
         'apps/gateway/src/**/*.ts',
         'infra/pulumi/src/config.ts',
         'infra/pulumi/src/github-config.ts',
+        'scripts/docs/codeowners.ts',
       ],
       exclude: ['**/*.test.ts', 'apps/gateway/src/index.ts'],
       thresholds: {

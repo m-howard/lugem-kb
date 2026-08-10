@@ -1,0 +1,80 @@
+name: Gap report
+
+# requirements.md R23: questions returning no confident answer are reported to the docs lead on a
+# cadence, naming the owning team from CODEOWNERS — so reader demand arrives as an authoring task
+# rather than an undirected backlog item.
+#
+# Monday morning, so a week of gaps lands before the week is planned. Scheduled workflows only ever
+# run on the default branch, which is what this wants: the report reads `main`'s CODEOWNERS.
+#
+# GitHub disables scheduled workflows in a repository after 60 days without activity. Running this
+# manually re-enables it.
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+# One report at a time. Two concurrent runs would both find no rolling issue and open two.
+concurrency:
+  group: gap-report
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Published by `pulumi up` (see infra/pulumi/src/components/gap-report-pipeline.ts), so a fork or
+  # a clone whose stack has never been deployed skips cleanly. This job deliberately stays outside
+  # the `gap-report` environment: it reads the variables before deciding there is anything to do.
+  check-configuration:
+    name: Check gap report configuration
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ vars.AWS_GAP_REPORT_ROLE_ARN }}" ] && [ -n "${{ vars.GAP_FEEDBACK_TABLE }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping the gap report — Pulumi has not published AWS_GAP_REPORT_ROLE_ARN and GAP_FEEDBACK_TABLE to this repository."
+          fi
+
+  report:
+    name: Report documentation gaps
+    needs: check-configuration
+    if: needs.check-configuration.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    # The IAM trust policy names this environment in its subject condition, so a job that skips the
+    # deployment gate cannot assume the role. The role it assumes holds dynamodb:Query on one table
+    # and nothing else — it is the only credential in the system that can read reader questions.
+    environment: gap-report
+    permissions:
+      contents: read
+      id-token: write
+      # Scoped to this job rather than the workflow, so the configuration gate above cannot write.
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_GAP_REPORT_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: bun install --frozen-lockfile
+
+      # Reads the window, groups by question, resolves each group's nearest page through
+      # CODEOWNERS, and updates one rolling issue in place.
+      - name: Report documentation gaps
+        run: bun run gaps:report
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          GAP_FEEDBACK_TABLE: ${{ vars.GAP_FEEDBACK_TABLE }}
+          GAP_REPORT_WINDOW_DAYS: '7'
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}

@@ -34,9 +34,28 @@ const IDLE_TIMEOUT_SECONDS = 120;
 const CMS_SIGN_IN_RULE_PRIORITY = 5;
 const CMS_AUTH_RULE_PRIORITY = 10;
 const CMS_FORWARD_RULE_PRIORITY = 20;
+const READER_SIGN_IN_RULE_PRIORITY = 30;
+const READER_AUTH_RULE_PRIORITY = 40;
 
-/** Only the editorial surface is authenticated at the edge — never the site or `/v1/ask`. */
+/** The editorial surface. Authenticated at the edge whenever `cmsAuthMode` is `alb`. */
 const CMS_PATH_PATTERN = '/v1/cms/*';
+
+/**
+ * The reader surface, authenticated only when `readerAuthRequired` is on — off by default.
+ *
+ * Never the site itself. R22 is about who may spend a question and whose queries are logged, not
+ * about who may read a page; every reader can already read every page, so putting an identity
+ * provider redirect in front of the documentation would buy nothing. See ADR 0017.
+ */
+const READER_PATH_PATTERNS = ['/v1/ask', '/v1/search', '/v1/feedback'];
+
+/**
+ * Where a reader goes to obtain a session.
+ *
+ * `/v1/cms/identity` cannot serve this: it is mounted only when the CMS is configured, and a
+ * deployment can authenticate readers without running one.
+ */
+const READER_SIGN_IN_PATH = '/v1/identity';
 
 /**
  * Where a browser goes to obtain an ALB session, and the one route that redirects to the IdP.
@@ -57,6 +76,12 @@ export interface GatewayIngressArgs {
   readonly cmsEnabled?: boolean | undefined;
   /** Present only in `cmsAuthMode: alb`, where the load balancer runs the OIDC exchange. */
   readonly cmsAuth?: CmsAlbAuthArgs | undefined;
+  /**
+   * Present only when readers must authenticate *and* the mode is `alb`. Absent — the default —
+   * means not one listener rule below is created and the load balancer behaves exactly as it did
+   * before R22 existed.
+   */
+  readonly readerAuth?: CmsAlbAuthArgs | undefined;
 }
 
 export interface CmsAlbAuthArgs {
@@ -168,6 +193,16 @@ export class GatewayIngress extends pulumi.ComponentResource {
         auth: config.certificateArn === undefined ? undefined : args.cmsAuth,
       });
       this.routingDependencies.push(rule);
+    }
+
+    // Same certificate prerequisite as the editorial rules, for the same reason: `authenticate-oidc`
+    // is an HTTPS listener action. `github-config.ts` refuses the combination at preview.
+    if (args.readerAuth !== undefined && config.certificateArn !== undefined) {
+      this.createReaderAuthRules(name, {
+        auth: args.readerAuth,
+        listener,
+        targetGroup,
+      });
     }
 
     const scheme = config.certificateArn === undefined ? 'http' : 'https';
@@ -404,6 +439,60 @@ export class GatewayIngress extends pulumi.ComponentResource {
    * rule — because `authenticate` on anything broader would put an identity provider round trip in
    * front of API calls that should fail fast with a status a client can read.
    */
+  /**
+   * Reader authentication at the edge, mirroring the editorial rules exactly.
+   *
+   * Both forward to the **public** target group, never the editorial one: that group probes
+   * `/readyz`, which mints a GitHub App installation token readers have no business depending on.
+   *
+   * These use plain `{ parent: this }` rather than `reparentedChild`, unlike their siblings in this
+   * file. The siblings predate the component refactor and carry an alias to a URN they once had;
+   * these never existed at the root, so an alias would point at nothing. See `child-options.ts`.
+   */
+  private createReaderAuthRules(name: string, args: CmsAuthRuleArgs): void {
+    const { auth, listener, targetGroup } = args;
+
+    // The one reader path that redirects. Without it a browser with no cookie is told 401 forever
+    // and given no way to fix it — the same trap `createCmsSignInRule` exists to avoid.
+    new aws.lb.ListenerRule(
+      `${name}-reader-sign-in`,
+      {
+        listenerArn: listener.arn,
+        priority: READER_SIGN_IN_RULE_PRIORITY,
+        conditions: [{ pathPattern: { values: [READER_SIGN_IN_PATH] } }],
+        actions: [
+          {
+            type: 'authenticate-oidc',
+            authenticateOidc: { ...oidcAction(auth), onUnauthenticatedRequest: 'authenticate' },
+          },
+          { type: 'forward', targetGroupArn: targetGroup.arn },
+        ],
+      },
+      { parent: this },
+    );
+
+    new aws.lb.ListenerRule(
+      `${name}-reader-auth`,
+      {
+        listenerArn: listener.arn,
+        priority: READER_AUTH_RULE_PRIORITY,
+        conditions: [{ pathPattern: { values: READER_PATH_PATTERNS } }],
+        actions: [
+          {
+            type: 'authenticate-oidc',
+            // `allow`, for the reason spelled out on the editorial rule: an *expired* session under
+            // `deny` is redirected to the identity provider, and the widget's `fetch` would try to
+            // parse an HTML login page as JSON. Under `allow` the gateway answers a JSON 401 the
+            // client can act on, and `AskWidget` renders a sign-in link.
+            authenticateOidc: { ...oidcAction(auth), onUnauthenticatedRequest: 'allow' },
+          },
+          { type: 'forward', targetGroupArn: targetGroup.arn },
+        ],
+      },
+      { parent: this },
+    );
+  }
+
   private createCmsSignInRule(name: string, args: CmsAuthRuleArgs): void {
     const { auth, listener, targetGroup } = args;
 
@@ -426,7 +515,7 @@ export class GatewayIngress extends pulumi.ComponentResource {
   }
 }
 
-/** The provider settings both rules share; only `onUnauthenticatedRequest` differs between them. */
+/** The provider settings every rule shares; only `onUnauthenticatedRequest` differs between them. */
 function oidcAction(auth: CmsAlbAuthArgs) {
   return {
     issuer: auth.oidc.issuer,

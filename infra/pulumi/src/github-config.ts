@@ -85,6 +85,15 @@ export interface GithubConfigInput {
    * reach it.
    */
   readonly certificateArn?: string | undefined;
+  /**
+   * Whether readers must authenticate — requirements.md R22, ADR 0017.
+   *
+   * Also read from the AWS half, and here for the same reason `certificateArn` is: reader
+   * authentication currently reuses the identity provider the editorial surface configures, so
+   * "you cannot require it without one" is a cross-cutting rule that belongs with the other pure
+   * validation rather than in the composition root where no test can reach it.
+   */
+  readonly readerAuthRequired?: boolean | undefined;
 }
 
 /** The GitHub App the gateway authenticates as — requirements.md R2. */
@@ -384,6 +393,17 @@ export function validateGithubConfig(input: GithubConfigInput): GithubConfig | u
   }
 
   const cmsApp = resolveCmsApp(input);
+
+  // Reader authentication has no identity provider configuration of its own; it borrows the CMS's.
+  // Requiring it without one would deploy an ALB rule pointing at nothing, which fails at apply
+  // rather than at preview. Decoupling the two is recorded as a follow-up in ADR 0017.
+  if ((input.readerAuthRequired ?? false) && cmsApp === undefined) {
+    throw new StackConfigError(
+      ['readerAuthRequired', 'cmsGitHubAppId'],
+      'reader authentication currently reuses the editorial identity provider, so it cannot be ' +
+        'required on a stack with no CMS configured',
+    );
+  }
 
   return {
     owner: fullName.slice(0, separator),

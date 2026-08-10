@@ -6,6 +6,8 @@ import { CmsCredential } from './src/components/cms-credential';
 import { CorpusBucket } from './src/components/corpus-bucket';
 import { CorpusRepository } from './src/components/corpus-repository';
 import { DocsKnowledgeBase } from './src/components/docs-knowledge-base';
+import { GapFeedbackTable } from './src/components/gap-feedback-table';
+import { GapReportPipeline } from './src/components/gap-report-pipeline';
 import { GatewayImage } from './src/components/gateway-image';
 import { GatewayIngress } from './src/components/gateway-ingress';
 import { GatewayService } from './src/components/gateway-service';
@@ -47,6 +49,15 @@ const knowledgeBase = new DocsKnowledgeBase(
   onAws,
 );
 
+// Created unconditionally. R23 is a shipped feature, an idle on-demand table costs approximately
+// nothing, and making it optional would add a second configuration to test in exchange for a class
+// of "why does /v1/feedback answer 404" support questions.
+const gapFeedback = new GapFeedbackTable(
+  NAME,
+  { retentionDays: config.gapFeedbackRetentionDays },
+  onAws,
+);
+
 // The GitHub half is opt-in: it needs an admin token the AWS half does not, and a stack that
 // manages no repository is a supported configuration rather than a half-finished one.
 let corpusRepository: CorpusRepository | undefined;
@@ -78,6 +89,21 @@ if (githubConfig !== undefined) {
     onBoth,
   );
 
+  new GapReportPipeline(
+    NAME,
+    {
+      config,
+      githubConfig,
+      repositoryName: corpusRepository.name,
+      gapFeedbackTableName: gapFeedback.tableName,
+      gapFeedbackTableArn: gapFeedback.tableArn,
+      // Reused rather than resolved again: an account holds at most one provider per URL, and a
+      // second one would pass preview and fail at apply.
+      oidcProviderArn: publishPipeline.oidcProviderArn,
+    },
+    onBoth,
+  );
+
   if (githubConfig.cmsApp !== undefined) {
     cmsCredential = new CmsCredential(
       NAME,
@@ -102,9 +128,21 @@ const cmsAuth =
 // authenticate: `/readyz` gating editorial admission is about the credential, not the login.
 const cmsEnabled = githubConfig?.cmsApp !== undefined && cmsCredential !== undefined;
 
+// R22, and off unless asked for. Reader authentication reuses the identity provider the editorial
+// surface already configures rather than introducing a second one — recorded as a limitation in
+// ADR 0017. With `readerAuthRequired` false, which is the default, not one reader listener rule is
+// created and `pulumi preview` shows no ALB change at all.
+const readerAuth = config.readerAuthRequired ? cmsAuth : undefined;
+
 const ingress = new GatewayIngress(
   NAME,
-  { config, network, cmsEnabled, ...(cmsAuth === undefined ? {} : { cmsAuth }) },
+  {
+    config,
+    network,
+    cmsEnabled,
+    ...(cmsAuth === undefined ? {} : { cmsAuth }),
+    ...(readerAuth === undefined ? {} : { readerAuth }),
+  },
   onAws,
 );
 
@@ -138,6 +176,8 @@ const service = new GatewayService(
     knowledgeBaseId: knowledgeBase.knowledgeBaseId,
     knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
     accountId,
+    gapFeedbackTableName: gapFeedback.tableName,
+    gapFeedbackTableArn: gapFeedback.tableArn,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
     ...(cms === undefined ? {} : { cms }),
     ...(ingress.cmsTargetGroupArn === undefined
@@ -152,6 +192,7 @@ const service = new GatewayService(
 
 export const siteUrl = ingress.url;
 export const corpusBucketName = corpus.bucketName;
+export const gapFeedbackTableName = gapFeedback.tableName;
 export const knowledgeBaseId = knowledgeBase.knowledgeBaseId;
 export const dataSourceId = knowledgeBase.dataSourceId;
 export const vectorBucketName = knowledgeBase.vectorBucketName;

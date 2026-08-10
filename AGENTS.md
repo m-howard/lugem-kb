@@ -63,10 +63,12 @@ Vitest is the only unit/integration runner; Playwright covers e2e.
 | E2E (Playwright)  | `bun run test:e2e`                                                          |
 | Coverage gate     | `bun run test:coverage` (80/80/80/80 — statements/lines/functions/branches) |
 
-The coverage gate measures `apps/gateway/src/**`, `infra/pulumi/src/config.ts` and
-`infra/pulumi/src/github-config.ts` — the code that holds logic. Declarative Pulumi resource wiring
-is excluded from the denominator so the number means something; see
-[ADR 0008](docs/adr/0008-coverage-gate-on-logic-only.md).
+The coverage gate measures `apps/gateway/src/**`, `infra/pulumi/src/config.ts`,
+`infra/pulumi/src/github-config.ts` and `scripts/docs/codeowners.ts` — the code that holds logic.
+Declarative Pulumi resource wiring is excluded from the denominator so the number means something;
+see [ADR 0008](docs/adr/0008-coverage-gate-on-logic-only.md). Most of `scripts/` is I/O
+orchestration and stays out; the CODEOWNERS parser is in because it decides who hears about a
+documentation gap.
 
 **PR rule**: If you change production code under any `src/`, you must include or update tests in
 the same PR.

@@ -63,28 +63,30 @@ pulumi stack init dev
 cp Pulumi.dev.yaml.example Pulumi.dev.yaml   # then edit it
 ```
 
-| Key                       | Required | Notes                                                                          |
-| ------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `aws:region`              | yes      | Must support S3 Vectors and have model access granted.                         |
-| `vpcId`                   | yes      | An existing VPC. Nothing here creates one.                                     |
-| `privateSubnetIds`        | yes      | For the Fargate tasks. Must belong to `vpcId`.                                 |
-| `publicSubnetIds`         | yes      | For the load balancer. Must belong to `vpcId`.                                 |
-| `answerModelId`           | yes      | Bedrock model that writes answers. No default — it names a billed resource.    |
-| `answerModelRegions`      | no       | Regions a cross-region inference profile may route to. Defaults to the region. |
-| `albScheme`               | no       | `internal` (default) or `internet-facing`.                                     |
-| `certificateArn`          | no       | With it the listener is HTTPS and HTTP redirects; without it, plain HTTP.      |
-| `desiredCount`            | no       | Default `1`.                                                                   |
-| `cpu` / `memory`          | no       | Default `512` / `1024`.                                                        |
-| `logRetentionDays`        | no       | Default `30`.                                                                  |
-| `corpusPrefix`            | no       | Default `docs/`. Must end in `/`.                                              |
-| `embeddingModelId`        | no       | Default `amazon.titan-embed-text-v2:0`.                                        |
-| `answerMaxTokens`         | no       | Default `700`. Ceiling on answer length.                                       |
-| `askRateLimitPerMinute`   | no       | Default `20`. Questions per client per minute on `/v1/ask`.                    |
-| `retrievalScoreThreshold` | no       | Default `0.4`. Below it, no documentation is deemed to cover the question.     |
-| `allowUnverifiedRegion`   | no       | Escape hatch for a newly added S3 Vectors region.                              |
-| `corpusRepository`        | no       | Master switch for the GitHub half. Unset, no GitHub resources are managed.     |
-| `cmsGitHubAppId`          | no       | With `cmsGitHubAppInstallationId`, the CMS app the gateway authenticates as.   |
-| `cmsAuthMode`             | no       | Required once the app ids are set. `bearer` or `alb` — see below.              |
+| Key                        | Required | Notes                                                                          |
+| -------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `aws:region`               | yes      | Must support S3 Vectors and have model access granted.                         |
+| `vpcId`                    | yes      | An existing VPC. Nothing here creates one.                                     |
+| `privateSubnetIds`         | yes      | For the Fargate tasks. Must belong to `vpcId`.                                 |
+| `publicSubnetIds`          | yes      | For the load balancer. Must belong to `vpcId`.                                 |
+| `answerModelId`            | yes      | Bedrock model that writes answers. No default — it names a billed resource.    |
+| `answerModelRegions`       | no       | Regions a cross-region inference profile may route to. Defaults to the region. |
+| `albScheme`                | no       | `internal` (default) or `internet-facing`.                                     |
+| `certificateArn`           | no       | With it the listener is HTTPS and HTTP redirects; without it, plain HTTP.      |
+| `desiredCount`             | no       | Default `1`.                                                                   |
+| `cpu` / `memory`           | no       | Default `512` / `1024`.                                                        |
+| `logRetentionDays`         | no       | Default `30`.                                                                  |
+| `corpusPrefix`             | no       | Default `docs/`. Must end in `/`.                                              |
+| `embeddingModelId`         | no       | Default `amazon.titan-embed-text-v2:0`.                                        |
+| `answerMaxTokens`          | no       | Default `700`. Ceiling on answer length.                                       |
+| `askRateLimitPerMinute`    | no       | Default `20`. Questions per client per minute on `/v1/ask`.                    |
+| `retrievalScoreThreshold`  | no       | Default `0.4`. Below it, no documentation is deemed to cover the question.     |
+| `gapFeedbackRetentionDays` | no       | Default `90`. How long a recorded gap question survives — see ADR 0016.        |
+| `readerAuthRequired`       | no       | Default `false`. Requires readers to sign in — see ADR 0017.                   |
+| `allowUnverifiedRegion`    | no       | Escape hatch for a newly added S3 Vectors region.                              |
+| `corpusRepository`         | no       | Master switch for the GitHub half. Unset, no GitHub resources are managed.     |
+| `cmsGitHubAppId`           | no       | With `cmsGitHubAppInstallationId`, the CMS app the gateway authenticates as.   |
+| `cmsAuthMode`              | no       | Required once the app ids are set. `bearer` or `alb` — see below.              |
 
 The GitHub half has several more keys of its own; they live in
 [the corpus repository guide](./corpus-repository.md) rather than here, because setting any of them
@@ -208,6 +210,7 @@ intended behaviour, not a failure. Confirm it in CloudWatch: the log line reads
 | ECS Fargate, 0.5 vCPU / 1 GB, 1 task | ~$15/month                     |
 | Application Load Balancer            | ~$18/month                     |
 | S3 corpus bucket                     | cents                          |
+| DynamoDB gap feedback table          | pay-per-request, no idle floor |
 | **S3 Vectors index**                 | **pay-per-use, no idle floor** |
 | Bedrock embeddings                   | per token, at ingestion        |
 | **Bedrock answer generation**        | **per token, per question**    |

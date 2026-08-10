@@ -51,6 +51,8 @@ export interface GatewayServiceArgs {
   readonly cmsSecretArn?: pulumi.Output<string> | undefined;
   /** The GitHub App and what it may touch. Absent means the editorial routes are never mounted. */
   readonly cms?: GatewayCmsArgs | undefined;
+  readonly gapFeedbackTableName: pulumi.Output<string>;
+  readonly gapFeedbackTableArn: pulumi.Output<string>;
 }
 
 /** Everything `apps/gateway/src/config.ts` needs to switch its CMS block on — requirements.md R10. */
@@ -241,9 +243,22 @@ export class GatewayService extends pulumi.ComponentResource {
         args.cmsSecretArn ?? pulumi.output(''),
         args.cms?.repository ?? pulumi.output(''),
         args.cms?.loadBalancerArn ?? pulumi.output(''),
+        // Appended, never inserted. This tuple is destructured positionally below, so adding an
+        // entry anywhere but the end silently shifts every later binding — and the failure looks
+        // like a container whose CORPUS_BUCKET holds a knowledge base id.
+        args.gapFeedbackTableName,
       ])
       .apply(
-        ([imageUri, corpusBucket, knowledgeBaseId, logGroup, cmsSecretArn, repository, albArn]) => {
+        ([
+          imageUri,
+          corpusBucket,
+          knowledgeBaseId,
+          logGroup,
+          cmsSecretArn,
+          repository,
+          albArn,
+          gapFeedbackTable,
+        ]) => {
           const environment: ContainerEnvironmentEntry[] = [
             { name: 'PORT', value: String(config.containerPort) },
             { name: 'AWS_REGION', value: config.region },
@@ -255,6 +270,12 @@ export class GatewayService extends pulumi.ComponentResource {
             { name: 'ANSWER_MAX_TOKENS', value: String(config.answerMaxTokens) },
             { name: 'ASK_RATE_LIMIT_PER_MINUTE', value: String(config.askRateLimitPerMinute) },
             { name: 'RETRIEVAL_SCORE_THRESHOLD', value: String(config.retrievalScoreThreshold) },
+            { name: 'GAP_FEEDBACK_TABLE', value: gapFeedbackTable },
+            {
+              name: 'GAP_FEEDBACK_RETENTION_DAYS',
+              value: String(config.gapFeedbackRetentionDays),
+            },
+            { name: 'READER_AUTH_REQUIRED', value: String(config.readerAuthRequired) },
             ...cmsEnvironment(args.cms, { cmsSecretArn, repository, albArn }),
           ];
 
@@ -315,8 +336,10 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
       args.knowledgeBaseArn,
       args.accountId,
       args.cmsSecretArn ?? pulumi.output(''),
+      // Appended at the end for the same reason the container tuple is — see the note there.
+      args.gapFeedbackTableArn,
     ])
-    .apply(([bucketArn, knowledgeBaseArn, accountId, cmsSecretArn]) => {
+    .apply(([bucketArn, knowledgeBaseArn, accountId, cmsSecretArn, gapFeedbackTableArn]) => {
       const statements: PolicyStatement[] = [
         {
           Sid: 'ListCorpusPrefixOnly',
@@ -346,6 +369,16 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
           Effect: 'Allow',
           Action: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
           Resource: answerModelArns(config, accountId),
+        },
+        // Write, and nothing else. The service that collects reader questions cannot read a single
+        // one back — no Query, no Scan, no GetItem. Only the scheduled gap report holds that, under
+        // a separate role. It is the strongest sentence in the answer to open question Q11, and it
+        // is true because of this statement. See docs/adr/0016-recording-documentation-gaps.md.
+        {
+          Sid: 'RecordDocumentationGapsWriteOnly',
+          Effect: 'Allow',
+          Action: ['dynamodb:PutItem'],
+          Resource: [gapFeedbackTableArn],
         },
       ];
 

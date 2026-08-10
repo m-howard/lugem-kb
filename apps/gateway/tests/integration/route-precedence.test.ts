@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildCmsTestApp, buildTestApp } from '../helpers/build-test-app';
+import { collectingRecorder } from '../helpers/fake-feedback';
 
 /**
  * The static site is a catch-all, so it is mounted last in `createApp`. Getting that order
@@ -111,6 +112,7 @@ describe('route precedence', () => {
       ['an unknown API path', '/v1/nonsense'],
       ['an unknown CMS path when the CMS is off', '/v1/cms/config'],
       ['a nested unknown path', '/v1/cms/drafts/cms/pricing/extra'],
+      ['the feedback path when gap recording is off', '/v1/feedback'],
     ])('answers %s with JSON 404', async (_case, path) => {
       const response = await buildTestApp({ objects: CORPUS }).request(path);
 
@@ -118,6 +120,30 @@ describe('route precedence', () => {
       expect(response.headers.get('content-type')).toContain('application/json');
       await expect(response.json()).resolves.toMatchObject({ error: 'not_found' });
     });
+  });
+
+  it('keeps /v1/feedback ahead of the terminator when gap recording is switched on', async () => {
+    const response = await buildTestApp({
+      objects: CORPUS,
+      feedback: collectingRecorder(),
+    }).request('/v1/feedback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answerId: crypto.randomUUID(), question: 'anything' }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get('content-type')).toContain('application/json');
+  });
+
+  it('does not let a GET on /v1/feedback fall through to the site', async () => {
+    const response = await buildTestApp({
+      objects: CORPUS,
+      feedback: collectingRecorder(),
+    }).request('/v1/feedback');
+
+    expect(response.status).not.toBe(200);
+    expect(response.headers.get('content-type')).not.toContain('text/html');
   });
 
   it('keeps the CMS routes ahead of the terminator when it is switched on', async () => {

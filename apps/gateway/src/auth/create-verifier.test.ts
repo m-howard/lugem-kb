@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createVerifier } from './dependencies';
+import { createVerifier } from './create-verifier';
 import { type AuthConfig } from '../config';
 
 const CLAIMS = { emailClaim: 'email', nameClaim: 'name' };

@@ -63,7 +63,11 @@ describe('Retriever', () => {
       ['an undefined result list', undefined],
     ])('reports no coverage for %s', async (_case, results) => {
       const outcome = await retrieverOver(results).retrieve('what is our policy on unicorns?');
-      expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+      expect(outcome).toEqual({
+        covered: false,
+        reason: 'no-documentation-covers-this',
+        nearestMiss: undefined,
+      });
     });
 
     it('discards results below the threshold rather than returning weak matches', async () => {
@@ -71,7 +75,7 @@ describe('Retriever', () => {
         result('Loosely related text.', 's3://corpus/docs/other.md', 0.2),
       ]).retrieve('unrelated question');
 
-      expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+      expect(outcome).toMatchObject({ covered: false, reason: 'no-documentation-covers-this' });
     });
 
     it('treats a result with no score as unscored, not as a perfect match', async () => {
@@ -79,7 +83,32 @@ describe('Retriever', () => {
         { content: { text: 'Unscored.' }, location: { s3Location: { uri: 's3://c/d.md' } } },
       ]).retrieve('anything');
 
-      expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+      expect(outcome).toMatchObject({ covered: false, reason: 'no-documentation-covers-this' });
+    });
+
+    // R23: a question the corpus does not cover still has to be attributable to somewhere, or a
+    // gap report is a list of questions with nobody to send them to. The best sub-threshold hit
+    // survives the filter for exactly that, and for nothing the reader ever sees.
+    it('keeps the highest-scoring result that missed the threshold, to attribute the gap', async () => {
+      const outcome = await retrieverOver([
+        result('Loosely related.', 's3://corpus/docs/other.md', 0.2),
+        result('Closer, still not enough.', 's3://corpus/docs/leave.md', 0.35),
+        result('Least related.', 's3://corpus/docs/far.md', 0.05),
+      ]).retrieve('unrelated question');
+
+      expect(outcome).toEqual({
+        covered: false,
+        reason: 'no-documentation-covers-this',
+        nearestMiss: { sourceUri: 's3://corpus/docs/leave.md', score: 0.35 },
+      });
+    });
+
+    it('has no nearest miss when every result was unusable rather than merely weak', async () => {
+      const outcome = await retrieverOver([
+        { content: { text: 'Orphan, no URI.' }, score: 0.99 },
+      ]).retrieve('anything');
+
+      expect(outcome).toMatchObject({ covered: false, nearestMiss: undefined });
     });
   });
 
@@ -96,7 +125,7 @@ describe('Retriever', () => {
       { content: { text: 'Orphan passage.' }, score: 0.99 },
     ]).retrieve('anything');
 
-    expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+    expect(outcome).toMatchObject({ covered: false, reason: 'no-documentation-covers-this' });
   });
 
   it('drops results missing text', async () => {
@@ -104,7 +133,7 @@ describe('Retriever', () => {
       { location: { s3Location: { uri: 's3://c/d.md' } }, score: 0.99 },
     ]).retrieve('anything');
 
-    expect(outcome).toEqual({ covered: false, reason: 'no-documentation-covers-this' });
+    expect(outcome).toMatchObject({ covered: false, reason: 'no-documentation-covers-this' });
   });
 
   it('keeps the good results when only some are unusable', async () => {
