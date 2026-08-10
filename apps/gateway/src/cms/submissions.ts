@@ -187,6 +187,33 @@ export class SubmissionService {
     return this.read(number);
   }
 
+  /**
+   * Closes a submission, returning the change to its author as a draft.
+   *
+   * The draft branch is deliberately left alone. Withdrawing a change from review is not the same
+   * as abandoning it, and an author who moved a card back to "draft" expecting to keep editing
+   * would not thank us for having deleted their work.
+   *
+   * `#requireOwnSubmission` runs here for the same reason it runs in {@link merge}, and it is not
+   * optional: `PATCH /pulls/42` is a well-formed, allowlisted call whatever 42 turns out to be, so
+   * without this an author could close a colleague's release pull request from inside the CMS.
+   * Unlike merging, closing needs no policy flag — it takes nothing into the published corpus.
+   *
+   * @param number - Pull request number.
+   * @returns The submission's state after closing.
+   * @throws {CmsPolicyError} When the pull request is not a CMS submission. Nothing is closed.
+   */
+  async close(number: number): Promise<Submission> {
+    const submission = await this.read(number);
+    this.#requireOwnSubmission(submission);
+
+    await this.#client.request('PATCH', this.#client.path(`/pulls/${String(number)}`), {
+      state: 'closed',
+    });
+
+    return this.read(number);
+  }
+
   #requireOwnSubmission(submission: Submission): void {
     // The git host is case-insensitive about owner and repository, so this comparison is too —
     // matching `endpoint-policy.ts`, which would otherwise disagree with this check.

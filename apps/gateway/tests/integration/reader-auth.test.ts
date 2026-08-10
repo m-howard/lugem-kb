@@ -49,7 +49,7 @@ function bodyFor(path: string): string {
   return JSON.stringify({ question: 'how do I book leave?' });
 }
 
-// requirements.md R22, built and default-off (ADR 0016). Two suites, and the second is the one
+// requirements.md R22, built and default-off (ADR 0017). Two suites, and the second is the one
 // that matters most: it proves the switch genuinely changes nothing when it is off.
 describe('reader authentication, when required', () => {
   it.each(READER_PATHS)('refuses an unauthenticated %s with a reason', async (path) => {

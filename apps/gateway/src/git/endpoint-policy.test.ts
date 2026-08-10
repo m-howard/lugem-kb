@@ -12,6 +12,7 @@ describe('checkEndpoint', () => {
     const cases: readonly [string, string, string][] = [
       ['GET', `${REPO}/git/ref/heads/main`, 'read a branch ref'],
       ['GET', `${REPO}/git/ref/heads/cms/pricing`, 'read a branch ref'],
+      ['GET', `${REPO}/git/matching-refs/heads/cms/`, 'list matching branches'],
       ['GET', `${REPO}/git/trees/abc123?recursive=1`, 'read a tree'],
       ['GET', `${REPO}/git/blobs/abc123`, 'read a blob'],
       ['GET', `${REPO}/git/commits/abc123`, 'read a commit'],
@@ -86,6 +87,20 @@ describe('checkEndpoint', () => {
         what: 'a pull request number that is not one',
         method: 'GET',
         path: `${REPO}/pulls/../secrets`,
+        reason: 'not-allowlisted',
+      },
+      // Enumeration is admitted for branches under a prefix, not for the whole ref namespace. A
+      // bare `heads/` would list every branch in the repository, which is not an editorial need.
+      {
+        what: 'listing every branch',
+        method: 'GET',
+        path: `${REPO}/git/matching-refs/heads/`,
+        reason: 'not-allowlisted',
+      },
+      {
+        what: 'listing tags rather than branches',
+        method: 'GET',
+        path: `${REPO}/git/matching-refs/tags/`,
         reason: 'not-allowlisted',
       },
       {

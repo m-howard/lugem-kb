@@ -122,5 +122,5 @@ answer is the only kind worth keeping, and it is kept for as short a time as is 
 - **[Getting started](./getting-started.md)** — run the site and the service locally.
 - **[ADR 0012](./adr/0012-grounded-generation-behind-retrieval.md)** — why answers are generated
   only from retrieved passages, and what that costs.
-- **[ADR 0015](./adr/0015-recording-documentation-gaps.md)** — exactly what is recorded when the
+- **[ADR 0016](./adr/0016-recording-documentation-gaps.md)** — exactly what is recorded when the
   documentation cannot answer you, and for how long.

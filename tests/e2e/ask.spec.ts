@@ -100,7 +100,10 @@ test.describe('the ask widget', () => {
     await panel.getByLabel('Your question').fill(UNCOVERED_QUESTION);
     await panel.getByRole('button', { name: 'Ask', exact: true }).click();
 
-    await expect(panel.getByText('No documentation covers this question.')).toBeVisible();
+    // Scoped to the transcript. The same sentence also reaches the visually hidden status region,
+    // which is how a screen reader hears it — asserting on both at once is a strict-mode clash.
+    const transcript = panel.getByRole('log');
+    await expect(transcript.getByText('No documentation covers this question.')).toBeVisible();
     await expect(panel.getByRole('button', { name: 'This did not help' })).toHaveCount(0);
   });
 

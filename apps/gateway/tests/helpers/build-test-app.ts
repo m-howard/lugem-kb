@@ -34,6 +34,7 @@ export const TEST_SITE_ROOT = 'apps/gateway/tests/fixtures/site';
 
 export const TEST_REPOSITORY = 'acme/handbook';
 export const TEST_GITHUB_API = 'https://api.github.test';
+export const TEST_ADMIN_CLIENT_ID = 'lugem-cms-admin';
 
 export const TEST_CMS_SETTINGS: CmsSettings = {
   repository: TEST_REPOSITORY,
@@ -76,7 +77,7 @@ export interface TestAppOptions {
   readonly feedback?: CollectingRecorder | undefined;
   /**
    * Present only when a test switches reader authentication on, mirroring READER_AUTH_REQUIRED.
-   * Absent means the reader routes are open, which is the default deployment — see ADR 0016.
+   * Absent means the reader routes are open, which is the default deployment — see ADR 0017.
    */
   readonly readerVerifier?: IdentityVerifier | undefined;
   /** Collects log records instead of discarding them, for tests that assert on audit output. */
@@ -139,6 +140,7 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
   const dependencies: CmsDependencies = {
     settings,
     tokens,
+    client,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({
@@ -152,6 +154,14 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
       claimNames: { email: 'email', name: 'name' },
       keyResolver: idp.keyResolver,
     }),
+    auth: {
+      mode: 'bearer',
+      issuer: idp.issuer,
+      audience: idp.audience,
+      clientId: TEST_ADMIN_CLIENT_ID,
+      emailClaim: 'email',
+      nameClaim: 'name',
+    },
     allowMergeFromCms: options.allowMergeFromCms ?? false,
   };
 

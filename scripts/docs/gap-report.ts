@@ -272,7 +272,7 @@ function renderBody(options: BodyOptions): string {
     ISSUE_MARKER,
     '',
     `Regenerated in full on every run. Questions are readers' own words, recorded only when the`,
-    `documentation could not answer them — see \`docs/adr/0015-recording-documentation-gaps.md\`.`,
+    `documentation could not answer them — see \`docs/adr/0016-recording-documentation-gaps.md\`.`,
     '',
     renderSection({
       heading: `Questions with no documentation (${window})`,

@@ -130,7 +130,7 @@ describe('createRateLimit', () => {
   });
 });
 
-// R22, once reader authentication is on (ADR 0016). Before it, everyone behind one office NAT
+// R22, once reader authentication is on (ADR 0017). Before it, everyone behind one office NAT
 // shared a window, so one enthusiastic colleague could exhaust the allowance for the floor.
 describe('createRateLimit, with an authenticated reader', () => {
   it('gives each subject its own window, even behind one shared address', async () => {

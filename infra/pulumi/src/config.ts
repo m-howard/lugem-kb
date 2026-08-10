@@ -56,7 +56,7 @@ const MAX_SCORE = 1;
  *
  * Ninety days spans a quarter of reports without keeping a reader's words indefinitely. Bounded
  * at ten years because a typo here is a retention policy nobody agreed to — see
- * docs/adr/0015-recording-documentation-gaps.md and requirements.md open question Q11.
+ * docs/adr/0016-recording-documentation-gaps.md and requirements.md open question Q11.
  */
 const DEFAULT_GAP_FEEDBACK_RETENTION_DAYS = 90;
 const MIN_GAP_FEEDBACK_RETENTION_DAYS = 1;
@@ -118,7 +118,7 @@ export interface StackConfig {
    * Whether readers must authenticate for `/v1/ask`, `/v1/search` and `/v1/feedback` (R22).
    *
    * Defaults to false. Turning it on in `alb` mode adds two listener rules and inherits the same
-   * certificate prerequisite `cmsAuthMode: alb` already has — see ADR 0016.
+   * certificate prerequisite `cmsAuthMode: alb` already has — see ADR 0017.
    */
   readonly readerAuthRequired: boolean;
 }

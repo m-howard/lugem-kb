@@ -147,7 +147,7 @@ describe('POST /v1/ask', () => {
   });
 
   // R23. A question the corpus cannot answer is the demand signal the whole feedback loop exists
-  // to collect — and the retention promise in ADR 0015 is the other half: an answered question is
+  // to collect — and the retention promise in ADR 0016 is the other half: an answered question is
   // never written anywhere, so these two tests have to hold together.
   describe('recording gaps', () => {
     it('records the declined question with the page it came closest to', async () => {
@@ -171,7 +171,7 @@ describe('POST /v1/ask', () => {
     });
 
     // THE retention test. If this ever fails, every question a reader asks is being stored, and
-    // the answer to Q11 recorded in ADR 0015 has quietly become untrue.
+    // the answer to Q11 recorded in ADR 0016 has quietly become untrue.
     it('records nothing at all when the question was answered', async () => {
       const feedback = collectingRecorder();
 

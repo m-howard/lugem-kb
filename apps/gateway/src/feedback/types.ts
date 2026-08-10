@@ -6,7 +6,7 @@ import { type Logger } from 'pino';
  * Only two things reach storage: a question the corpus could not answer, and an answer a reader
  * marked unhelpful. An answered question is never recorded, in any form. That boundary is the
  * whole of the retention argument in
- * docs/adr/0015-recording-documentation-gaps.md (requirements.md R22, R23, open question Q11).
+ * docs/adr/0016-recording-documentation-gaps.md (requirements.md R22, R23, open question Q11).
  */
 
 /**

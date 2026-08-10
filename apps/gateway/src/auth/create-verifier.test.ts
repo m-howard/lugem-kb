@@ -15,6 +15,7 @@ describe('createVerifier', () => {
       mode: 'bearer',
       issuer: 'https://idp.example.com/realm',
       audience: 'lugem-cms',
+      clientId: 'lugem-cms-admin',
     };
 
     expect(createVerifier(auth, REGION).mode).toBe('bearer');
@@ -32,7 +33,13 @@ describe('createVerifier', () => {
 
   it('refuses an unauthenticated request in either mode, without a network call', async () => {
     const bearer = createVerifier(
-      { ...CLAIMS, mode: 'bearer', issuer: 'https://idp.example.com', audience: 'lugem-cms' },
+      {
+        ...CLAIMS,
+        mode: 'bearer',
+        issuer: 'https://idp.example.com',
+        audience: 'lugem-cms',
+        clientId: 'a',
+      },
       REGION,
     );
     const alb = createVerifier({ ...CLAIMS, mode: 'alb', loadBalancerArn: 'arn:aws:x' }, REGION);

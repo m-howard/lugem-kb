@@ -1,11 +1,11 @@
 ---
-title: 0015 — Recording documentation gaps
-sidebar_label: 0015 Recording gaps
+title: 0016 — Recording documentation gaps
+sidebar_label: 0016 Recording gaps
 owner: platform
 last_reviewed: 2026-08-10
 ---
 
-# ADR 0015 — Recording documentation gaps
+# ADR 0016 — Recording documentation gaps
 
 - **Date:** 2026-08-10
 - **Status:** Accepted
@@ -42,7 +42,7 @@ Record the questions that name a gap, and only those.
    rest defensible, and it has a test whose failure means the promise here has quietly become
    untrue.
 3. **No identity, ever.** No subject, no email, no address — and not conditionally on whether
-   reader authentication (R22, ADR 0016) happens to be on. Storing the question makes a record
+   reader authentication (R22, ADR 0017) happens to be on. Storing the question makes a record
    sensitive; storing who asked makes it attributable to a person, and R23 needs only the former.
 4. **Retention is an attribute, not a policy document.** Every item carries an `expiresAt` and
    DynamoDB deletes on it. `gapFeedbackRetentionDays` defaults to 90 — long enough to see a pattern

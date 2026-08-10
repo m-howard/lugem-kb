@@ -45,7 +45,7 @@ const CMS_PATH_PATTERN = '/v1/cms/*';
  *
  * Never the site itself. R22 is about who may spend a question and whose queries are logged, not
  * about who may read a page; every reader can already read every page, so putting an identity
- * provider redirect in front of the documentation would buy nothing. See ADR 0016.
+ * provider redirect in front of the documentation would buy nothing. See ADR 0017.
  */
 const READER_PATH_PATTERNS = ['/v1/ask', '/v1/search', '/v1/feedback'];
 

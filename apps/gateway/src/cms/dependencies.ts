@@ -5,7 +5,7 @@ import { DraftService } from './drafts';
 import { type CmsSettings } from './settings';
 import { SubmissionService } from './submissions';
 import { type IdentityVerifier } from '../auth/verifier';
-import { type CmsConfig } from '../config';
+import { type AuthConfig, type CmsConfig } from '../config';
 import { createAppKeyLoader } from '../git/app-key';
 import { GitHubClient } from '../git/github-client';
 import { InstallationTokenSource } from '../git/installation-token';
@@ -14,8 +14,14 @@ export interface CmsDependencyOptions {
   readonly cms: CmsConfig;
   /** AWS region, for Secrets Manager. */
   readonly region: string;
-  /** Built once by `createDependencies` and shared with the reader routes — see ADR 0016. */
+  /** Built once by `createDependencies` and shared with the reader routes — see ADR 0017. */
   readonly verifier: IdentityVerifier;
+  /**
+   * The resolved auth configuration, published (never the verifier) so `/v1/admin/config` can
+   * tell the admin page how to sign in. Auth was lifted out of `CmsConfig` by ADR 0017, so it is
+   * `createDependencies` that resolves it now, from the same config the verifier is built from.
+   */
+  readonly auth: AuthConfig;
 }
 
 /** Everything the editorial routes need, plus the credential the readiness probe checks. */
@@ -27,6 +33,17 @@ export interface CmsDependencies {
   readonly verifier: IdentityVerifier;
   readonly tokens: InstallationTokenSource;
   readonly allowMergeFromCms: boolean;
+  /**
+   * The allowlisted git client itself, for the one editorial read no service expresses: listing
+   * the draft branches the editorial board is built from. Everything else goes through a service.
+   */
+  readonly client: GitHubClient;
+  /**
+   * The resolved auth configuration, so `/v1/admin/config` can tell the admin page how to sign in.
+   * The verifier is built from the same block and remains the only thing that decides who someone
+   * is — this is published for the browser's benefit, and grants nothing.
+   */
+  readonly auth: AuthConfig;
 }
 
 /**
@@ -43,7 +60,7 @@ export interface CmsDependencies {
  * @returns The dependencies the editorial routes and the readiness probe need.
  */
 export function createCmsDependencies(options: CmsDependencyOptions): CmsDependencies {
-  const { cms, region, verifier } = options;
+  const { cms, region, verifier, auth } = options;
   const settings: CmsSettings = {
     repository: cms.repository,
     defaultBranch: cms.defaultBranch,
@@ -72,6 +89,8 @@ export function createCmsDependencies(options: CmsDependencyOptions): CmsDepende
   return {
     settings,
     tokens,
+    client,
+    auth,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),

@@ -1,7 +1,7 @@
 ---
 title: Requirements — docs authoring gateway
 sidebar_label: Requirements
-sidebar_position: 7
+sidebar_position: 8
 owner: platform
 last_reviewed: 2026-08-08
 ---
@@ -20,7 +20,8 @@ last_reviewed: 2026-08-08
        `last_reviewed`, and readers see the review date beside citations.
     4. This file is listed in .prettierignore. Prettier renumbers markdown ordered lists,
        which rewrites story 23 below into a duplicate of 15. Do not remove that entry.
-    5. `sidebar_position` moved from 6 to 7 when docs/authoring-gateway.md joined the corpus.
+    5. `sidebar_position` moved from 6 to 7 when docs/authoring-gateway.md joined the corpus, and
+       from 7 to 8 when docs/editing-in-the-cms.md did.
        Frontmatter only; the document below is unchanged. In particular the §6 checkboxes are NOT
        ticked as phases land — see the README's status section for what is built.
 
@@ -277,10 +278,10 @@ published corpus. Answers come from the corpus or not at all.
 
 #### R22. Reader access and query handling
 
-- [ ] The chat endpoint authenticates against the same IdP as `/admin` (R1); anonymous access is refused — **built, and off by default.** `READER_AUTH_REQUIRED` turns it on; until a deployment does, anonymous access is allowed and this is not met. Deliberate, and the reasoning is in [ADR 0016](adr/0016-reader-authentication.md)
+- [ ] The chat endpoint authenticates against the same IdP as `/admin` (R1); anonymous access is refused — **built, and off by default.** `READER_AUTH_REQUIRED` turns it on; until a deployment does, anonymous access is allowed and this is not met. Deliberate, and the reasoning is in [ADR 0017](adr/0017-reader-authentication.md)
 - [x] The answering service holds no git host credential and no write path through the gateway
 - [x] Paths excluded from the index by configuration never appear in an answer or citation
-- [x] Question text retention and access are restricted per the governance requirement — readers will ask people-ops questions about their own circumstances, so query logs are more sensitive than the corpus they search — settled by [ADR 0015](adr/0015-recording-documentation-gaps.md)
+- [x] Question text retention and access are restricted per the governance requirement — readers will ask people-ops questions about their own circumstances, so query logs are more sensitive than the corpus they search — settled by [ADR 0016](adr/0016-recording-documentation-gaps.md)
 
 #### R23. Gap feedback loop
 
@@ -357,7 +358,7 @@ signal there.
 | Q8 | Does the AI assistant referenced in R11 already exist? Is R20–R23 an integration contract or a new service? | Platform | **Resolved.** A new service, in this repository — `apps/gateway` answers over the corpus directly |
 | Q9 | Model and inference hosting — Bedrock, or an existing internal endpoint? | Platform | **Resolved.** Bedrock, on S3 Vectors — [ADR 0005](adr/0005-bedrock-knowledge-base-on-s3-vectors.md), [ADR 0012](adr/0012-grounded-generation-behind-retrieval.md) |
 | Q10 | Where does chat surface: docs site, chat platform, or both? Drives the R22 auth model. | Docs lead / Platform | **Resolved.** The docs site, served by the same gateway. A chat platform surface would reopen it |
-| Q11 | Retention and access policy for question logs, given people-ops content | Compliance / People ops | **Resolved.** Gap questions only, 90-day TTL, write-only from the service — [ADR 0015](adr/0015-recording-documentation-gaps.md) |
+| Q11 | Retention and access policy for question logs, given people-ops content | Compliance / People ops | **Resolved.** Gap questions only, 90-day TTL, write-only from the service — [ADR 0016](adr/0016-recording-documentation-gaps.md) |
 | Q12 | Expected query volume and cost ceiling — does budget constrain the retrieval design? | Platform | No |
 | Q13 | Any pages readable on the site that should nonetheless be excluded from the index? | Docs lead | No |
 
@@ -374,7 +375,7 @@ containing HR and finance content are personal data in a way the corpus itself i
 not — "how do I report my manager" is a disclosure even though the page it retrieves
 is public internally.
 
-The answer, in [ADR 0015](adr/0015-recording-documentation-gaps.md), is narrow on
+The answer, in [ADR 0016](adr/0016-recording-documentation-gaps.md), is narrow on
 purpose. Only two things are stored: a question the corpus could not answer, and an
 answer a reader marked unhelpful. An answered question is never stored, no record
 carries who asked, retention is a per-item TTL defaulting to ninety days, and the

@@ -373,7 +373,7 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
         // Write, and nothing else. The service that collects reader questions cannot read a single
         // one back — no Query, no Scan, no GetItem. Only the scheduled gap report holds that, under
         // a separate role. It is the strongest sentence in the answer to open question Q11, and it
-        // is true because of this statement. See docs/adr/0015-recording-documentation-gaps.md.
+        // is true because of this statement. See docs/adr/0016-recording-documentation-gaps.md.
         {
           Sid: 'RecordDocumentationGapsWriteOnly',
           Effect: 'Allow',
@@ -430,6 +430,7 @@ function cmsEnvironment(
     entries.push(
       { name: 'AUTH_ISSUER_URL', value: gateway.issuerUrl ?? '' },
       { name: 'AUTH_AUDIENCE', value: gateway.audience ?? '' },
+      { name: 'AUTH_CLIENT_ID', value: gateway.clientId ?? '' },
     );
   }
 

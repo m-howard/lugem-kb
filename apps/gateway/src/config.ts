@@ -18,7 +18,7 @@ const MAX_ASK_RATE_LIMIT_PER_MINUTE = 10_000;
 /**
  * How long a recorded gap survives. Ninety days is long enough to see a pattern across a quarter's
  * reports and short enough that a question asked once does not sit in a table forever — see
- * docs/adr/0015-recording-documentation-gaps.md and requirements.md open question Q11.
+ * docs/adr/0016-recording-documentation-gaps.md and requirements.md open question Q11.
  */
 const DEFAULT_GAP_FEEDBACK_RETENTION_DAYS = 90;
 const MAX_GAP_FEEDBACK_RETENTION_DAYS = 3650;
@@ -70,7 +70,20 @@ export type AuthConfig = {
   readonly emailClaim: string;
   readonly nameClaim: string;
 } & (
-  | { readonly mode: 'bearer'; readonly issuer: string; readonly audience: string }
+  | {
+      readonly mode: 'bearer';
+      readonly issuer: string;
+      readonly audience: string;
+      /**
+       * The public OIDC client the `/admin` page signs in as.
+       *
+       * Required in `bearer` mode because Decap's proxy backend sends no `Authorization` header of
+       * its own — the admin page has to obtain a token itself, and it cannot start an
+       * authorization-code flow without a client id. Public by nature: it travels in the browser's
+       * redirect URL either way, which is why `/v1/admin/config` may serve it anonymously.
+       */
+      readonly clientId: string;
+    }
   | { readonly mode: 'alb'; readonly loadBalancerArn: string }
 );
 
@@ -113,7 +126,7 @@ export type Config = BaseConfig & {
    *
    * **Defaults to false**, and that is a decision rather than an oversight. ADR 0013 left
    * `/v1/ask` open because putting a login in front of every reader buys nothing until someone
-   * asks for it; ADR 0016 builds the mechanism without making that choice for every deployment.
+   * asks for it; ADR 0017 builds the mechanism without making that choice for every deployment.
    */
   readonly readerAuthRequired: boolean;
 };
@@ -178,6 +191,7 @@ const AUTH_KEYS = {
   issuer: 'AUTH_ISSUER_URL',
   audience: 'AUTH_AUDIENCE',
   albArn: 'AUTH_ALB_ARN',
+  clientId: 'AUTH_CLIENT_ID',
   emailClaim: 'AUTH_EMAIL_CLAIM',
   nameClaim: 'AUTH_NAME_CLAIM',
   readerAuthRequired: 'READER_AUTH_REQUIRED',
@@ -235,12 +249,13 @@ function resolveAuthConfig(env: Env): AuthConfig {
     return { ...claims, mode: 'alb', loadBalancerArn: read(env, AUTH_KEYS.albArn) ?? '' };
   }
 
-  requireAll(env, [AUTH_KEYS.issuer, AUTH_KEYS.audience], BECAUSE_AUTH);
+  requireAll(env, [AUTH_KEYS.issuer, AUTH_KEYS.audience, AUTH_KEYS.clientId], BECAUSE_AUTH);
   return {
     ...claims,
     mode: 'bearer',
     issuer: read(env, AUTH_KEYS.issuer) ?? '',
     audience: read(env, AUTH_KEYS.audience) ?? '',
+    clientId: read(env, AUTH_KEYS.clientId) ?? '',
   };
 }
 

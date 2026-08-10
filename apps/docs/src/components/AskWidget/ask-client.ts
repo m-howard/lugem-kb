@@ -8,7 +8,7 @@ const UNAUTHORIZED = 401;
 /**
  * Where a reader goes to sign in.
  *
- * Only reachable when the deployment requires reader authentication (ADR 0016), which is off by
+ * Only reachable when the deployment requires reader authentication (ADR 0017), which is off by
  * default — so on most deployments this branch never fires. Following the link trips the one ALB
  * rule that redirects to the identity provider and mints a session, after which the reader can ask
  * again.
@@ -26,7 +26,7 @@ export interface AskHandlers {
   readonly onToken: (text: string) => void;
   readonly onNotCovered: (message: string) => void;
   readonly onFailure: (message: string) => void;
-  /** Only ever called on a deployment that requires reader authentication — see ADR 0016. */
+  /** Only ever called on a deployment that requires reader authentication — see ADR 0017. */
   readonly onSignInRequired: (message: string) => void;
 }
 

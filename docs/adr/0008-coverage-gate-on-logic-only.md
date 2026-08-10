@@ -35,7 +35,7 @@ Measured over:
   logic, and the only genuinely testable part of the program
 - `scripts/docs/codeowners.ts` — the CODEOWNERS parser. Most of `scripts/` is I/O orchestration and
   stays out, but this one file decides who hears about a documentation gap, and its last-match-wins
-  rule fails silently when it is wrong (added with [ADR 0015](0015-recording-documentation-gaps.md))
+  rule fails silently when it is wrong (added with [ADR 0016](0016-recording-documentation-gaps.md))
 
 Everything else in `infra/pulumi/src` is excluded: it wires resources, and the honest test for
 resource wiring is `pulumi preview`, which CI runs separately.

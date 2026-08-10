@@ -5,6 +5,9 @@ import { resolveBranch } from '../git/branch-policy';
 import { type GitHubClient } from '../git/github-client';
 import { resolveWritePath } from '../git/path-policy';
 
+/** How many blobs a collection listing reads at once. The git host rate-limits; this is polite. */
+const BLOB_READ_CONCURRENCY = 8;
+
 export interface DocumentSummary {
   readonly path: string;
   readonly sha: string;
@@ -71,6 +74,55 @@ export class DocumentReader {
     return entries
       .filter((entry) => resolveWritePath(entry.path, { prefixes: this.#settings.pathPrefixes }).ok)
       .map((entry) => ({ path: entry.path, sha: entry.sha, size: entry.size }));
+  }
+
+  /**
+   * Reads the documents on a branch that `select` accepts, with their content.
+   *
+   * Exists because listing a collection needs content, and doing that as N calls to {@link read}
+   * would re-read the branch ref and the whole tree once per document — four upstream calls per
+   * page instead of three for the branch plus one per page. The predicate is applied *before* the
+   * blobs are fetched, so a narrow collection costs only what it selects.
+   *
+   * @param select - Decides which repository-relative paths to read.
+   * @param branch - Branch to read. Defaults to the repository's default branch.
+   * @returns The selected documents, in tree order.
+   * @throws {CmsPolicyError} When the branch may not be read.
+   */
+  async listContent(
+    select: (path: string) => boolean,
+    branch = this.#settings.defaultBranch,
+  ): Promise<readonly DocumentContent[]> {
+    const resolvedBranch = this.#resolveBranch(branch);
+    const snapshot = await readBranchSnapshot(this.#client, resolvedBranch);
+    if (snapshot === undefined) {
+      return [];
+    }
+
+    const entries = (await readTreeEntries(this.#client, snapshot.treeSha))
+      .filter((entry) => resolveWritePath(entry.path, { prefixes: this.#settings.pathPrefixes }).ok)
+      .filter((entry) => select(entry.path));
+
+    const documents: DocumentContent[] = [];
+    // Chunked rather than one `Promise.all` over the whole collection: the git host rate-limits,
+    // and a collection listing is the one operation whose fan-out is set by how much content
+    // exists rather than by what the author just typed.
+    for (let index = 0; index < entries.length; index += BLOB_READ_CONCURRENCY) {
+      const chunk = entries.slice(index, index + BLOB_READ_CONCURRENCY);
+      documents.push(
+        ...(await Promise.all(
+          chunk.map(async (entry) => ({
+            branch: resolvedBranch,
+            path: entry.path,
+            sha: entry.sha,
+            size: entry.size,
+            content: await this.#readBlob(entry.sha),
+          })),
+        )),
+      );
+    }
+
+    return documents;
   }
 
   /**

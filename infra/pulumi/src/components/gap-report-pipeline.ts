@@ -31,7 +31,7 @@ export interface GapReportPipelineArgs {
  *
  * The split is the other half of a promise made in `gateway-service.ts`: the gateway can write
  * gaps and never read them, and this role can read them and never write. Neither can do the
- * other's job. See docs/adr/0015-recording-documentation-gaps.md, which settles open question Q11.
+ * other's job. See docs/adr/0016-recording-documentation-gaps.md, which settles open question Q11.
  *
  * @example
  * ```ts

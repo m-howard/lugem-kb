@@ -9,13 +9,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The documentation CMS at `/admin`** — the CMS half of Phase 3, so an author writes and submits
+  a page without a git host account or any knowledge of markdown. See
+  [Editing in the CMS](docs/editing-in-the-cms.md).
+  - Decap CMS reaches the editorial API through an adapter in the gateway at `POST /v1/cms/proxy`.
+    Every action goes through the same document, draft and submission services the REST routes use,
+    so the path, branch and endpoint policies apply unchanged and a refusal still costs no upstream
+    call. See [ADR 0015](docs/adr/0015-decap-adapter-in-the-gateway.md).
+  - Decap's three editorial statuses map onto the gateway's two states: a draft is a `cms/*` branch
+    with no pull request, submitting opens one, and `pending_publish` is an alias rather than a
+    third state — publishing stays in the git host, where a code owner approves it.
+  - The endpoint allowlist gained one read-only row, `GET /git/matching-refs/heads/...`, because
+    the editorial board has to show drafts that have no pull request yet.
+  - `SubmissionService.close` withdraws a submission without touching its branch, reusing the same
+    confinement check as merge so an author cannot close a pull request that is not theirs.
+  - The `/admin` page runs its own OIDC sign-in with PKCE, because Decap's proxy backend sends no
+    `Authorization` header. `AUTH_CLIENT_ID` (stack key `cmsAuthClientId`) is required in `bearer`
+    mode; `GET /v1/admin/config` publishes the sign-in parameters anonymously, since they travel in
+    the browser's redirect URL regardless.
+  - Audit records carry the Decap action, so one endpoint carrying every operation still leaves a
+    log an operator can read (R9).
+  - Image upload is not supported: the corpus holds markdown only, so the media library lists
+    nothing and uploads are refused with an explanation. R15 is a separate change.
 - **The gap feedback loop** — Phase 5 of [the requirements](docs/requirements.md), so the
   documentation learns what it is missing. Off unless `GAP_FEEDBACK_TABLE` is set.
   - A question the corpus cannot answer is recorded, and readers can mark an answer unhelpful with
     an optional reason. An answered question is never recorded, and no record carries who asked.
   - Retention is a per-item DynamoDB TTL, defaulting to ninety days, rather than a policy someone
     has to remember. This settles open question Q11 — see
-    [ADR 0015](docs/adr/0015-recording-documentation-gaps.md).
+    [ADR 0016](docs/adr/0016-recording-documentation-gaps.md).
   - The gateway task role holds `dynamodb:PutItem` and nothing else, so the service collecting
     reader questions cannot read one back. A separate role, in its own deployment environment, holds
     the read.
@@ -31,7 +53,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lifted out of the CMS block so a deployment can authenticate readers without running a CMS; the
   environment variable names are unchanged. The rate limiter keys on the reader's subject when
   there is one, so an office behind a single NAT no longer shares one allowance. See
-  [ADR 0016](docs/adr/0016-reader-authentication.md).
+  [ADR 0017](docs/adr/0017-reader-authentication.md).
 
 - **The authoring gateway** — Phase 2 of [the requirements](docs/requirements.md), so that someone
   without a git host account can publish. Off unless `CMS_REPOSITORY` is set; with it set, every

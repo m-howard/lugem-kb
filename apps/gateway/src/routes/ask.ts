@@ -115,7 +115,7 @@ function streamAnswer(
  * One question does now leave the request: a question this route *declines* is recorded to the
  * feedback table, because a gap nobody can see is a gap nobody fixes (R23). An answered question is
  * never recorded, and no record carries who asked. See
- * docs/adr/0015-recording-documentation-gaps.md, which settles open question Q11.
+ * docs/adr/0016-recording-documentation-gaps.md, which settles open question Q11.
  *
  * The answer id is minted here rather than reusing the request id, which is client-supplied and so
  * cannot be trusted as the key a reader later posts feedback against.

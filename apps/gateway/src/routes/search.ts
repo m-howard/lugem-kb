@@ -32,7 +32,7 @@ export interface SearchRoutesOptions {
  * "how do I report my manager" is a disclosure about the asker even though the page it retrieves
  * is internally public (requirements.md R22). It is still not logged — but a question this route
  * declines is now recorded to the feedback table, under the retention policy settled in
- * docs/adr/0015-recording-documentation-gaps.md (R23, open question Q11). A question that found
+ * docs/adr/0016-recording-documentation-gaps.md (R23, open question Q11). A question that found
  * passages is never recorded.
  *
  * There is no answer to rate here, so this route takes no part in unhelpful feedback — the reader

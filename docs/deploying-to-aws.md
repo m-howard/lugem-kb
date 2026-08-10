@@ -81,8 +81,8 @@ cp Pulumi.dev.yaml.example Pulumi.dev.yaml   # then edit it
 | `answerMaxTokens`          | no       | Default `700`. Ceiling on answer length.                                       |
 | `askRateLimitPerMinute`    | no       | Default `20`. Questions per client per minute on `/v1/ask`.                    |
 | `retrievalScoreThreshold`  | no       | Default `0.4`. Below it, no documentation is deemed to cover the question.     |
-| `gapFeedbackRetentionDays` | no       | Default `90`. How long a recorded gap question survives — see ADR 0015.        |
-| `readerAuthRequired`       | no       | Default `false`. Requires readers to sign in — see ADR 0016.                   |
+| `gapFeedbackRetentionDays` | no       | Default `90`. How long a recorded gap question survives — see ADR 0016.        |
+| `readerAuthRequired`       | no       | Default `false`. Requires readers to sign in — see ADR 0017.                   |
 | `allowUnverifiedRegion`    | no       | Escape hatch for a newly added S3 Vectors region.                              |
 | `corpusRepository`         | no       | Master switch for the GitHub half. Unset, no GitHub resources are managed.     |
 | `cmsGitHubAppId`           | no       | With `cmsGitHubAppInstallationId`, the CMS app the gateway authenticates as.   |

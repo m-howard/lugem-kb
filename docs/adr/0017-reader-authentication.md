@@ -1,11 +1,11 @@
 ---
-title: 0016 — Reader authentication, built and switched off
-sidebar_label: 0016 Reader authentication
+title: 0017 — Reader authentication, built and switched off
+sidebar_label: 0017 Reader authentication
 owner: platform
 last_reviewed: 2026-08-10
 ---
 
-# ADR 0016 — Reader authentication, built and switched off
+# ADR 0017 — Reader authentication, built and switched off
 
 - **Date:** 2026-08-10
 - **Status:** Accepted
@@ -20,7 +20,7 @@ only to the editorial surface, recording the reason plainly: turning authenticat
 
 Phase 5 is where R22 was deferred to. But the reason ADR 0013 gave has not expired — nobody has
 since asked for a login in front of the documentation assistant. What has changed is that the
-project now stores something about readers (ADR 0015), which makes "who is asking" a question worth
+project now stores something about readers (ADR 0016), which makes "who is asking" a question worth
 being able to answer, and that the rate limiter's blindness to identity has a cost worth fixing.
 
 There is also a scope point worth stating, because it is easy to get wrong. R18 notes that every

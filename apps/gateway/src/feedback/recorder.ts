@@ -36,7 +36,7 @@ function text(value: string): AttributeValue {
  *
  * What reaches this class is bounded by its callers, and that boundary is the retention argument:
  * only unanswered questions and explicit unhelpful marks. See
- * docs/adr/0015-recording-documentation-gaps.md.
+ * docs/adr/0016-recording-documentation-gaps.md.
  */
 export class DynamoGapRecorder implements GapRecorder {
   readonly #client: DynamoDBClient;

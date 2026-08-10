@@ -39,6 +39,11 @@ interface EndpointRule {
  */
 const ALLOWLIST: readonly EndpointRule[] = [
   { method: 'GET', pattern: /^\/git\/ref\/heads\/.+$/, what: 'read a branch ref' },
+  // Listing refs, not just reading one. The editorial board has to show drafts that have no pull
+  // request yet, and a draft with no pull request is only a branch — there is nothing else to ask
+  // about. Read-only, and the pattern requires a ref prefix, so this cannot become "list
+  // everything in the repository".
+  { method: 'GET', pattern: /^\/git\/matching-refs\/heads\/.+$/, what: 'list matching branches' },
   { method: 'GET', pattern: /^\/git\/trees\/[^/]+$/, what: 'read a tree' },
   { method: 'GET', pattern: /^\/git\/blobs\/[^/]+$/, what: 'read a blob' },
   { method: 'GET', pattern: /^\/git\/commits\/[^/]+$/, what: 'read a commit' },

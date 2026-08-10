@@ -51,7 +51,7 @@ export type Turn =
    * The reader must sign in first.
    *
    * Only reachable on a deployment that requires reader authentication, which is off by default —
-   * see ADR 0016. Its own kind rather than a failure, because it is the one refusal the reader can
+   * see ADR 0017. Its own kind rather than a failure, because it is the one refusal the reader can
    * actually do something about.
    */
   | {

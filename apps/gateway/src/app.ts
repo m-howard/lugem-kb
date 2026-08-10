@@ -18,6 +18,7 @@ import { CitationViewer } from './kb/citation-view';
 import { CorpusClient } from './kb/corpus-client';
 import { Retriever } from './kb/retrieve';
 import { createRateLimit } from './rate-limit';
+import { createAdminConfigRoutes } from './routes/admin-config';
 import { createApiNotFoundRoutes } from './routes/api-not-found';
 import { createAskRoutes } from './routes/ask';
 import { createCmsRoutes } from './routes/cms';
@@ -52,9 +53,30 @@ export interface AppDependencies {
    * Present only when `READER_AUTH_REQUIRED` is true.
    *
    * Absent — the default — means `/v1/ask`, `/v1/search` and `/v1/feedback` stay open exactly as
-   * they were before R22, and `/v1/identity` is never mounted. See ADR 0016.
+   * they were before R22, and `/v1/identity` is never mounted. See ADR 0017.
    */
   readonly readerVerifier?: IdentityVerifier | undefined;
+}
+
+/**
+ * The editorial dependencies, or nothing — all three conditions have to hold for the CMS to be
+ * usable, and passing a partial set would produce a task that boots and refuses the first author.
+ */
+function resolveCmsDependencies(
+  config: Config,
+  verifier: IdentityVerifier | undefined,
+): Pick<AppDependencies, 'cms'> {
+  if (config.cms === undefined || verifier === undefined || config.auth === undefined) {
+    return {};
+  }
+  return {
+    cms: createCmsDependencies({
+      cms: config.cms,
+      region: config.awsRegion,
+      verifier,
+      auth: config.auth,
+    }),
+  };
 }
 
 /**
@@ -103,9 +125,7 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
     siteRoot: config.siteRoot,
     askRateLimitPerMinute: config.askRateLimitPerMinute,
     corpusPrefix: config.corpusPrefix,
-    ...(config.cms === undefined || verifier === undefined
-      ? {}
-      : { cms: createCmsDependencies({ cms: config.cms, region: config.awsRegion, verifier }) }),
+    ...resolveCmsDependencies(config, verifier),
     // Built once and shared. Two verifiers in one service could disagree about who is calling.
     ...(config.readerAuthRequired && verifier !== undefined ? { readerVerifier: verifier } : {}),
     ...(config.feedback === undefined
@@ -232,9 +252,15 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         settings: cms.settings,
         allowMergeFromCms: cms.allowMergeFromCms,
         tokens: cms.tokens,
+        client: cms.client,
         auth: createAuthMiddleware({ verifier: cms.verifier }),
       }),
     );
+
+    // Unauthenticated on purpose, and only these fields — see the route's own note. Mounted
+    // alongside rather than inside `/v1/cms`, so that sub-app's "everything here needs a token"
+    // rule survives someone adding a route next to this one.
+    app.route('/v1/admin', createAdminConfigRoutes({ auth: cms.auth }));
   }
 
   // Terminates `/v1` before the site can answer for it. Must stay after every API route.

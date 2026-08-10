@@ -9,7 +9,7 @@ last_reviewed: 2026-08-09
 
 - **Date:** 2026-08-09
 - **Status:** Accepted
-- **Amended by:** [ADR 0016](0016-reader-authentication.md)
+- **Amended by:** [ADR 0017](0017-reader-authentication.md)
 
 ## Context
 
@@ -79,7 +79,7 @@ listener's default action.
 - `/v1/ask` stays unauthenticated. R22 belongs to Phase 5, and turning it on now would put a login
   in front of every reader for a benefit nobody has asked for yet.
 
-  _Amended by [ADR 0016](0016-reader-authentication.md)._ Phase 5 built R22 on top of the interface
+  _Amended by [ADR 0017](0017-reader-authentication.md)._ Phase 5 built R22 on top of the interface
   this ADR introduced, which is the clearest evidence the interface was the right call: reader
   authentication became a configuration change rather than a rewrite. It still defaults to off, for
   exactly the reason stated above.

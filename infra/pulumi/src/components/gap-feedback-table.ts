@@ -17,7 +17,7 @@ export interface GapFeedbackTableArgs {
  *
  * **Retention is enforced here, not by a policy someone remembers.** Every item carries an
  * `expiresAt` epoch-seconds attribute and DynamoDB deletes on it. That is the mechanism behind the
- * answer to open question Q11 — see docs/adr/0015-recording-documentation-gaps.md.
+ * answer to open question Q11 — see docs/adr/0016-recording-documentation-gaps.md.
  *
  * **Point-in-time recovery is off, and that is the load-bearing part of this file.** PITR keeps a
  * continuous 35-day backup that TTL deletion cannot reach, so switching it on would quietly extend
