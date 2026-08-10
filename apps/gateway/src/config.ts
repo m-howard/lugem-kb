@@ -62,7 +62,20 @@ export type AuthConfig = {
   readonly emailClaim: string;
   readonly nameClaim: string;
 } & (
-  | { readonly mode: 'bearer'; readonly issuer: string; readonly audience: string }
+  | {
+      readonly mode: 'bearer';
+      readonly issuer: string;
+      readonly audience: string;
+      /**
+       * The public OIDC client the `/admin` page signs in as.
+       *
+       * Required in `bearer` mode because Decap's proxy backend sends no `Authorization` header of
+       * its own — the admin page has to obtain a token itself, and it cannot start an
+       * authorization-code flow without a client id. Public by nature: it travels in the browser's
+       * redirect URL either way, which is why `/v1/admin/config` may serve it anonymously.
+       */
+      readonly clientId: string;
+    }
   | { readonly mode: 'alb'; readonly loadBalancerArn: string }
 );
 
@@ -128,6 +141,7 @@ const CMS_KEYS = {
   issuer: 'AUTH_ISSUER_URL',
   audience: 'AUTH_AUDIENCE',
   albArn: 'AUTH_ALB_ARN',
+  clientId: 'AUTH_CLIENT_ID',
   emailClaim: 'AUTH_EMAIL_CLAIM',
   nameClaim: 'AUTH_NAME_CLAIM',
 } as const;
@@ -181,12 +195,13 @@ function resolveAuthConfig(env: Env): AuthConfig {
     return { ...claims, mode: 'alb', loadBalancerArn: read(env, CMS_KEYS.albArn) ?? '' };
   }
 
-  requireAll(env, [CMS_KEYS.issuer, CMS_KEYS.audience]);
+  requireAll(env, [CMS_KEYS.issuer, CMS_KEYS.audience, CMS_KEYS.clientId]);
   return {
     ...claims,
     mode: 'bearer',
     issuer: read(env, CMS_KEYS.issuer) ?? '',
     audience: read(env, CMS_KEYS.audience) ?? '',
+    clientId: read(env, CMS_KEYS.clientId) ?? '',
   };
 }
 

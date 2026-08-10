@@ -66,6 +66,7 @@ export interface GithubConfigInput {
   readonly cmsAuthMode?: string | undefined;
   readonly cmsAuthIssuerUrl?: string | undefined;
   readonly cmsAuthAudience?: string | undefined;
+  readonly cmsAuthClientId?: string | undefined;
   readonly cmsAuthEmailClaim?: string | undefined;
   readonly cmsAuthNameClaim?: string | undefined;
   readonly cmsBranchPrefix?: string | undefined;
@@ -110,6 +111,11 @@ export interface CmsGatewayConfig {
   readonly authMode: CmsAuthMode;
   readonly issuerUrl: string | undefined;
   readonly audience: string | undefined;
+  /**
+   * The public OIDC client the `/admin` editor signs in as. Present only in `bearer` mode; in
+   * `alb` mode the load balancer runs the exchange with its own client and secret.
+   */
+  readonly clientId: string | undefined;
   readonly emailClaim: string | undefined;
   readonly nameClaim: string | undefined;
   readonly branchPrefix: string;
@@ -287,25 +293,28 @@ function resolveCmsGateway(input: GithubConfigInput): CmsGatewayConfig {
       authMode: 'alb',
       issuerUrl: undefined,
       audience: undefined,
+      clientId: undefined,
       oidcListener: resolveOidcListener(input),
     };
   }
 
   const issuerUrl = emptyToUndefined(input.cmsAuthIssuerUrl);
   const audience = emptyToUndefined(input.cmsAuthAudience);
+  const clientId = emptyToUndefined(input.cmsAuthClientId);
   const missing = [
     ...(issuerUrl === undefined ? ['cmsAuthIssuerUrl'] : []),
     ...(audience === undefined ? ['cmsAuthAudience'] : []),
+    ...(clientId === undefined ? ['cmsAuthClientId'] : []),
   ];
   if (missing.length > 0) {
     throw new StackConfigError(
       missing,
       'are required when cmsAuthMode is "bearer": the gateway verifies the editor\'s token against ' +
-        'that issuer, for that audience',
+        'that issuer, for that audience, and the /admin editor signs in as that client',
     );
   }
 
-  return { ...common, authMode: 'bearer', issuerUrl, audience, oidcListener: undefined };
+  return { ...common, authMode: 'bearer', issuerUrl, audience, clientId, oidcListener: undefined };
 }
 
 /**

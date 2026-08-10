@@ -21,6 +21,17 @@ export interface CmsDependencies {
   readonly verifier: IdentityVerifier;
   readonly tokens: InstallationTokenSource;
   readonly allowMergeFromCms: boolean;
+  /**
+   * The allowlisted git client itself, for the one editorial read no service expresses: listing
+   * the draft branches the editorial board is built from. Everything else goes through a service.
+   */
+  readonly client: GitHubClient;
+  /**
+   * The resolved auth configuration, so `/v1/admin/config` can tell the admin page how to sign in.
+   * The verifier is built from the same block and remains the only thing that decides who someone
+   * is — this is published for the browser's benefit, and grants nothing.
+   */
+  readonly auth: AuthConfig;
 }
 
 /**
@@ -82,6 +93,8 @@ export function createCmsDependencies(cms: CmsConfig, region: string): CmsDepend
   return {
     settings,
     tokens,
+    client,
+    auth: cms.auth,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),

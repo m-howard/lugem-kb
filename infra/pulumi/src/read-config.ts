@@ -65,6 +65,7 @@ export function readGithubConfig(): GithubConfig | undefined {
     cmsAuthMode: config.get('cmsAuthMode'),
     cmsAuthIssuerUrl: config.get('cmsAuthIssuerUrl'),
     cmsAuthAudience: config.get('cmsAuthAudience'),
+    cmsAuthClientId: config.get('cmsAuthClientId'),
     cmsAuthEmailClaim: config.get('cmsAuthEmailClaim'),
     cmsAuthNameClaim: config.get('cmsAuthNameClaim'),
     cmsBranchPrefix: config.get('cmsBranchPrefix'),

@@ -14,6 +14,7 @@ const CMS_APP = {
 
 const ISSUER = 'https://idp.example.com/realm';
 const AUDIENCE = 'lugem-cms';
+const CLIENT_ID = 'lugem-cms-admin';
 const CERTIFICATE_ARN = 'arn:aws:acm:us-east-1:111122223333:certificate/abc-123';
 
 function expectKeys(input: Parameters<typeof validateGithubConfig>[0], ...keys: string[]): void {
@@ -194,6 +195,7 @@ describe('validateGithubConfig', () => {
         cmsAuthMode: 'bearer',
         cmsAuthIssuerUrl: ISSUER,
         cmsAuthAudience: AUDIENCE,
+        cmsAuthClientId: CLIENT_ID,
       });
       expect(config?.cmsApp).toEqual({ appId: '123456', installationId: '78901234' });
     });
@@ -225,6 +227,7 @@ describe('validateGithubConfig', () => {
       cmsAuthMode: 'bearer',
       cmsAuthIssuerUrl: ISSUER,
       cmsAuthAudience: AUDIENCE,
+      cmsAuthClientId: CLIENT_ID,
     };
 
     const ALB = {
@@ -286,11 +289,12 @@ describe('validateGithubConfig', () => {
         expectKeys({ ...VALID, ...CMS_APP, cmsAuthMode: 'basic' }, 'cmsAuthMode');
       });
 
-      it('names both bearer keys when neither is set', () => {
+      it('names every bearer key when none is set', () => {
         expectKeys(
           { ...VALID, ...CMS_APP, cmsAuthMode: 'bearer' },
           'cmsAuthIssuerUrl',
           'cmsAuthAudience',
+          'cmsAuthClientId',
         );
       });
 

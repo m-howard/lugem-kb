@@ -1,2 +1,6 @@
 .docusaurus/
 build/
+
+# Built by scripts/build/build-admin.ts from src/admin/, with Decap bundled in.
+# index.html beside it IS committed.
+static/admin/admin.js

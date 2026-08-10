@@ -23,6 +23,7 @@ import { Retriever } from '../../apps/gateway/src/kb/retrieve';
 // Reused rather than constructing pino here: runtime dependencies resolve from the workspace
 // that declares them, and this script lives outside every workspace.
 import { createLogger } from '../../apps/gateway/src/logging';
+import { createE2eCms } from '../../apps/gateway/tests/helpers/e2e-cms';
 
 const DEFAULT_PORT = 4173;
 const SCORE_THRESHOLD = 0.4;
@@ -111,6 +112,11 @@ const stubBedrockRuntime = {
 } as unknown as BedrockRuntimeClient;
 
 const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
+const origin = `http://127.0.0.1:${String(port)}`;
+
+// The editorial half, stubbed the same way: a fake git host injected into the client, and an
+// identity provider the *browser* signs in against. `/admin` cannot be exercised without one.
+const cms = await createE2eCms(origin);
 
 const corpus = new CorpusClient({ s3: stubS3, bucket: BUCKET, prefix: PREFIX });
 const viewer = new CitationViewer({ corpus, location: { bucket: BUCKET, prefix: PREFIX } });
@@ -134,7 +140,25 @@ const app = createApp({
   logger: createLogger({ level: 'silent' }),
   siteRoot: 'apps/docs/build',
   askRateLimitPerMinute: ASK_RATE_LIMIT_PER_MINUTE,
+  cms: cms.dependencies,
 });
 
-Bun.serve({ port, fetch: app.fetch });
-console.log(`e2e gateway listening on http://127.0.0.1:${String(port)}`);
+const IDP_PREFIX = '/idp/';
+
+/**
+ * Puts the stub identity provider on the same origin as the site, in front of the real app.
+ *
+ * In front rather than inside: `createApp` owns its route order — the site catch-all has to stay
+ * last — and the point of an e2e is to run that app as it ships, not a variant with test routes
+ * threaded through it.
+ */
+Bun.serve({
+  port,
+  fetch: (request: Request) => {
+    const { pathname } = new URL(request.url);
+    return pathname.startsWith(IDP_PREFIX)
+      ? cms.idp.fetch(new Request(request.url.replace(IDP_PREFIX, '/'), request))
+      : app.fetch(request);
+  },
+});
+console.log(`e2e gateway listening on ${origin}`);

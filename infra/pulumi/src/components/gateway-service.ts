@@ -397,6 +397,7 @@ function cmsEnvironment(
     entries.push(
       { name: 'AUTH_ISSUER_URL', value: gateway.issuerUrl ?? '' },
       { name: 'AUTH_AUDIENCE', value: gateway.audience ?? '' },
+      { name: 'AUTH_CLIENT_ID', value: gateway.clientId ?? '' },
     );
   }
 

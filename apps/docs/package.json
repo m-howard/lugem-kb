@@ -5,7 +5,9 @@
   "description": "Docusaurus site for the Lugem knowledge base. Its content root is the repo-root docs/ tree.",
   "license": "MIT",
   "scripts": {
+    "prestart": "bun run ../../scripts/build/build-admin.ts",
     "start": "docusaurus start --port 3001",
+    "prebuild": "bun run ../../scripts/build/build-admin.ts",
     "build": "docusaurus build",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
@@ -17,6 +19,7 @@
     "@docusaurus/theme-mermaid": "3.10.2",
     "@mdx-js/react": "3.1.1",
     "clsx": "2.1.1",
+    "decap-cms-app": "3.9.0",
     "prism-react-renderer": "2.4.1",
     "react": "19.2.8",
     "react-dom": "19.2.8"
