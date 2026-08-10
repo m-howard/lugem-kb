@@ -10,8 +10,10 @@ import {
   fakeS3Client,
 } from './fake-aws';
 import { type CollectingRecorder } from './fake-feedback';
+import { type FakeGitHost, fakeGitHost } from './fake-git-host';
 import { type FakeGitHub, type FakeGitHubRoute, fakeGitHub } from './fake-github';
 import { type FakeIdp, fakeIdp } from './fake-idp';
+import { type SeedFile } from './git-repo';
 import { createApp } from '../../src/app';
 import { type AppEnv } from '../../src/app-env';
 import { createBearerVerifier } from '../../src/auth/bearer-verifier';
@@ -106,13 +108,22 @@ export interface TestAppOptions {
   readonly captureLogs?: Record<string, unknown>[] | undefined;
 }
 
-export interface TestCms {
+/** Everything a CMS harness gives a test, whichever git host is behind it. */
+export interface TestCmsHarness {
   readonly app: Hono<AppEnv>;
   readonly idp: FakeIdp;
-  readonly host: FakeGitHub;
   readonly dependencies: CmsDependencies;
   /** `Authorization` header for the given claims, defaulting to a valid author. */
   authorize(claims?: Record<string, unknown>): Promise<Record<string, string>>;
+}
+
+export interface TestCms extends TestCmsHarness {
+  readonly host: FakeGitHub;
+}
+
+/** The same harness over a git host that keeps what it is given — see `fake-git-host.ts`. */
+export interface StatefulTestCms extends TestCmsHarness {
+  readonly host: FakeGitHost;
 }
 
 export interface TestCmsOptions {
@@ -130,6 +141,20 @@ export interface TestCmsOptions {
   readonly previewBaseUrl?: string;
 }
 
+/** Options for the stateful harness. `seed` is the corpus the sandbox repository starts with. */
+export interface StatefulTestCmsOptions {
+  readonly seed?: Readonly<Record<string, SeedFile>>;
+  /**
+   * A host built by the caller, when the test needs to hold it before the app exists — to observe
+   * the calls, or to wrap `fetch` so something happens between a read and the write that follows.
+   */
+  readonly host?: FakeGitHost;
+  readonly settings?: Partial<CmsSettings>;
+  readonly allowMergeFromCms?: boolean;
+  readonly captureLogs?: Record<string, unknown>[];
+  readonly previewBaseUrl?: string;
+}
+
 /**
  * Builds the real app with the CMS switched on, over a fake git host and a real key pair.
  *
@@ -141,11 +166,58 @@ export interface TestCmsOptions {
  * @returns The app, the issuer, the git host, and a helper that mints an Authorization header.
  */
 export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<TestCms> {
-  const idp = await fakeIdp();
   const host = fakeGitHub(
     options.routes ?? [],
     options.mintStatus === undefined ? {} : { mintStatus: options.mintStatus },
   );
+
+  return { ...(await buildCmsHarness(host.fetch, options)), host };
+}
+
+/**
+ * The same harness over a repository that remembers what was written to it.
+ *
+ * Use this when the assertion is about the editorial workflow — that a saved page is readable
+ * afterwards, that a draft branch reaches the board, that a submission becomes a pull request.
+ * Use {@link buildCmsTestApp} when the assertion is about which upstream calls were made, which is
+ * what guards the endpoint allowlist.
+ *
+ * @param options - The seed corpus, settings overrides, and the merge flag.
+ * @returns The app, the issuer, the live git host, and an Authorization helper.
+ */
+export async function buildStatefulCmsTestApp(
+  options: StatefulTestCmsOptions = {},
+): Promise<StatefulTestCms> {
+  const settings: CmsSettings = { ...TEST_CMS_SETTINGS, ...options.settings };
+  const host =
+    options.host ??
+    fakeGitHost({
+      repository: settings.repository,
+      defaultBranch: settings.defaultBranch,
+      ...(options.seed === undefined ? {} : { seed: options.seed }),
+    });
+
+  return { ...(await buildCmsHarness(host.fetch, options)), host };
+}
+
+interface CmsHarnessOptions {
+  readonly settings?: Partial<CmsSettings>;
+  readonly allowMergeFromCms?: boolean;
+  readonly captureLogs?: Record<string, unknown>[];
+  readonly previewBaseUrl?: string;
+}
+
+/**
+ * Assembles the CMS dependency graph over an injected `fetch`.
+ *
+ * Shared by both harnesses so the two differ in exactly one thing — which git host is behind
+ * them — rather than in fifty lines of duplicated wiring that could drift apart.
+ */
+async function buildCmsHarness(
+  upstream: typeof globalThis.fetch,
+  options: CmsHarnessOptions,
+): Promise<TestCmsHarness> {
+  const idp = await fakeIdp();
   const settings: CmsSettings = { ...TEST_CMS_SETTINGS, ...options.settings };
   const { privateKey } = await generateKeyPair('RS256', { extractable: true });
 
@@ -154,14 +226,14 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
     installationId: '78901234',
     loadPrivateKey: () => Promise.resolve(privateKey),
     apiBaseUrl: TEST_GITHUB_API,
-    fetch: host.fetch,
+    fetch: upstream,
   });
   const client = new GitHubClient({
     tokens,
     repository: settings.repository,
     apiBaseUrl: TEST_GITHUB_API,
     allowMergeFromCms: options.allowMergeFromCms ?? false,
-    fetch: host.fetch,
+    fetch: upstream,
   });
 
   const dependencies: CmsDependencies = {
@@ -200,7 +272,6 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
       ...(options.captureLogs === undefined ? {} : { captureLogs: options.captureLogs }),
     }),
     idp,
-    host,
     dependencies,
     async authorize(claims = { sub: 'a1b2', email: 'sam@example.com', name: 'Sam Okoro' }) {
       return { authorization: `Bearer ${await idp.sign(claims)}` };

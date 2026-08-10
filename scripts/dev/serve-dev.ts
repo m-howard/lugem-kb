@@ -23,8 +23,14 @@ const GATEWAY_ORIGIN = process.env['GATEWAY_ORIGIN'] ?? 'http://127.0.0.1:3000';
 const SITE_ORIGIN = process.env['SITE_ORIGIN'] ?? 'http://127.0.0.1:3001';
 const BAD_GATEWAY = 502;
 
-/** Everything the gateway owns. The rest is the site, which is the catch-all in production too. */
-const GATEWAY_PATHS = ['/v1/', '/healthz', '/readyz'];
+/**
+ * Everything the gateway owns. The rest is the site, which is the catch-all in production too.
+ *
+ * `/idp/` is not a production path: it is where `scripts/dev/serve-cms.ts` mounts its stub identity
+ * provider. Forwarding it is what lets `/admin` sign in through this proxy — the browser's
+ * discovery fetch and token exchange have to reach the same origin the page is served from.
+ */
+const GATEWAY_PATHS = ['/v1/', '/healthz', '/readyz', '/previews/', '/idp/'];
 
 function originFor(pathname: string): string {
   return GATEWAY_PATHS.some((prefix) => pathname.startsWith(prefix)) ? GATEWAY_ORIGIN : SITE_ORIGIN;

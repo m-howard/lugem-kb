@@ -198,9 +198,24 @@ lists each one with the line it is on. Fix them and save again; the comment upda
 **Anything else.** The message the editor shows comes from the gateway and is written to be acted
 on. If it is not, that is worth reporting: send it to a platform engineer with what you were doing.
 
+## Trying it without touching anything real
+
+If you have this repository checked out and want to see the editor before you use it in anger,
+there is a sandbox: a copy of the documentation you can edit freely, on your own machine, wired to
+nothing.
+
+```bash
+bun run dev:cms      # then open http://127.0.0.1:4300/admin/
+```
+
+It signs you in automatically, and everything on this page works — writing, images, saving,
+submitting. Nothing leaves your machine, and `bun run dev:cms --reset` puts it all back.
+
 ## Related
 
 - [The authoring gateway](./authoring-gateway.md) — how this works, for whoever operates it
+- [Getting started](./getting-started.md#run-the-cms-at-admin) — running the sandbox above
 - [ADR 0015](./adr/0015-decap-adapter-in-the-gateway.md) — why the editor works the way it does
 - [ADR 0021](./adr/0021-images-travel-with-the-draft.md) — why an image is saved with its page
+- [ADR 0022](./adr/0022-a-local-sandbox-for-the-editorial-surface.md) — how the sandbox works
 - [Requirements](./requirements.md) — the user stories this page implements

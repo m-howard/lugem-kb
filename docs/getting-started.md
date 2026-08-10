@@ -66,7 +66,8 @@ Without AWS credentials the site and `/healthz` work; `/readyz`, `/v1/documents`
 | `POST` | `/v1/search`          | Retrieve passages with citations. Body: `{"question": "..."}`.     |
 | `POST` | `/v1/ask`             | Grounded answer, streamed as SSE. Body: `{"question", "history"}`. |
 | `*`    | `/v1/cms/*`           | The authoring gateway. Only mounted when `CMS_REPOSITORY` is set.  |
-| `GET`  | `/*`                  | The built documentation site.                                      |
+| `GET`  | `/v1/admin/config`    | Sign-in parameters for `/admin`. Mounted with the CMS.             |
+| `GET`  | `/*`                  | The built documentation site, including `/admin/`.                 |
 
 `/v1/ask` answers in one of two shapes. A question the corpus covers gets `text/event-stream`: a
 `citations` frame, then `token` frames, then `done`. A question it does not gets ordinary JSON —
@@ -75,22 +76,63 @@ Without AWS credentials the site and `/healthz` work; `/readyz`, `/v1/documents`
 Any other `/v1/...` path answers JSON `404`. The site is a catch-all mounted last, so without that
 terminator a mistyped API path would return the site's HTML with a `200`.
 
-### Running the authoring gateway locally
-
-The editorial routes stay unmounted unless you configure them. To work on them you need a GitHub App
-and its private key, which can come from a file rather than Secrets Manager in development:
+## Run the CMS at `/admin` {#run-the-cms-at-admin}
 
 ```bash
-CMS_REPOSITORY=acme/handbook \
-GITHUB_APP_ID=123456 GITHUB_APP_INSTALLATION_ID=78901234 \
-CMS_APP_PRIVATE_KEY_PATH=./cms-app.private-key.pem \
-AUTH_MODE=bearer AUTH_ISSUER_URL=https://idp.example.com/realm AUTH_AUDIENCE=lugem-cms \
-bun run dev
+bun run dev:cms      # http://127.0.0.1:4300/admin/
 ```
 
-Keep the PEM out of the repository. See
-**[The authoring gateway](./authoring-gateway.md#run-it-locally)** for the full variable list and
-what each refusal means.
+That is the whole setup. No AWS account, no GitHub App, no identity provider, no `.env`. It signs
+you in, lists this repository's own `docs/` pages as a collection, and lets you edit one, save it,
+watch the draft reach the editorial board, and submit it for review.
+
+The gateway itself is the real one — the same `createApp`, the same branch, path and endpoint
+policies, real token verification. What is local is everything it talks to: a git host that keeps
+what it is given, an identity provider on the same origin, and stubbed AWS. See
+[ADR 0022](./adr/0022-a-local-sandbox-for-the-editorial-surface.md).
+
+Drafts are written to `.lugem-local/cms-sandbox.json` and survive a restart, which is the point —
+a page half-written today and finished tomorrow is the normal way documentation gets written. To
+start over:
+
+```bash
+bun run dev:cms --reset
+```
+
+| Variable                                      | Default              | Why you would set it                                         |
+| --------------------------------------------- | -------------------- | ------------------------------------------------------------ |
+| `PORT`                                        | `4300`               | Something else holds the port.                               |
+| `SITE_ROOT`                                   | `apps/docs/static`   | `apps/docs/build`, to get the whole site alongside `/admin`. |
+| `PUBLIC_ORIGIN`                               | the listening origin | You are reaching it through the proxy below.                 |
+| `SANDBOX_AUTHOR_EMAIL`, `SANDBOX_AUTHOR_NAME` | a placeholder author | See your own name on the commits and pull requests.          |
+
+`SITE_ROOT` points at `apps/docs/static` rather than a built site on purpose: Docusaurus copies
+`static/` verbatim, so `/admin/` resolves out of it and only the editor bundle has to be built,
+which takes seconds. Every other path answers a plain-text 404 until you build the site.
+
+The sandbox is loopback-only and is not a security boundary: its identity provider signs anyone in.
+
+### Working on the editor itself, with hot reload
+
+`apps/docs/src/admin/` holds the sign-in shim. To iterate on it with the site rebuilding as you
+type, three terminals:
+
+```bash
+PUBLIC_ORIGIN=http://127.0.0.1:4000 bun run dev:cms         # sandbox gateway on :4300
+bun run docs:start                                          # Docusaurus on :3001
+GATEWAY_ORIGIN=http://127.0.0.1:4300 bun run dev:proxy      # proxy on :4000 — open this one
+```
+
+`PUBLIC_ORIGIN` is what makes this work. The sign-in parameters the gateway publishes name the
+identity provider the browser will fetch, and the browser is on the proxy's port — an issuer naming
+`:4300` would be cross-origin, and there is no CORS in this repository.
+
+### Against a real repository
+
+Once the sandbox has taken you as far as it can — branch protection, real reviewers, a real
+identity provider — see
+**[The authoring gateway](./authoring-gateway.md#run-it-locally)** for the variables and what each
+refusal means.
 
 ## Working on the ask widget
 
@@ -111,13 +153,14 @@ no-coverage response so you can see that state too.
 **With hot reload**, for iterating on the component itself. Three terminals:
 
 ```bash
-bun run dev                          # gateway on :3000
-bun run docs:start                   # Docusaurus on :3001
-bun run scripts/dev/serve-dev.ts     # proxy on :4000 — open this one
+bun run dev            # gateway on :3000
+bun run docs:start     # Docusaurus on :3001
+bun run dev:proxy      # proxy on :4000 — open this one
 ```
 
-The proxy forwards `/v1/*`, `/healthz` and `/readyz` to the gateway and everything else to
-Docusaurus, so the browser sees a single origin. Streaming passes through untouched. Docusaurus's
+The proxy forwards `/v1/*`, `/healthz`, `/readyz`, `/previews/` and `/idp/` to the gateway and
+everything else to Docusaurus, so the browser sees a single origin. Streaming passes through
+untouched. Docusaurus's
 hot-reload WebSocket does not, so edits rebuild but the page needs a manual refresh; the console
 logs a WebSocket error, which is expected.
 

@@ -9,6 +9,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A local sandbox for `/admin`** — `bun run dev:cms` runs the editorial surface with no AWS
+  account, no GitHub App and no identity provider. See
+  [ADR 0022](docs/adr/0022-a-local-sandbox-for-the-editorial-surface.md).
+  - Until now `/admin` was the one part of the system nobody could run locally: `CMS_REPOSITORY` is
+    a master switch that makes an App credential and a reachable OIDC issuer required, and the only
+    credential-free path stubbed the git host with a table of canned responses — you could watch
+    the editor render, but not save a page and see it come back.
+  - `apps/gateway/tests/helpers/git-repo.ts` models the objects instead — blobs, trees, commits,
+    refs and pull requests, content-addressed — and `fake-git-host.ts` serves the sixteen calls
+    `git/endpoint-policy.ts` allows. Non-fast-forward ref updates are refused properly, so the
+    `409` an author reads as "this draft moved since you opened it" is reachable by hand.
+  - The gateway is the production one: the same `createApp`, the same branch, path and endpoint
+    policies, and the real `createBearerVerifier` over a local key set, so the 401 paths behave as
+    deployed. There is no `AUTH_MODE=stub` and no development branch in `config.ts` — the sandbox
+    is a separate composition root under `scripts/dev/`, which a deployment never loads.
+  - Seeded from this repository's own `docs/` tree, so the collection holds real pages in the real
+    frontmatter shape. Drafts and pull requests are persisted to a gitignored
+    `.lugem-local/cms-sandbox.json` and survive a restart; `--reset` starts over.
+  - `SITE_ROOT` defaults to `apps/docs/static`, so only the editor bundle has to be built rather
+    than the whole site.
+  - `bun run dev:proxy` now forwards `/idp/` and `/previews/` as well, and the sandbox takes
+    `PUBLIC_ORIGIN`, so the editor can be worked on behind the proxy with Docusaurus hot-reloading.
+- **The editorial round trip is tested** — `tests/integration/editorial-round-trip.test.ts` drives
+  save, re-read, conflict, the editorial board, submission and merge against the stateful host.
+  `cms.test.ts` and `decap-proxy.test.ts` keep their canned route tables, which is what proves
+  _which_ upstream calls the gateway makes; neither could assert that a saved page comes back,
+  because with a table the read is a different fixture from the write.
 - **Image handling in the CMS** — R15, so an author illustrates a page themselves instead of filing
   a ticket for an engineer to commit a PNG. See
   [ADR 0021](docs/adr/0021-images-travel-with-the-draft.md).
