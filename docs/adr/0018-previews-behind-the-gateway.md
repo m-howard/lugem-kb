@@ -34,6 +34,16 @@ tidy and costs nothing, but R21 says preview builds are never ingested — and t
 the knowledge base's data source. That constraint would then rest on a prefix filter in the data
 source configuration, one edit away from indexing a hundred unmerged drafts.
 
+And there is a trap in serving previews from the gateway rather than from somewhere else. `docs/**`
+is MDX, so a page is a React component rather than a document: a pull request can carry script as
+easily as a paragraph. [ADR 0014](0014-purpose-built-editorial-api.md) then makes that reachable by
+someone who has no git account at all — the CMS opens `cms/*` branches on their behalf. Serving
+those bytes from the origin that also carries `/admin`, the editorial API and the reader's session
+means opening a preview runs unreviewed script with the privileges of whoever opened it: a sign-in
+token copied into the tab's `sessionStorage` in bearer mode, a credentialed call to the CMS in ALB
+mode. That is a lower-privileged author reaching a higher-privileged one, and no amount of
+`x-robots-tag` speaks to it.
+
 ## Decision
 
 **The gateway serves previews, from a private bucket of its own.**
@@ -47,14 +57,28 @@ source configuration, one edit away from indexing a hundred unmerged drafts.
    catch-all and after the API routes. A preview is therefore reachable by exactly the people who
    can already reach the documentation site, with no second access-control mechanism to get wrong.
 3. **No CloudFront, and no public URL.** The base URL handed to authors is the load balancer's.
-4. **The workflow publishes and deletes.** `.github/workflows/preview.yml` builds with
-   `DOCUSAURUS_BASE_URL=/previews/pr-<n>/`, syncs with `--delete`, comments the link, and on
-   `closed` — merge or close, both — removes the prefix and rewrites the comment. A 30-day
-   lifecycle rule is the backstop for the run that never happens, not the mechanism.
-5. **The CMS card asks the gateway.** Decap's `getDeployPreview` is answered from the entry's
+4. **Every preview response is sandboxed.** A `Content-Security-Policy` of
+   `sandbox allow-scripts allow-popups`, set by middleware on the whole `/previews` sub-app so that
+   no single response can forget it. Without `allow-same-origin` the document lands in an opaque
+   origin: no storage, no cookies, no same-origin reads, and no credentials on anything it
+   fetches. `allow-scripts` stays
+   because a preview has to render like the real site, and it can — Docusaurus hydrates, routes
+   client-side and styles itself from an opaque origin, verified against a real build in Chromium
+   rather than assumed. `allow-popups` keeps a `target="_blank"` link from being a dead click, and
+   is deliberately not paired with `allow-popups-to-escape-sandbox`.
+5. **The workflow publishes; a second one deletes.** `.github/workflows/preview.yml` builds with
+   `DOCUSAURUS_BASE_URL=/previews/pr-<n>/`, syncs with `--delete` and comments the link.
+   `preview-cleanup.yml` removes the prefix and rewrites the comment on `closed` — merge or close,
+   both. They are separate because the publishing trigger filters on `paths`, and a `paths` filter
+   applies to every event a trigger names: a pull request that published a preview and then
+   reverted its last documentation change would never fire a matching `closed` event, and the
+   drafts would sit in the bucket until the lifecycle rule expired them. Deletion cannot depend on
+   what the final diff touches. A 30-day lifecycle rule is the backstop for the run that never
+   happens, not the mechanism.
+6. **The CMS card asks the gateway.** Decap's `getDeployPreview` is answered from the entry's
    newest submission: an open pull request yields `pr-<number>/`, anything else yields `null`.
    Nothing has to tell the CMS what the workflow did.
-6. **Both halves or neither.** `PREVIEW_BUCKET` is a master switch and `PREVIEW_BASE_URL` becomes
+7. **Both halves or neither.** `PREVIEW_BUCKET` is a master switch and `PREVIEW_BASE_URL` becomes
    required with it, following [ADR 0009](0009-fail-closed-configuration.md). A deployment that
    configures a bucket and no URL fails at start-up rather than offering authors a broken link.
 
@@ -76,6 +100,21 @@ can read under `pr-*`; `resolvePreviewRequest` refuses anything that would resol
 requested pull request's prefix, before any S3 call. That function is pure and its whole refusal
 table is a unit test, for the same reason `kb/key-policy.ts` is.
 
+**A preview has an opaque origin, which is not free.** Three things follow from the sandbox. A
+preview cannot call the gateway's own API with the reader's credentials — that is the point, and it
+means the `/ask` page inside a preview does not answer. Anything the site stores per reader, such
+as the theme choice, resets on every load. And in ALB authentication mode
+([ADR 0013](0013-two-authentication-modes.md)), a browser may withhold the load balancer's session
+cookie from subresource requests made by an opaque-origin document, in which case the preview's own
+stylesheets and scripts are redirected to the identity provider and the page renders bare. That
+mode has never been deployed, so it is a risk rather than an observation; if it materialises, the
+fix is the separate origin the sandbox is standing in for — a second hostname on the same load
+balancer, which makes previews cross-origin by construction and needs no header at all.
+
+**The sandbox is a mitigation, not the boundary.** It stops preview script from reaching the
+reader's session. It does not stop a pull request from putting something misleading on a page the
+reviewer is reading, and it is not a reason to review a `cms/*` branch less carefully.
+
 **This is unexercised against real AWS.** The component and the workflow ship reviewed but not
 deployed — this repository's stack has never been applied. The same honesty
 [ADR 0013](0013-two-authentication-modes.md) applies to ALB auth mode applies here.
@@ -89,3 +128,14 @@ second authentication mechanism to build.
 
 **A workflow artifact.** A downloadable zip is not a rendered preview at a URL. It fails R12's
 first criterion and gives the CMS card nothing to link to.
+
+**A separate origin for previews, instead of the sandbox.** The stronger answer, and the one to
+reach for if the sandbox proves too blunt: a second hostname on the same internal load balancer,
+which makes a preview cross-origin by construction rather than by a header the gateway has to
+remember. Deferred because it needs a DNS name, a certificate covering it, host-based routing on
+the listener and its own authentication action — four pieces of infrastructure this stack has never
+applied even once, to replace one header whose effect can be tested in CI today.
+
+**A stricter CSP with no `sandbox`.** `connect-src`, `form-action` and friends can stop a preview
+from calling the CMS API, but not from reading `sessionStorage` and putting a token in a URL it
+navigates to. Same-origin script keeps same-origin privileges; only the opaque origin removes them.

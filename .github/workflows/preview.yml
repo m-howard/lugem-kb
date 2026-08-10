@@ -11,9 +11,15 @@ name: Preview
 #
 # R21 is why that bucket is not the corpus bucket: preview builds must never be ingested, and a
 # bucket the knowledge base has never been pointed at cannot be.
+#
+# Publishing only. Deleting is `preview-cleanup.yml`, and it is a separate workflow because of the
+# `paths` filter below: a filter applies to every event the trigger names, so a pull request that
+# published a preview and then reverted the last of its documentation changes would stop matching
+# and never fire its `closed` event. The drafts would then sit in the bucket until the lifecycle
+# rule expired them. Deletion cannot depend on what the final diff touches.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
     paths:
       - 'docs/**'
       - 'apps/docs/**'
@@ -61,7 +67,7 @@ jobs:
   publish:
     name: Publish the preview
     needs: check-configuration
-    if: needs.check-configuration.outputs.configured == 'true' && github.event.action != 'closed'
+    if: needs.check-configuration.outputs.configured == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -135,56 +141,5 @@ jobs:
                 ...scope,
                 issue_number: context.issue.number,
                 body,
-              });
-            }
-
-  remove:
-    name: Remove the preview
-    needs: check-configuration
-    if: needs.check-configuration.outputs.configured == 'true' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: write
-    steps:
-      - uses: aws-actions/configure-aws-credentials@v5
-        with:
-          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      # R12's third criterion. The bucket's lifecycle rule is only a backstop for the run that never
-      # happens; this is the mechanism, and it runs on close as well as on merge.
-      - name: Delete the preview
-        run: aws s3 rm "s3://${PREVIEW_BUCKET}/pr-${PR_NUMBER}/" --recursive --only-show-errors
-        env:
-          PREVIEW_BUCKET: ${{ vars.PREVIEW_BUCKET }}
-          PR_NUMBER: ${{ github.event.number }}
-
-      # Rewritten rather than left in place: a comment offering a link to a preview that has been
-      # deleted is worse than no comment. Never created here — a pull request that never had one
-      # does not need to be told that it still does not.
-      - name: Say that the preview is gone
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const marker = '<!-- lugem-preview -->';
-            const scope = { owner: context.repo.owner, repo: context.repo.repo };
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              ...scope,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find((comment) => comment.body?.startsWith(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                ...scope,
-                comment_id: existing.id,
-                body: [
-                  marker,
-                  '### Documentation preview',
-                  '',
-                  'Removed — this pull request is closed.',
-                ].join('\n'),
               });
             }

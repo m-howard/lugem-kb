@@ -1,5 +1,7 @@
 import { posix } from 'node:path';
 
+import GithubSlugger from 'github-slugger';
+
 import { type Problem } from './problem';
 
 /** `](target)` or `](target "title")`. The target stops at whitespace or the closing bracket. */
@@ -12,6 +14,24 @@ const REFERENCE_DEFINITION = /^ {0,3}\[[^\]]+\]:[ \t]*(\S+)/;
 const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
 const ATX_HEADING = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/;
+
+/**
+ * Docusaurus's classic explicit heading id: `## Runbook {#ops}`.
+ *
+ * The same expression `parseMarkdownHeadingId` in `@docusaurus/utils` uses — anchored to the end of
+ * the heading, and refusing an id that itself contains `{#` or `}`.
+ */
+const CLASSIC_HEADING_ID = /\s*\{#(?<id>(?:.(?!\{#|\}))*.)\}$/;
+
+/**
+ * The comment form of the same thing: a heading closed by an MDX comment holding `#ops`.
+ *
+ * The MDX spelling only. Docusaurus also reads an id out of an HTML comment, but that path needs
+ * the heading parsed as CommonMark, and this site leaves `markdown.format` at its default — every
+ * page here is MDX, where `<!-- -->` never becomes a comment node. Checked against a real build
+ * rather than assumed; `links.test.ts` spells the form out.
+ */
+const COMMENT_HEADING_ID = /\s*\{\/\*(?<comment>[\s\S]*?)\*\/\}$/;
 
 /** `http:`, `mailto:` and friends. An offline checker cannot speak to whether they resolve. */
 const URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
@@ -104,35 +124,73 @@ export function findLinks(body: string): readonly Link[] {
 }
 
 /**
- * Turns heading text into the anchor Docusaurus will publish for it.
+ * Reduces a heading to the plain text a renderer would show.
  *
- * Matches `github-slugger`, which is what Docusaurus uses: lowercase, drop everything that is not
- * a letter, a digit, a space, a hyphen or an underscore, then hyphenate the spaces. Inline
- * formatting is unwrapped first so `## The **CMS** GitHub App` and `## The CMS GitHub App` produce
- * the same anchor, as they do on the rendered page.
+ * Docusaurus slugs the heading's rendered text, not its markdown source, so `## The **CMS** App`
+ * and `## The CMS App` publish the same anchor. Unwrapping links and emphasis here is what makes
+ * the two agree. Everything after this is `github-slugger`'s business, not ours.
+ *
+ * `_` is left in place, unlike the other emphasis characters. It survives into the rendered text
+ * far more often than it opens emphasis — `## The snake_case option` publishes
+ * `#the-snake_case-option` — and this corpus writes strong text as `**`, which markdownlint's
+ * MD050 enforces.
  */
-function slugify(heading: string): string {
+function headingText(heading: string): string {
   return heading
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/[*_`~]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N} _-]/gu, '')
-    .replace(/ /g, '-');
+    .replace(/[*`~]/g, '')
+    .trim();
+}
+
+/**
+ * The id an author wrote on the heading, if they wrote one.
+ *
+ * Two spellings, in Docusaurus's own order of preference: a trailing MDX comment holding `#id`,
+ * then the classic `{#id}`. A comment without the `#` is a comment — Docusaurus wants the marker
+ * so that a note to a future editor does not silently become an anchor.
+ */
+function explicitHeadingId(heading: string): string | undefined {
+  const comment = COMMENT_HEADING_ID.exec(heading)?.groups?.['comment'];
+
+  if (comment !== undefined) {
+    const marked = comment.trim().split(' ')[0] ?? '';
+    if (marked.startsWith('#') && marked.length > 1) {
+      return marked.slice(1);
+    }
+  }
+
+  return CLASSIC_HEADING_ID.exec(heading)?.groups?.['id']?.trim();
 }
 
 /**
  * The anchors a page publishes, one per ATX heading.
  *
- * Repeated headings get the `-1`, `-2` suffixes Docusaurus appends, so a page with two
- * "Troubleshooting" sections resolves `#troubleshooting-1` as the reader's browser would.
+ * Two rules here are Docusaurus's rather than obvious, and getting either wrong fails an author
+ * for a link that works:
+ *
+ * 1. **An explicit id wins and is used verbatim.** `## Runbook {#ops}` publishes `#ops`, not
+ *    `#runbook-ops`. Docusaurus does not pass it through the slugger either, so it takes no place
+ *    in the `-1`, `-2` sequence a repeated heading produces. The comment spellings count too.
+ * 2. **Uniqueness is global, not per heading.** `github-slugger` remembers every slug it has
+ *    already returned, so `Foo`, `Foo`, `Foo-1` publishes `foo`, `foo-1`, `foo-1-1` — the third
+ *    heading collides with the second's *output*. Counting occurrences per base text instead
+ *    yields only two anchors and rejects `#foo-1-1`.
+ *
+ * The slugger is the one Docusaurus itself uses, at the version it resolves, and one instance per
+ * page because that is the scope Docusaurus gives it.
  *
  * @param body - The whole file.
  * @returns Every anchor on the page.
+ *
+ * @example
+ * ```ts
+ * headingSlugs('## Runbook {#ops}\n## Runbook\n');
+ * // → Set { 'ops', 'runbook' }
+ * ```
  */
 export function headingSlugs(body: string): ReadonlySet<string> {
   const slugs = new Set<string>();
-  const seen = new Map<string, number>();
+  const slugger = new GithubSlugger();
 
   for (const line of withoutCode(body).split('\n')) {
     const heading = ATX_HEADING.exec(line)?.[2];
@@ -140,14 +198,20 @@ export function headingSlugs(body: string): ReadonlySet<string> {
       continue;
     }
 
-    const base = slugify(heading);
-    if (base === '') {
+    // Read off the raw heading, before formatting is unwrapped: an id is used verbatim, and that
+    // step is free to touch characters an id may legitimately contain.
+    const explicitId = explicitHeadingId(heading);
+    if (explicitId !== undefined) {
+      slugs.add(explicitId);
       continue;
     }
 
-    const count = seen.get(base) ?? 0;
-    seen.set(base, count + 1);
-    slugs.add(count === 0 ? base : `${base}-${String(count)}`);
+    const text = headingText(heading);
+    if (text === '') {
+      continue;
+    }
+
+    slugs.add(slugger.slug(text));
   }
 
   return slugs;

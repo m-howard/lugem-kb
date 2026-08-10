@@ -80,6 +80,12 @@ copy of the site, so you can click around it — your new page in the sidebar, t
 the way a long table wraps. Nobody outside the review sees it, and it disappears when the change is
 published or withdrawn.
 
+Two things behave differently in a preview than on the real site: the **Ask** page cannot answer
+questions, and the light/dark choice is forgotten when you reload. A preview is walled off from the
+rest of the site on purpose, and both of those need to reach out of the wall. Everything you are
+there to check — your words, your headings, your links, your tables — renders exactly as it will
+once the change is published.
+
 The same link is posted as a comment on your change, so a reviewer can open it without going
 through the editor.
 

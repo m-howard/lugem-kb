@@ -126,13 +126,26 @@ instead: this role may write under `pr-*` in one bucket, and nowhere else. A for
 at all, because a fork's `pull_request` token carries the fork's own subject.
 
 `.github/workflows/preview.yml` builds the site with `DOCUSAURUS_BASE_URL=/previews/pr-<n>/`, syncs
-it to `s3://<bucket>/pr-<n>/`, and comments the link. On `closed` — merged or abandoned, both — it
-deletes the prefix and rewrites the comment. A 30-day lifecycle rule catches the pull request
-nobody ever closes.
+it to `s3://<bucket>/pr-<n>/`, and comments the link. `.github/workflows/preview-cleanup.yml`
+deletes the prefix and rewrites the comment on `closed` — merged or abandoned, both. A 30-day
+lifecycle rule catches the pull request nobody ever closes.
+
+**Two workflows, not one, and only the first filters on `paths`.** A `paths` filter applies to
+every event its trigger names. Were deletion in the same workflow, a pull request that published a
+preview and then reverted its last documentation change would stop matching, never fire its
+`closed` event, and leave the drafts in the bucket until the lifecycle rule expired them. Deleting
+has to happen for every closed pull request, whatever the final diff touches.
 
 **A separate bucket from the corpus, deliberately.** R21 says preview builds are never ingested,
 and a bucket the knowledge base has never been pointed at cannot be. See
 [ADR 0018](./adr/0018-previews-behind-the-gateway.md).
+
+**The gateway serves previews sandboxed.** Every response under `/previews` carries
+`Content-Security-Policy: sandbox allow-scripts allow-popups`. A pull request's pages are unreviewed
+MDX — code, not just prose — and the sandbox is what keeps them from running on the origin that
+holds `/admin` and the reader's session. The visible cost is that a preview cannot call the
+gateway's API, so the **Ask** page does not answer inside one. ADR 0018 has the reasoning and the
+caveat for ALB authentication mode.
 
 ## Content quality gates
 
@@ -210,3 +223,10 @@ no way to fix it.
 
 **`AssumeRoleWithWebIdentity` is denied.** The job is missing `environment: publish`, or its
 `id-token: write` permission. The trust policy matches the subject exactly, so both are required.
+
+**A preview URL answers 500 rather than "no preview for pull request N".** The bucket refused the
+gateway's read — a task role, bucket policy or encryption grant that does not match the bucket, not
+a build that has not finished. The gateway's log names the bucket and the key. The two are
+distinguishable only because the task role holds `s3:ListBucket` on the preview bucket: without it
+S3 answers `AccessDenied` for a key that is simply absent, and every misconfiguration would read as
+a missing preview forever.

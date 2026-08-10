@@ -88,6 +88,12 @@ export interface TestAppOptions {
    * Keys are relative to the preview bucket root, e.g. `pr-42/index.html`.
    */
   readonly previewObjects?: Readonly<Record<string, string>> | undefined;
+  /**
+   * Makes the preview bucket answer `AccessDenied` for anything it does not hold — a deployment
+   * whose task role, bucket policy or encryption grant is wrong, rather than a build that has not
+   * finished. Only meaningful alongside `previewObjects`.
+   */
+  readonly previewsRefused?: boolean | undefined;
   /** Collects log records instead of discarding them, for tests that assert on audit output. */
   readonly captureLogs?: Record<string, unknown>[] | undefined;
 }
@@ -245,7 +251,12 @@ export function buildTestApp(options: TestAppOptions = {}): Hono<AppEnv> {
       ? {}
       : {
           previews: new PreviewClient({
-            s3: fakeS3Client({ objects: options.previewObjects }),
+            s3: fakeS3Client({
+              objects: options.previewObjects,
+              ...(options.previewsRefused === undefined
+                ? {}
+                : { refuseMissing: options.previewsRefused }),
+            }),
             bucket: TEST_PREVIEW_BUCKET,
           }),
         }),

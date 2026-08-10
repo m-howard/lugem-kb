@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { buildTestApp } from '../helpers/build-test-app';
 
@@ -52,6 +52,51 @@ describe('pull request previews', () => {
     const response = await withPreviews().request('/previews/pr-42/');
 
     expect(response.headers.get('x-robots-tag')).toContain('noindex');
+  });
+
+  // The one that matters. `docs/**` is MDX, so a pull request can carry script, and the CMS lets
+  // someone with no git account open one. Without the sandbox that script runs on the origin that
+  // holds `/admin`, the CMS API and the reader's session. See ADR 0018.
+  describe('sandboxing', () => {
+    // Every path out of the route, including the ones that carry no pull request bytes at all: a
+    // response that forgot the header is the one an attacker would look for.
+    it.each([
+      ['a served page', '/previews/pr-42/'],
+      ['an asset', '/previews/pr-42/assets/css/styles.css'],
+      ["the build's own 404", '/previews/pr-42/no-such-page'],
+      ['a pull request with no preview', '/previews/pr-99/'],
+      ['a refused path', '/previews/pr-42/..%2f..%2fetc%2fpasswd'],
+    ])('sandboxes %s', async (_case, path) => {
+      const response = await withPreviews().request(path);
+
+      expect(response.headers.get('content-security-policy')).toBe(
+        'sandbox allow-scripts allow-popups',
+      );
+    });
+
+    // The whole point of the header. `allow-same-origin` would hand the preview the reader's
+    // storage, cookies and credentialed access to the editorial API.
+    it('never grants a preview the site origin', async () => {
+      const response = await withPreviews().request('/previews/pr-42/');
+
+      expect(response.headers.get('content-security-policy')).not.toContain('allow-same-origin');
+    });
+
+    // A popup that escaped the sandbox would be a same-origin window opened by unreviewed script.
+    it('does not let a popup escape the sandbox', async () => {
+      const response = await withPreviews().request('/previews/pr-42/');
+
+      expect(response.headers.get('content-security-policy')).not.toContain(
+        'allow-popups-to-escape-sandbox',
+      );
+    });
+
+    // The published site is not preview content and must not lose its own origin.
+    it('leaves the site itself unsandboxed', async () => {
+      const response = await withPreviews().request('/');
+
+      expect(response.headers.get('content-security-policy')).toBeNull();
+    });
   });
 
   // Republished on every push. A cached preview makes an author think their fix did not land.
@@ -110,6 +155,41 @@ describe('pull request previews', () => {
 
     expect(response.status).toBe(404);
     await expect(response.text()).resolves.not.toContain('Not for previews');
+  });
+
+  // A bucket that refuses the read is a deployment someone has to fix. Answering the author's 404
+  // hides it: every preview then reads "may not have finished yet", forever, and nothing is logged.
+  describe('when the preview bucket refuses the read', () => {
+    function refused() {
+      return buildTestApp({ previewObjects: PREVIEW, previewsRefused: true, captureLogs: logs });
+    }
+
+    let logs: Record<string, unknown>[] = [];
+
+    beforeEach(() => {
+      logs = [];
+    });
+
+    it('does not report a refusal as a missing preview', async () => {
+      const response = await refused().request('/previews/pr-99/');
+
+      expect(response.status).toBe(500);
+      await expect(response.text()).resolves.not.toContain('merged or closed');
+    });
+
+    it('logs which bucket refused which key', async () => {
+      await refused().request('/previews/pr-99/');
+
+      const errors = logs.filter((record) => record['level'] === 'error');
+      expect(JSON.stringify(errors)).toContain('pr-99/index.html');
+    });
+
+    // The refusal only decides what a *miss* means. An object that is there is still served.
+    it('still serves a preview that exists', async () => {
+      const response = await refused().request('/previews/pr-42/');
+
+      expect(response.status).toBe(200);
+    });
   });
 
   describe('when no preview bucket is configured', () => {

@@ -398,16 +398,31 @@ function taskPolicyDocument(args: GatewayServiceArgs): pulumi.Output<string> {
         });
       }
 
-      // Read, on the preview bucket only, under `pr-*` only. No list: the preview route asks for
-      // named keys and treats a miss as a 404, so listing would grant a way to enumerate every
-      // open pull request's draft content for nothing the route uses.
+      // Read, on the preview bucket only, under `pr-*` only.
+      //
+      // `s3:ListBucket` comes with it, and unconditionally — unlike the corpus grant above, which
+      // narrows the same action with an `s3:prefix` condition. That difference is deliberate and
+      // it is not about listing: a `GetObject` on a key that is not there answers `AccessDenied`
+      // rather than `NoSuchKey` when the caller cannot list the bucket, and `s3:prefix` is not in
+      // a `GetObject` request's context, so a conditioned grant would not change that answer.
+      // Without this the gateway cannot tell "the build has not finished" from "this deployment's
+      // permissions are wrong", and `previews/preview-client.ts` would have to call both a 404.
+      // The bucket holds nothing but preview builds this role may already read.
       if (previewBucketArn !== '') {
-        statements.push({
-          Sid: 'ReadPreviewsOnly',
-          Effect: 'Allow',
-          Action: ['s3:GetObject'],
-          Resource: [`${previewBucketArn}/pr-*`],
-        });
+        statements.push(
+          {
+            Sid: 'ReadPreviewsOnly',
+            Effect: 'Allow',
+            Action: ['s3:GetObject'],
+            Resource: [`${previewBucketArn}/pr-*`],
+          },
+          {
+            Sid: 'DistinguishAMissingPreviewFromARefusal',
+            Effect: 'Allow',
+            Action: ['s3:ListBucket'],
+            Resource: [previewBucketArn],
+          },
+        );
       }
 
       return JSON.stringify({ Version: '2012-10-17', Statement: statements });

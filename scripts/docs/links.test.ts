@@ -75,10 +75,58 @@ describe('headingSlugs', () => {
     expect(headingSlugs('## The **[CMS](./a.md)** app\n').has('the-cms-app')).toBe(true);
   });
 
+  it('keeps an underscore, which the rendered text does too', () => {
+    expect(headingSlugs('## The snake_case option\n').has('the-snake_case-option')).toBe(true);
+  });
+
   it('suffixes a repeated heading, as the rendered page does', () => {
     const slugs = headingSlugs('## Troubleshooting\n## Troubleshooting\n## Troubleshooting\n');
 
     expect([...slugs]).toEqual(['troubleshooting', 'troubleshooting-1', 'troubleshooting-2']);
+  });
+
+  // github-slugger tracks the slugs it has *returned*, not the headings it was given, so the third
+  // heading here collides with the second one's output. Counting per heading text yields two
+  // anchors and rejects a valid link to `#foo-1-1`.
+  it('resolves a collision against an earlier suffixed slug, not the heading text', () => {
+    const slugs = headingSlugs('## Foo\n## Foo\n## Foo-1\n');
+
+    expect([...slugs]).toEqual(['foo', 'foo-1', 'foo-1-1']);
+  });
+
+  // Docusaurus reads `{#id}` off the end of a heading and publishes it verbatim.
+  it('uses an explicit heading id instead of slugifying the text', () => {
+    const slugs = headingSlugs('## Runbook {#ops}\n');
+
+    expect([...slugs]).toEqual(['ops']);
+  });
+
+  it('keeps an explicit id exactly as written', () => {
+    expect(headingSlugs('## Rotate the CMS credential {#rotate_the-KEY}\n')).toEqual(
+      new Set(['rotate_the-KEY']),
+    );
+  });
+
+  // An explicit id never reaches the slugger, so it claims no place in the -1/-2 sequence.
+  it('does not let an explicit id consume a suffix', () => {
+    const slugs = headingSlugs('## Setup\n## Setup {#second-setup}\n## Setup\n');
+
+    expect([...slugs]).toEqual(['setup', 'second-setup', 'setup-1']);
+  });
+
+  it('reads an explicit id from an MDX comment', () => {
+    expect([...headingSlugs('## Runbook {/* #ops */}\n')]).toEqual(['ops']);
+  });
+
+  // Docusaurus requires the `#`, so that a note to a future editor does not become an anchor.
+  it('treats an unmarked comment as a comment, not an id', () => {
+    expect(headingSlugs('## Runbook {/* rewrite this */}\n').has('ops')).toBe(false);
+  });
+
+  // The classic form has to close the heading. Docusaurus anchors its expression to the end, and
+  // MDX would read a `{...}` anywhere else as an expression rather than an id.
+  it('ignores a classic id that is not at the end of the heading', () => {
+    expect([...headingSlugs('## Runbook {#ops} and more\n')]).toEqual(['runbook-ops-and-more']);
   });
 
   it('ignores a `#` inside a code block', () => {
@@ -116,6 +164,26 @@ describe('checkLinks', () => {
     const problems = checkLinks([
       { file: 'docs/a.md', body: '[x](./b.md#missing)' },
       { file: 'docs/b.md', body: '## Present\n' },
+    ]);
+
+    expect(problems.map((problem) => problem.rule)).toEqual(['link-anchor']);
+  });
+
+  // The gate's own failure mode: a link Docusaurus resolves that the checker calls broken is worse
+  // than no checker, because it blocks a correct pull request.
+  it('accepts a link to an explicit heading id', () => {
+    expect(
+      checkLinks([
+        { file: 'docs/a.md', body: '[x](./b.md#ops)' },
+        { file: 'docs/b.md', body: '## Runbook {#ops}\n' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('reports a link to the slug an explicit id replaced', () => {
+    const problems = checkLinks([
+      { file: 'docs/a.md', body: '[x](./b.md#runbook)' },
+      { file: 'docs/b.md', body: '## Runbook {#ops}\n' },
     ]);
 
     expect(problems.map((problem) => problem.rule)).toEqual(['link-anchor']);
