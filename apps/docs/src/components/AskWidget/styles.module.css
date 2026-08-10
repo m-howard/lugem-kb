@@ -272,3 +272,69 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/*
+ * Feedback sits under the citations and stays visually quieter than them. A reader came for an
+ * answer, not to fill in a survey — this should be findable when something is wrong and easy to
+ * ignore when nothing is.
+ */
+.feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+
+.feedbackRow {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.feedbackLabel {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.75rem;
+}
+
+.feedbackReason {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font-size: 0.85rem;
+}
+
+.feedbackButton {
+  align-self: flex-start;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.feedbackButton:hover:not(:disabled) {
+  border-color: var(--ifm-color-emphasis-500);
+  color: var(--ifm-font-color-base);
+}
+
+.feedbackButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.feedbackDone,
+.feedbackFailed {
+  margin: 0.6rem 0 0;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.78rem;
+}
+
+.feedbackFailed {
+  color: var(--ifm-color-danger);
+}

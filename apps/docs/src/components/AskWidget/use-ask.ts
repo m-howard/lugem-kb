@@ -9,7 +9,8 @@ import {
 } from 'react';
 
 import { askTheDocs } from './ask-client';
-import { type ConversationMessage, type Turn } from './types';
+import { sendUnhelpfulFeedback } from './feedback-client';
+import { type ConversationMessage, type FeedbackStatus, type Turn } from './types';
 
 /**
  * How many prior turns travel with each question.
@@ -29,6 +30,8 @@ export interface AskController {
   readonly ask: (question: string) => void;
   readonly stop: () => void;
   readonly clear: () => void;
+  /** Reports that an answer did not help, optionally saying why. */
+  readonly markUnhelpful: (turnId: string, reason?: string) => void;
 }
 
 interface AskDeps {
@@ -67,6 +70,27 @@ function withLastAnswer(turns: readonly Turn[], update: (answer: Answer) => Turn
   return last?.kind === 'answer' ? [...turns.slice(0, -1), update(last)] : turns;
 }
 
+/**
+ * Feedback targets a turn by id, not by position.
+ *
+ * A reader can scroll back and mark an answer from three questions ago, so `withLastAnswer` is the
+ * wrong tool here even though it looks like the same job.
+ */
+function withAnswer(
+  turns: readonly Turn[],
+  id: string,
+  update: (answer: Answer) => Turn,
+): readonly Turn[] {
+  return turns.map((turn) => (turn.kind === 'answer' && turn.id === id ? update(turn) : turn));
+}
+
+/** The question that prompted an answer is the turn immediately before it. */
+function questionBefore(turns: readonly Turn[], id: string): string | undefined {
+  const index = turns.findIndex((turn) => turn.id === id);
+  const question = index <= 0 ? undefined : turns[index - 1];
+  return question?.kind === 'question' ? question.text : undefined;
+}
+
 const markComplete = (answer: Answer): Turn =>
   answer.status === 'streaming' ? { ...answer, status: 'complete' } : answer;
 
@@ -83,7 +107,15 @@ function startAsk(question: string, deps: AskDeps): void {
     return [
       ...current,
       { kind: 'question', id: nextId(), text: question },
-      { kind: 'answer', id: answerId, text: '', citations: [], status: 'streaming' },
+      {
+        kind: 'answer',
+        id: answerId,
+        text: '',
+        citations: [],
+        status: 'streaming',
+        answerId: '',
+        feedback: 'none',
+      },
     ];
   });
 
@@ -96,8 +128,14 @@ function startAsk(question: string, deps: AskDeps): void {
     history,
     signal: abort.signal,
     handlers: {
-      onCitations: (citations) => {
-        deps.setTurns((current) => withLastAnswer(current, (answer) => ({ ...answer, citations })));
+      onCitations: (frame) => {
+        deps.setTurns((current) =>
+          withLastAnswer(current, (answer) => ({
+            ...answer,
+            citations: frame.citations,
+            answerId: frame.answerId,
+          })),
+        );
       },
       onToken: (text) => {
         deps.setTurns((current) =>
@@ -166,5 +204,44 @@ export function useAsk(): AskController {
     startAsk(trimmed, { setTurns, setIsAsking, controller });
   }, []);
 
-  return { turns, isAsking, ask, stop, clear };
+  const markUnhelpful = useCallback(
+    (turnId: string, reason?: string) => {
+      // Read from state, send outside the updater. A `setTurns` callback can run twice under
+      // StrictMode, and a double-invoked updater that posts would file the same gap twice.
+      const answer = turns.find((turn) => turn.id === turnId);
+      const question = questionBefore(turns, turnId);
+      if (answer?.kind !== 'answer' || answer.answerId === '' || question === undefined) {
+        return;
+      }
+      if (answer.feedback === 'sending' || answer.feedback === 'sent') {
+        return;
+      }
+
+      const settle = (status: FeedbackStatus): void => {
+        setTurns((current) =>
+          withAnswer(current, turnId, (turn) => ({ ...turn, feedback: status })),
+        );
+      };
+
+      settle('sending');
+      void sendUnhelpfulFeedback({
+        answerId: answer.answerId,
+        question,
+        citedPaths: answer.citations
+          .map((citation) => citation.path)
+          .filter((path): path is string => path !== null),
+        ...(reason === undefined || reason.trim() === '' ? {} : { reason: reason.trim() }),
+      }).then(
+        (accepted) => {
+          settle(accepted ? 'sent' : 'failed');
+        },
+        () => {
+          settle('failed');
+        },
+      );
+    },
+    [turns],
+  );
+
+  return { turns, isAsking, ask, stop, clear, markUnhelpful };
 }

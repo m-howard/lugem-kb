@@ -23,7 +23,7 @@ export interface AskPanelProps {
  * answer streams into an inert node and one status message is announced once it is finished.
  */
 export function AskPanel({ variant, autoFocus = false }: AskPanelProps): ReactElement {
-  const { turns, isAsking, ask, stop, clear } = useAsk();
+  const { turns, isAsking, ask, stop, clear, markUnhelpful } = useAsk();
   const [announcement, setAnnouncement] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
   const wasAsking = useRef(false);
@@ -48,7 +48,7 @@ export function AskPanel({ variant, autoFocus = false }: AskPanelProps): ReactEl
         {turns.length === 0 ? (
           <p className={styles.empty}>{EMPTY_STATE}</p>
         ) : (
-          <Transcript turns={turns} />
+          <Transcript turns={turns} markUnhelpful={markUnhelpful} />
         )}
       </div>
 

@@ -4,8 +4,14 @@ const ASK_ENDPOINT = '/v1/ask';
 const FRAME_SEPARATOR = '\n\n';
 const TOO_MANY_REQUESTS = 429;
 
+/** The citations frame's payload: the sources, and the handle for rating what they produced. */
+export interface CitationsFrame {
+  readonly answerId: string;
+  readonly citations: readonly Citation[];
+}
+
 export interface AskHandlers {
-  readonly onCitations: (citations: readonly Citation[]) => void;
+  readonly onCitations: (frame: CitationsFrame) => void;
   readonly onToken: (text: string) => void;
   readonly onNotCovered: (message: string) => void;
   readonly onFailure: (message: string) => void;
@@ -38,7 +44,7 @@ function dispatchFrame(frame: string, handlers: AskHandlers): void {
 
   const data: unknown = JSON.parse(raw);
   if (event === 'citations') {
-    handlers.onCitations(data as Citation[]);
+    handlers.onCitations(data as CitationsFrame);
   } else if (event === 'token') {
     handlers.onToken((data as { text: string }).text);
   } else if (event === 'error') {

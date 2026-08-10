@@ -16,6 +16,14 @@ export interface ConversationMessage {
 export type AnswerStatus = 'streaming' | 'complete' | 'failed';
 
 /**
+ * Where an answer is in the "this did not help" flow.
+ *
+ * `none` is the resting state, not "the reader found it helpful" — nobody clicks to say an answer
+ * worked, so the absence of a mark means nothing and is never recorded as though it did.
+ */
+export type FeedbackStatus = 'none' | 'sending' | 'sent' | 'failed';
+
+/**
  * One entry in the transcript.
  *
  * `not-covered` is its own kind rather than an answer with empty citations, mirroring the API's
@@ -30,6 +38,13 @@ export type Turn =
       readonly text: string;
       readonly citations: readonly Citation[];
       readonly status: AnswerStatus;
+      /**
+       * The gateway's handle for this answer, arriving with the citations frame. Empty until then,
+       * and the control that reports an unhelpful answer stays hidden while it is — there is
+       * nothing to report against yet.
+       */
+      readonly answerId: string;
+      readonly feedback: FeedbackStatus;
     }
   | { readonly kind: 'not-covered'; readonly id: string; readonly message: string }
   | { readonly kind: 'failed'; readonly id: string; readonly message: string };
