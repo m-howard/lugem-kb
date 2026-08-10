@@ -85,6 +85,8 @@ export interface StackConfigInput {
   readonly retrievalScoreThreshold?: number | undefined;
   readonly gapFeedbackRetentionDays?: number | undefined;
   readonly readerAuthRequired?: boolean | undefined;
+  readonly notifySenderAddress?: string | undefined;
+  readonly notifyRecipientDomains?: readonly string[] | undefined;
 }
 
 export interface StackConfig {
@@ -121,6 +123,22 @@ export interface StackConfig {
    * certificate prerequisite `cmsAuthMode: alb` already has — see ADR 0017.
    */
   readonly readerAuthRequired: boolean;
+  /**
+   * The verified `From` address for review notifications (R14), or nothing.
+   *
+   * Absent is the default and means the feature does not exist: no SES identity, no role, no
+   * Actions variables, and a workflow that skips. Setting it is what turns R14 on — see
+   * ADR 0020.
+   */
+  readonly notifySenderAddress: string | undefined;
+  /**
+   * Domains a notification may be delivered to.
+   *
+   * Defaults to the sender's own domain, which is the safe reading: this system sends mail from a
+   * corporate-verified address, and a wider recipient set should be an operator's explicit choice
+   * rather than the default.
+   */
+  readonly notifyRecipientDomains: readonly string[];
 }
 
 /**
@@ -265,6 +283,40 @@ export function answerModelArns(config: StackConfig, accountId: string): string[
   ];
 }
 
+/** A sender must be one address this account can verify — a domain or a list is not sendable-as. */
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+$/;
+
+/**
+ * Resolves review-notification settings (R14).
+ *
+ * Validated here rather than at the component, because the failure this prevents is a stack that
+ * deploys an SES identity and a role and then cannot send: an address with a typo verifies never,
+ * and the first anyone hears of it is a reviewer who was not told about a pull request.
+ */
+function resolveNotifications(
+  input: StackConfigInput,
+): Pick<StackConfig, 'notifySenderAddress' | 'notifyRecipientDomains'> {
+  const sender = input.notifySenderAddress?.trim();
+  if (sender === undefined || sender === '') {
+    return { notifySenderAddress: undefined, notifyRecipientDomains: [] };
+  }
+
+  if (!EMAIL_PATTERN.test(sender)) {
+    raise('notifySenderAddress', `must be a single email address, got "${sender}"`);
+  }
+
+  const configured = (input.notifyRecipientDomains ?? [])
+    .map((domain) => domain.trim().toLowerCase())
+    .filter((domain) => domain !== '');
+
+  return {
+    notifySenderAddress: sender,
+    // The sender's own domain is the default, so the common case needs no second key and the
+    // permitted set is never accidentally empty.
+    notifyRecipientDomains: configured.length > 0 ? configured : [sender.split('@')[1] ?? ''],
+  };
+}
+
 function assertRegionSupportsS3Vectors(region: string, allowUnverified: boolean): void {
   if (allowUnverified) {
     return;
@@ -345,5 +397,6 @@ export function validateStackConfig(input: StackConfigInput): StackConfig {
       'gapFeedbackRetentionDays',
     ),
     readerAuthRequired: input.readerAuthRequired ?? false,
+    ...resolveNotifications(input),
   };
 }

@@ -38,6 +38,8 @@ export function readStackConfig(): StackConfig {
     retrievalScoreThreshold: config.getNumber('retrievalScoreThreshold'),
     gapFeedbackRetentionDays: config.getNumber('gapFeedbackRetentionDays'),
     readerAuthRequired: config.getBoolean('readerAuthRequired'),
+    notifySenderAddress: config.get('notifySenderAddress'),
+    notifyRecipientDomains: config.getObject<string[]>('notifyRecipientDomains'),
   });
 }
 

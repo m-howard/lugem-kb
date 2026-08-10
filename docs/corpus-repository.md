@@ -165,6 +165,69 @@ Run it locally before pushing:
 bun run docs:check
 ```
 
+## Review notifications
+
+Off unless you configure a sender. Set one and Pulumi creates an SES identity, a third OIDC role,
+and a `notify` environment — the same shape as the publish pipeline above:
+
+```bash
+pulumi config set notifySenderAddress docs-notifications@example.com
+
+# Optional. Defaults to the sender's own domain, which is the safe reading.
+pulumi config set --path notifyRecipientDomains[0] example.com
+pulumi config set --path notifyRecipientDomains[1] contractors.example.net
+```
+
+Two things need doing by hand afterwards, and neither is optional:
+
+1. **Verify the sender.** `pulumi up` creates the identity and requests verification; AWS emails
+   the address and somebody has to click the link. Until then every send fails.
+2. **Leave the SES sandbox.** A new account may only send to verified addresses. Request production
+   access in the SES console — it is not instant, so start it before the rollout, not during it.
+
+Then map each `CODEOWNERS` handle to an address in `.github/docs-owner-emails.json`:
+
+```json
+{
+  "owners": {
+    "@lugem/docs-team": "docs-team@example.com",
+    "@lugem/platform": "platform@example.com"
+  }
+}
+```
+
+The file ships empty. `CODEOWNERS` names GitHub handles and email needs addresses, and nothing in
+the GitHub API bridges the two reliably — user emails are private by default. So the mapping is
+explicit and reviewed, and an owner with no entry here is reported as unroutable in the workflow
+log rather than guessed at. See
+[ADR 0020](./adr/0020-review-notifications-by-email.md).
+
+`.github/workflows/review-notifications.yml` sends on three events, matching
+[requirements.md](./requirements.md) R14:
+
+| Event                               | Who hears                                      |
+| ----------------------------------- | ---------------------------------------------- |
+| Pull request opened or marked ready | Owners of the changed pages, from `CODEOWNERS` |
+| Pull request merged                 | The submitter                                  |
+| A review requests changes           | The submitter                                  |
+
+Only paths under `docs/` route a review request — otherwise every engineering pull request would
+email a code owner, and a notification people learn to ignore routes nothing. The submitter's
+address comes from the pull request body, which R6 already fills in from a verified token, and is
+only trusted on a branch under the CMS prefix.
+
+The role's policy is `ses:SendEmail` on one identity with a `ses:FromAddress` condition, so it
+cannot send as any other verified address in the account.
+
+:::warning
+
+`review-notifications.yml` runs on `pull_request_target`, which means it has the repository's
+credentials while handling an event from a fork. It must never check out, build, or run pull
+request code. Adding a `ref:` pointing at the head branch would hand a fork everything the job
+holds.
+
+:::
+
 ## The CMS GitHub App
 
 Pulumi cannot create a GitHub App. Create it once by hand, then hand Pulumi its ids.

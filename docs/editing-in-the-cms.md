@@ -93,6 +93,24 @@ If the button keeps saying **Check for preview**, the build is still running —
 minutes after a save. If it never resolves, the deployment may not have previews switched on; ask a
 platform engineer.
 
+## Being told what happened
+
+You do not have to watch your submission. If your deployment has notifications switched on, you get
+an email when it matters:
+
+| When                                  | You get                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| Your change is approved and published | A note that it is live, and answerable in chat within about 15 minutes |
+| A reviewer asks for changes           | A note to open the page in the CMS and submit it again                 |
+
+Reviewers get the matching email when a page they own is waiting for them, so a submission does not
+sit unnoticed.
+
+Nothing arrives while you are still drafting — saving is silent by design.
+
+If you never receive these, notifications are not configured on your deployment. That is a setting,
+not a fault with your submission; ask a platform engineer.
+
 ## Your name on your work
 
 Every change records you as its author — your name and your email, from the login you signed in

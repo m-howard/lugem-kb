@@ -1,0 +1,90 @@
+name: Review notifications
+
+# requirements.md R14: owners are notified when a pull request awaits their review, and authors are
+# notified when their submission is published or changes are requested. Open question Q7 settled on
+# email — docs/adr/0020-review-notifications-by-email.md.
+#
+# `pull_request_target` rather than `pull_request`, and the distinction matters:
+# `pull_request` from a fork gets a read-only token and no OIDC, so it could never assume the role
+# that sends mail. `pull_request_target` runs in the base repository's context, where the
+# credential exists.
+#
+# THE RULE THAT COMES WITH IT: this workflow must never check out, build, or execute pull request
+# code. It checks out the base ref (the `actions/checkout` default under this event) and reads only
+# the event payload and the base branch's own CODEOWNERS and owner directory. Adding a `ref:` that
+# points at the head, or any step that runs code from the pull request, hands a fork write access
+# to everything below.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, closed]
+  pull_request_review:
+    types: [submitted]
+
+# Serialised per pull request. Two deliveries arriving together — a review submitted as the author
+# reopens — would otherwise race to send overlapping mail. Never cancel: a cancelled notification
+# is one nobody ever receives.
+concurrency:
+  group: review-notifications-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Published by `pulumi up` (see infra/pulumi/src/components/notification-pipeline.ts), so a fork
+  # or a clone whose stack has never been deployed skips cleanly. This job deliberately stays
+  # outside the `notify` environment: it reads the variables before deciding there is anything to do.
+  check-configuration:
+    name: Check notification configuration
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ vars.AWS_NOTIFY_ROLE_ARN }}" ] && [ -n "${{ vars.NOTIFY_SENDER }}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping review notifications — Pulumi has not published AWS_NOTIFY_ROLE_ARN and NOTIFY_SENDER to this repository."
+          fi
+
+  notify:
+    name: Notify reviewers and authors
+    needs: check-configuration
+    if: needs.check-configuration.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    # The IAM trust policy names this environment in its subject condition, so a job that skips the
+    # deployment gate cannot assume the role. That role holds `ses:SendEmail` from one address and
+    # nothing else.
+    environment: notify
+    permissions:
+      contents: read
+      id-token: write
+      # Reading the changed paths of a pull request, to resolve them through CODEOWNERS.
+      pull-requests: read
+    steps:
+      # No `ref:` — the default under `pull_request_target` is the base branch, which is the point.
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_NOTIFY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: bun install --frozen-lockfile
+
+      # Classifies the delivery, resolves recipients through CODEOWNERS and the owner directory,
+      # and sends one message each. Most deliveries resolve to nothing and exit quietly.
+      - name: Send review notifications
+        run: bun run notify:review
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          NOTIFY_SENDER: ${{ vars.NOTIFY_SENDER }}
+          NOTIFY_RECIPIENT_DOMAINS: ${{ vars.NOTIFY_RECIPIENT_DOMAINS }}
+          CMS_BRANCH_PREFIX: ${{ vars.CMS_BRANCH_PREFIX }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}

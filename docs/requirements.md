@@ -250,8 +250,8 @@ Every request produces a structured record.
 
 #### R14. Review notifications
 
-- [ ] Owners are notified in chat when a pull request awaits their review
-- [ ] Authors are notified when their submission is published or changes are requested
+- [ ] Owners are notified in chat when a pull request awaits their review — **built, by email rather than chat, and off by default.** Q7 settled the mechanism: no chat platform, so "in chat" reads as "out of band" here. `notifySenderAddress` turns it on; until a deployment sets it and fills in `.github/docs-owner-emails.json`, nobody is notified and this is not met ([ADR 0020](adr/0020-review-notifications-by-email.md))
+- [ ] Authors are notified when their submission is published or changes are requested — same mechanism, same switch. The author's address comes from the pull request body R6 already fills in, and only on a branch under the CMS prefix
 
 #### R15. Image handling
 
@@ -354,7 +354,7 @@ signal there.
 | Q4 | Does the IdP access token carry email and name claims, or must they come from the ALB header? | Platform | Yes, for R6 |
 | Q5 | Audit log retention period? | Compliance | No |
 | Q6 | Do any existing pages live outside the proposed writable prefixes? | Docs lead | No |
-| Q7 | Chat platform for R14 notifications? | Docs lead | No |
+| Q7 | Chat platform for R14 notifications? | Docs lead | **Resolved.** Email — no new chat platform dependency; reuses the org's existing SMTP/SES path |
 | Q8 | Does the AI assistant referenced in R11 already exist? Is R20–R23 an integration contract or a new service? | Platform | **Resolved.** A new service, in this repository — `apps/gateway` answers over the corpus directly |
 | Q9 | Model and inference hosting — Bedrock, or an existing internal endpoint? | Platform | **Resolved.** Bedrock, on S3 Vectors — [ADR 0005](adr/0005-bedrock-knowledge-base-on-s3-vectors.md), [ADR 0012](adr/0012-grounded-generation-behind-retrieval.md) |
 | Q10 | Where does chat surface: docs site, chat platform, or both? Drives the R22 auth model. | Docs lead / Platform | **Resolved.** The docs site, served by the same gateway. A chat platform surface would reopen it |
