@@ -125,6 +125,7 @@ describe('loadConfig', () => {
       AUTH_MODE: 'bearer',
       AUTH_ISSUER_URL: 'https://idp.example.com/realm',
       AUTH_AUDIENCE: 'lugem-cms',
+      AUTH_CLIENT_ID: 'lugem-cms-admin',
     } as const;
 
     // CMS_REPOSITORY is the master switch, mirroring `corpusRepository` in the Pulumi program.
@@ -179,6 +180,9 @@ describe('loadConfig', () => {
         ['AUTH_MODE'],
         ['AUTH_ISSUER_URL'],
         ['AUTH_AUDIENCE'],
+        // Without it the `/admin` page cannot start a sign-in, and the failure would surface as an
+        // editor that loads and then cannot authenticate — long after the deploy looked healthy.
+        ['AUTH_CLIENT_ID'],
       ])('rejects a missing %s and names it', (variable) => {
         const env = {
           ...VALID_ENV,
@@ -233,11 +237,12 @@ describe('loadConfig', () => {
     });
 
     describe('auth modes', () => {
-      it('reads the issuer and audience in bearer mode', () => {
+      it('reads the issuer, audience and admin client id in bearer mode', () => {
         expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).cms?.auth).toEqual({
           mode: 'bearer',
           issuer: 'https://idp.example.com/realm',
           audience: 'lugem-cms',
+          clientId: 'lugem-cms-admin',
           emailClaim: 'email',
           nameClaim: 'name',
         });

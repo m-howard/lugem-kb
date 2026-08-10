@@ -1,2 +1,7 @@
 .docusaurus/
 build/
+
+# Built by scripts/build/build-admin.ts: the Decap bundle copied from node_modules, and the
+# sign-in shim compiled from src/admin/. index.html beside them IS committed.
+static/admin/decap-cms-app.js
+static/admin/admin.js

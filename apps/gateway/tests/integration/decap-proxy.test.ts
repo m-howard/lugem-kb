@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCmsTestApp, TEST_REPOSITORY } from '../helpers/build-test-app';
+import { buildCmsTestApp, buildTestApp, TEST_REPOSITORY } from '../helpers/build-test-app';
 import { type FakeGitHubRoute } from '../helpers/fake-github';
 
 const REPO = `/repos/${TEST_REPOSITORY}`;
@@ -170,6 +170,27 @@ describe('the Decap adapter', () => {
         reason: 'missing-credential',
       });
       expect(cms.host.paths()).toEqual([]);
+    });
+  });
+
+  // The one editorial path that is deliberately anonymous. It is mounted beside `/v1/cms` rather
+  // than inside it, so that sub-app's "everything here needs a token" rule stays literally true.
+  describe('the admin sign-in configuration', () => {
+    it('is served without a token, because the page that needs it has none yet', async () => {
+      const cms = await buildCmsTestApp();
+
+      const response = await cms.app.request('/v1/admin/config');
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ authMode: 'bearer' });
+      expect(cms.host.paths()).toEqual([]);
+    });
+
+    it('is absent when the CMS is switched off', async () => {
+      const response = await buildTestApp().request('/v1/admin/config');
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: 'not_found' });
     });
   });
 
