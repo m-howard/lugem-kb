@@ -82,7 +82,7 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}

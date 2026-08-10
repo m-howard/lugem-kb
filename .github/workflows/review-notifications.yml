@@ -70,7 +70,7 @@ jobs:
         with:
           bun-version-file: .bun-version
 
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_NOTIFY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
