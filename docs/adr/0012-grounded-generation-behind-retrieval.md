@@ -10,6 +10,8 @@ last_reviewed: 2026-08-09
 - **Date:** 2026-08-09
 - **Status:** Accepted
 - **Supersedes:** the retrieval-only stance recorded in the README and in `kb/retrieve.ts`
+- **Amended by:** [ADR 0015](0015-recording-documentation-gaps.md) and
+  [ADR 0016](0016-reader-authentication.md)
 
 ## Context
 
@@ -78,6 +80,11 @@ Generation, with retrieval as the gate.
   internet-facing ALB — it holds state in memory, per task, so with `desiredCount: n` the real
   ceiling is `n × limit` and it resets on deploy. It is not access control, and a real global
   limit needs a WAF rate-based rule or a shared store.
+
+  _Amended by ADR 0016._ R22 is now built and defaults to off, so this still describes a default
+  deployment. With the switch on the limiter keys on the reader's subject rather than their
+  address; it remains per task, so the ceiling above is unchanged.
+
 - **R20's conflicting-pages rule is prompt-enforced and not unit-testable.** The prompt requires
   both sources to be cited when they disagree; nothing verifies the model complies. Closing that
   needs an evaluation fixture with two deliberately contradictory pages.

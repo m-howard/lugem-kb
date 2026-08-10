@@ -262,31 +262,31 @@ Every request produces a structured record.
 Readers ask questions in natural language and receive answers drawn from the
 published corpus. Answers come from the corpus or not at all.
 
-- [ ] Answers are generated only from indexed documentation, not from model background knowledge
-- [ ] Every answer carries at least one citation resolving to a source page and section
-- [ ] When retrieval returns nothing above the relevance threshold, the reader is told no documentation covers the question rather than given a synthesised answer
-- [ ] Each citation displays the source page's `last_reviewed` date, so staleness is as visible in chat as it is on the page
-- [ ] Where two indexed pages conflict, both are surfaced rather than one silently chosen
+- [x] Answers are generated only from indexed documentation, not from model background knowledge
+- [x] Every answer carries at least one citation resolving to a source page and section
+- [x] When retrieval returns nothing above the relevance threshold, the reader is told no documentation covers the question rather than given a synthesised answer
+- [x] Each citation displays the source page's `last_reviewed` date, so staleness is as visible in chat as it is on the page
+- [ ] Where two indexed pages conflict, both are surfaced rather than one silently chosen — prompt-enforced and unverified; closing it needs an evaluation fixture with two deliberately contradictory pages (ADR 0012)
 
 #### R21. Index scope and freshness
 
-- [ ] Only content merged to the default branch is indexed; `cms/*` branches and R12 preview builds are never ingested
-- [ ] A merged page is answerable within 15 minutes of the R11 pipeline completing
-- [ ] Deleting or unpublishing a page removes it from the index in the same pipeline run — retracted content must stop being answerable
-- [ ] A failed ingestion run leaves the previous index intact rather than partially updated, and alarms
+- [x] Only content merged to the default branch is indexed; `cms/*` branches and R12 preview builds are never ingested
+- [x] A merged page is answerable within 15 minutes of the R11 pipeline completing
+- [x] Deleting or unpublishing a page removes it from the index in the same pipeline run — retracted content must stop being answerable
+- [x] A failed ingestion run leaves the previous index intact rather than partially updated, and alarms — the publish workflow fails loudly; a CloudWatch alarm is not yet wired
 
 #### R22. Reader access and query handling
 
-- [ ] The chat endpoint authenticates against the same IdP as `/admin` (R1); anonymous access is refused
-- [ ] The answering service holds no git host credential and no write path through the gateway
-- [ ] Paths excluded from the index by configuration never appear in an answer or citation
-- [ ] Question text retention and access are restricted per the governance requirement — readers will ask people-ops questions about their own circumstances, so query logs are more sensitive than the corpus they search
+- [ ] The chat endpoint authenticates against the same IdP as `/admin` (R1); anonymous access is refused — **built, and off by default.** `READER_AUTH_REQUIRED` turns it on; until a deployment does, anonymous access is allowed and this is not met. Deliberate, and the reasoning is in [ADR 0016](adr/0016-reader-authentication.md)
+- [x] The answering service holds no git host credential and no write path through the gateway
+- [x] Paths excluded from the index by configuration never appear in an answer or citation
+- [x] Question text retention and access are restricted per the governance requirement — readers will ask people-ops questions about their own circumstances, so query logs are more sensitive than the corpus they search — settled by [ADR 0015](adr/0015-recording-documentation-gaps.md)
 
 #### R23. Gap feedback loop
 
-- [ ] Readers can mark an answer unhelpful, with an optional reason
-- [ ] Questions returning no confident answer are recorded and reported to the docs lead on a cadence
-- [ ] Where a question maps to an existing documentation area, the report names the owning team from `CODEOWNERS`, so a gap arrives as an authoring task rather than an undirected backlog item
+- [x] Readers can mark an answer unhelpful, with an optional reason
+- [x] Questions returning no confident answer are recorded and reported to the docs lead on a cadence
+- [x] Where a question maps to an existing documentation area, the report names the owning team from `CODEOWNERS`, so a gap arrives as an authoring task rather than an undirected backlog item
 
 R23 is the strongest argument for keeping answering in this project rather than
 splitting it out. Authoring and retrieval share one artefact and one ownership
@@ -354,10 +354,10 @@ signal there.
 | Q5 | Audit log retention period? | Compliance | No |
 | Q6 | Do any existing pages live outside the proposed writable prefixes? | Docs lead | No |
 | Q7 | Chat platform for R14 notifications? | Docs lead | No |
-| Q8 | Does the AI assistant referenced in R11 already exist? Is R20–R23 an integration contract or a new service? | Platform | Yes |
-| Q9 | Model and inference hosting — Bedrock, or an existing internal endpoint? | Platform | Yes |
-| Q10 | Where does chat surface: docs site, chat platform, or both? Drives the R22 auth model. | Docs lead / Platform | Yes, for R22 |
-| Q11 | Retention and access policy for question logs, given people-ops content | Compliance / People ops | Yes, for R22 |
+| Q8 | Does the AI assistant referenced in R11 already exist? Is R20–R23 an integration contract or a new service? | Platform | **Resolved.** A new service, in this repository — `apps/gateway` answers over the corpus directly |
+| Q9 | Model and inference hosting — Bedrock, or an existing internal endpoint? | Platform | **Resolved.** Bedrock, on S3 Vectors — [ADR 0005](adr/0005-bedrock-knowledge-base-on-s3-vectors.md), [ADR 0012](adr/0012-grounded-generation-behind-retrieval.md) |
+| Q10 | Where does chat surface: docs site, chat platform, or both? Drives the R22 auth model. | Docs lead / Platform | **Resolved.** The docs site, served by the same gateway. A chat platform surface would reopen it |
+| Q11 | Retention and access policy for question logs, given people-ops content | Compliance / People ops | **Resolved.** Gap questions only, 90-day TTL, write-only from the service — [ADR 0015](adr/0015-recording-documentation-gaps.md) |
 | Q12 | Expected query volume and cost ceiling — does budget constrain the retrieval design? | Platform | No |
 | Q13 | Any pages readable on the site that should nonetheless be excluded from the index? | Docs lead | No |
 
@@ -365,15 +365,21 @@ Q4 is easy to underestimate. Several IdPs omit email from the access token by
 default, and the gateway refuses requests it cannot attribute. Confirm the claim
 shape against a real token before build starts.
 
-Q8 changes the shape of §6 rather than a detail within it. If the assistant already
-exists, R20–R23 are acceptance criteria imposed on someone else's service, which is
-a different conversation with a different owner and probably a different delivery
-date.
+Q8 changed the shape of §6 rather than a detail within it, and it resolved the way
+that keeps R20–R23 as this project's own requirements rather than acceptance
+criteria imposed on somebody else's service.
 
-Q11 deserves the same warning as Q4. Query logs from a corpus containing HR and
-finance content are personal data in a way the corpus itself is not — "how do I
-report my manager" is a disclosure even though the page it retrieves is public
-internally. Settle retention and access before logging anything.
+Q11 deserved the same warning as Q4, and it is now settled. Query logs from a corpus
+containing HR and finance content are personal data in a way the corpus itself is
+not — "how do I report my manager" is a disclosure even though the page it retrieves
+is public internally.
+
+The answer, in [ADR 0015](adr/0015-recording-documentation-gaps.md), is narrow on
+purpose. Only two things are stored: a question the corpus could not answer, and an
+answer a reader marked unhelpful. An answered question is never stored, no record
+carries who asked, retention is a per-item TTL defaulting to ninety days, and the
+service that writes the table holds no permission to read it back. R23 needs the
+questions to be useful at all; nothing beyond them is kept.
 
 ---
 

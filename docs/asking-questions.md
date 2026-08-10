@@ -48,7 +48,25 @@ they do not come at all — nothing is invented to fill a gap. If you see this, 
 has nothing relevant, and the honest answer is worth more than a plausible one.
 
 When it happens, it is worth asking whether the page ought to exist. A question the documentation
-cannot answer is usually a documentation gap, not a search problem.
+cannot answer is usually a documentation gap, not a search problem — and you do not have to report
+it yourself. The question is recorded and reaches the people who own that area of the
+documentation. See [What is recorded](#what-is-recorded) below.
+
+## Telling us an answer did not help
+
+Under a finished answer there is a **This did not help** link. Use it when the answer was wrong,
+out of date, or about the wrong thing.
+
+You can add a line saying what you were actually looking for. It is optional, and short is fine —
+"this is about the old expenses tool" is more useful than nothing.
+
+There is no thumbs-up, deliberately. Nobody clicks to say an answer worked, so a score built from
+that would say more about who clicks than about the documentation. The complaint is the useful
+signal.
+
+What happens next: your question and what you said go into a weekly report for the docs lead,
+grouped with anyone else who asked something similar and labelled with the team that owns the
+nearest page. A gap arrives as a task with an owner, rather than a note nobody picks up.
 
 ## What it can and cannot answer
 
@@ -77,18 +95,32 @@ like the documentation work best:
 - **Start a new conversation when you change topic.** Use **Clear**. Unrelated earlier turns make
   the next answer worse, not better.
 
-## Privacy
+## What is recorded
 
-Your question is not written to any log — not the question, not the conversation, and not the
-answer. Only counts and timings are recorded, so operators can see how the service is behaving
-without seeing what anyone asked.
+Your questions are not written to any log — not the question, not the conversation, not the answer.
+Only counts and timings are logged, so operators can see how the service is behaving without seeing
+what anyone asked.
+
+Two things are stored, and only these two:
+
+- **A question nothing could answer.** If you get "No documentation covers this question", the
+  question is kept so it can reach the docs lead.
+- **An answer you marked as unhelpful**, with your optional note.
+
+**A question that was answered is never stored.** Neither is your name, your email, or anything
+else identifying you — the report says what was asked, not who asked it. What is stored is deleted
+automatically after ninety days, and the service that writes it has no permission to read it back;
+only the weekly report job can.
 
 This matters because the corpus covers people operations as well as engineering, and "how do I
 report my manager" says something about the person asking even though the page it finds is one
-anyone can read.
+anyone can read. That is why the line is drawn at gaps: a question the documentation failed to
+answer is the only kind worth keeping, and it is kept for as short a time as is useful.
 
 ## Related
 
 - **[Getting started](./getting-started.md)** — run the site and the service locally.
 - **[ADR 0012](./adr/0012-grounded-generation-behind-retrieval.md)** — why answers are generated
   only from retrieved passages, and what that costs.
+- **[ADR 0015](./adr/0015-recording-documentation-gaps.md)** — exactly what is recorded when the
+  documentation cannot answer you, and for how long.
