@@ -2,7 +2,7 @@ name: Review notifications
 
 # requirements.md R14: owners are notified when a pull request awaits their review, and authors are
 # notified when their submission is published or changes are requested. Open question Q7 settled on
-# email — docs/adr/0018-review-notifications-by-email.md.
+# email — docs/adr/0020-review-notifications-by-email.md.
 #
 # `pull_request_target` rather than `pull_request`, and the distinction matters:
 # `pull_request` from a fork gets a read-only token and no OIDC, so it could never assume the role

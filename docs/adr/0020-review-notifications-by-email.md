@@ -1,11 +1,11 @@
 ---
-title: 0018 — Review notifications by email, from GitHub Actions
-sidebar_label: 0018 Review notifications
+title: 0020 — Review notifications by email, from GitHub Actions
+sidebar_label: 0020 Review notifications
 owner: platform
 last_reviewed: 2026-08-10
 ---
 
-# ADR 0018 — Review notifications by email, from GitHub Actions
+# ADR 0020 — Review notifications by email, from GitHub Actions
 
 - **Date:** 2026-08-10
 - **Status:** Accepted
@@ -90,9 +90,14 @@ Deliver by email, from GitHub Actions, on a webhook.
   edit is a privilege escalation.
 - **Subject lines are sanitised, because a pull request title is untrusted input.** Carried into a
   header unaltered, a newline in a title ends the header and starts another. There is a test for it.
-- **R14's checklist is met; R12 and R13 are still open.** This closes Phase 4's only engineering
-  requirement, but the phase plan assumes Phase 3 finished first, and pull request previews and
-  content quality gates have not been built.
+- **This closes Phase 4's only engineering requirement.** The rest of the phase is onboarding the
+  remaining departments, and the S3 sync it also names has been built since Phase 1. Phase 3
+  finished first after all — pull request previews (ADR 0018) and content quality gates (ADR 0019)
+  landed while this was in review — so the phase order the plan assumes holds.
+- **R14's criteria stay unticked in `requirements.md`, deliberately.** They are met only where an
+  operator has set a sender and filled in the owner directory, which is the same reading R22 gets
+  for the same reason: a checkbox that is false on a default deployment would be a lie in the one
+  document meant to be checkable.
 
 ## Alternatives considered
 

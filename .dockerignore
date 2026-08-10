@@ -3,6 +3,12 @@ out
 build
 dist
 .docusaurus
+# ...but `scripts/build/` holds the tooling that *produces* build output. The site stage copies it
+# and runs it as `@lugem/docs`' prebuild hook, so an image built without it has no `/admin` bundle
+# and the stage exits non-zero. Docker's patterns are anchored at the context root, so `build`
+# above does not reach this path today; the negation is here so it still cannot, whatever that
+# pattern becomes. The same note is in .gitignore, .prettierignore and eslint.config.mjs.
+!scripts/build
 
 # Local databases and runtime data (never bake into an image).
 data

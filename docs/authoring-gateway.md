@@ -34,9 +34,23 @@ never mounted, and the service behaves exactly as it did before — site, `/v1/d
 | `GET /v1/cms/submissions[/{number}]`   | Where a submission got to.                                                   |
 | `POST /v1/cms/submissions/{n}/merge`   | Refused unless `POLICY_ALLOW_MERGE_FROM_CMS` is set.                         |
 | `POST /v1/cms/proxy`                   | The Decap adapter. One endpoint carrying every editorial action.             |
+| `GET /previews/pr-{n}/*`               | A pull request's rendered preview. Unauthenticated, like the site itself.    |
 
 Saving and submitting are separate on purpose. A draft written over three days should not sit in a
 reviewer's queue the whole time.
+
+### Previews
+
+`/previews/pr-42/` serves the documentation site as that pull request would publish it, read from a
+private S3 bucket the preview workflow writes to. It sits behind whatever already guards the
+documentation site — on an `internal` load balancer, that means previews of unmerged people and
+finance content never leave the network. [ADR 0018](./adr/0018-previews-behind-the-gateway.md)
+records why that was chosen over a CloudFront distribution.
+
+The path is refused before any S3 call if it could resolve outside the requested pull request's
+prefix, by the same kind of pure, fully tested policy that guards the corpus. Previews live in
+their own bucket, never the corpus bucket, so R21's "preview builds are never ingested" is true by
+construction rather than by a prefix filter somebody could edit.
 
 ### The Decap adapter
 
@@ -92,6 +106,12 @@ pulumi up
 | `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                                                                                         |
 | `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                                                                                            |
 | `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                                                                                              |
+
+Pull request previews need no configuration key of their own. `pulumi up` creates the bucket and
+the publishing role whenever the GitHub half of the stack is configured, hands the gateway
+`PREVIEW_BUCKET` and `PREVIEW_BASE_URL`, and publishes `AWS_PREVIEW_ROLE_ARN`, `PREVIEW_BUCKET` and
+`PREVIEW_BASE_URL` as repository variables for the workflow. A stack that manages no repository
+gets no previews, and the CMS card then offers no preview link.
 
 :::warning Confirm the email claim against a real token
 

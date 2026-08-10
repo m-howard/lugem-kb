@@ -238,20 +238,20 @@ Every request produces a structured record.
 
 #### R12. Pull request previews
 
-- [ ] Each pull request publishes a rendered preview to an isolated URL
-- [ ] The preview link is visible on the CMS workflow card and as a pull request comment
-- [ ] Preview artifacts are deleted on merge or close
+- [x] Each pull request publishes a rendered preview to an isolated URL — the gateway serves `/previews/pr-<n>/` from a private bucket, behind the same boundary as the site rather than a public CDN (ADR 0018)
+- [x] The preview link is visible on the CMS workflow card and as a pull request comment
+- [x] Preview artifacts are deleted on merge or close — the workflow deletes the prefix on `closed`; a 30-day lifecycle rule is the backstop, not the mechanism
 
 #### R13. Content quality gates
 
-- [ ] Frontmatter is schema-validated in CI; a missing owner fails the check
-- [ ] Internal links are checked; a broken link fails the check
-- [ ] Failures surface as a readable message, not a raw log
+- [x] Frontmatter is schema-validated in CI; a missing owner fails the check
+- [x] Internal links are checked; a broken link fails the check
+- [x] Failures surface as a readable message, not a raw log — annotations pinned to the line, and a table posted as a pull request comment where a CMS author will actually see it (ADR 0019)
 
 #### R14. Review notifications
 
-- [ ] Owners are notified in chat when a pull request awaits their review
-- [ ] Authors are notified when their submission is published or changes are requested
+- [ ] Owners are notified in chat when a pull request awaits their review — **built, by email rather than chat, and off by default.** Q7 settled the mechanism: no chat platform, so "in chat" reads as "out of band" here. `notifySenderAddress` turns it on; until a deployment sets it and fills in `.github/docs-owner-emails.json`, nobody is notified and this is not met ([ADR 0020](adr/0020-review-notifications-by-email.md))
+- [ ] Authors are notified when their submission is published or changes are requested — same mechanism, same switch. The author's address comes from the pull request body R6 already fills in, and only on a branch under the CMS prefix
 
 #### R15. Image handling
 

@@ -12,6 +12,7 @@ import { GatewayImage } from './src/components/gateway-image';
 import { GatewayIngress } from './src/components/gateway-ingress';
 import { GatewayService } from './src/components/gateway-service';
 import { NotificationPipeline } from './src/components/notification-pipeline';
+import { PreviewSite } from './src/components/preview-site';
 import { PublishPipeline } from './src/components/publish-pipeline';
 import { resolveNetwork } from './src/network';
 import { readGithubConfig, readStackConfig } from './src/read-config';
@@ -64,10 +65,12 @@ const gapFeedback = new GapFeedbackTable(
 let corpusRepository: CorpusRepository | undefined;
 let publishPipeline: PublishPipeline | undefined;
 let cmsCredential: CmsCredential | undefined;
+/** Hoisted because `PreviewSite` needs it, and cannot be created until the ingress URL exists. */
+let onBoth: pulumi.ComponentResourceOptions | undefined;
 
 if (githubConfig !== undefined) {
   const githubProvider = new github.Provider('github', { owner: githubConfig.owner });
-  const onBoth: pulumi.ComponentResourceOptions = { providers: [awsProvider, githubProvider] };
+  onBoth = { providers: [awsProvider, githubProvider] };
 
   corpusRepository = new CorpusRepository(
     NAME,
@@ -107,7 +110,7 @@ if (githubConfig !== undefined) {
 
   // R14, and off unless a sender address is configured. Notifying people is the one part of this
   // system that reaches outside it, so it stays absent until an operator names the address it may
-  // send from — see ADR 0018.
+  // send from — see ADR 0020.
   if (config.notifySenderAddress !== undefined) {
     new NotificationPipeline(
       NAME,
@@ -166,6 +169,33 @@ const ingress = new GatewayIngress(
   onAws,
 );
 
+// requirements.md R12. Created after the ingress rather than beside the other GitHub resources,
+// because the preview URL an author is given is the load balancer's — the gateway serves
+// `/previews/pr-<n>/` itself rather than a CDN doing it, so that previews of unmerged people and
+// finance content stay behind whatever already guards the published site. See ADR 0018.
+//
+// Only when the GitHub half is configured: a preview is published by a workflow in a repository
+// this stack manages, and without one there is nothing to publish it.
+const previewSite =
+  githubConfig === undefined ||
+  corpusRepository === undefined ||
+  publishPipeline === undefined ||
+  onBoth === undefined
+    ? undefined
+    : new PreviewSite(
+        NAME,
+        {
+          repositoryFullName: githubConfig.fullName,
+          repositoryName: corpusRepository.name,
+          // Must match `PREVIEW_MOUNT_PATH` in apps/gateway/src/previews/preview-key.ts. The two
+          // live in different workspaces, so this is a convention rather than a shared constant.
+          baseUrl: pulumi.interpolate`${ingress.url}/previews`,
+          // Reused rather than resolved again: an account holds at most one provider per URL.
+          oidcProviderArn: publishPipeline.oidcProviderArn,
+        },
+        onBoth,
+      );
+
 // The editorial routes are mounted only when all three are present: the App ids, the gateway
 // settings, and the secret the private key lives in. Passing a partial set would produce a task
 // that boots and refuses the first author — see `resolveCmsConfig` in apps/gateway/src/config.ts.
@@ -200,6 +230,15 @@ const service = new GatewayService(
     gapFeedbackTableArn: gapFeedback.tableArn,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
     ...(cms === undefined ? {} : { cms }),
+    ...(previewSite === undefined
+      ? {}
+      : {
+          previews: {
+            bucketName: previewSite.bucketName,
+            bucketArn: previewSite.bucketArn,
+            baseUrl: previewSite.baseUrl,
+          },
+        }),
     ...(ingress.cmsTargetGroupArn === undefined
       ? {}
       : { cmsTargetGroupArn: ingress.cmsTargetGroupArn }),
@@ -225,3 +264,6 @@ export const logGroupName = service.logGroupName;
 export const corpusRepositoryFullName = corpusRepository?.fullName;
 export const publishRoleArn = publishPipeline?.roleArn;
 export const cmsAppSecretArn = cmsCredential?.secretArn;
+export const previewBucketName = previewSite?.bucketName;
+export const previewBaseUrl = previewSite?.baseUrl;
+export const previewRoleArn = previewSite?.roleArn;

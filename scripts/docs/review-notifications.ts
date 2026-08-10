@@ -4,7 +4,7 @@
  *
  * requirements.md R14: owners hear when a pull request awaits their review, and authors hear when
  * their submission is published or has changes requested. Open question Q7 settled on email, so
- * there is no chat platform here — see docs/adr/0018-review-notifications-by-email.md.
+ * there is no chat platform here — see docs/adr/0020-review-notifications-by-email.md.
  *
  * Runs from GitHub Actions on a webhook delivery. It reads the event, works out who should hear
  * about it, and sends one message through SES. Most deliveries are none of R14's three moments and

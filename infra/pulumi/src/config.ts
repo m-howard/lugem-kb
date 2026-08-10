@@ -128,7 +128,7 @@ export interface StackConfig {
    *
    * Absent is the default and means the feature does not exist: no SES identity, no role, no
    * Actions variables, and a workflow that skips. Setting it is what turns R14 on — see
-   * ADR 0018.
+   * ADR 0020.
    */
   readonly notifySenderAddress: string | undefined;
   /**

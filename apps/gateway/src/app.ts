@@ -17,6 +17,8 @@ import { Answerer } from './kb/answer';
 import { CitationViewer } from './kb/citation-view';
 import { CorpusClient } from './kb/corpus-client';
 import { Retriever } from './kb/retrieve';
+import { PreviewClient } from './previews/preview-client';
+import { PREVIEW_MOUNT_PATH } from './previews/preview-key';
 import { createRateLimit } from './rate-limit';
 import { createAdminConfigRoutes } from './routes/admin-config';
 import { createApiNotFoundRoutes } from './routes/api-not-found';
@@ -26,6 +28,7 @@ import { createDocumentRoutes } from './routes/documents';
 import { createFeedbackRoutes } from './routes/feedback';
 import { createHealthRoutes } from './routes/health';
 import { createIdentityRoutes } from './routes/identity';
+import { createPreviewRoutes } from './routes/previews';
 import { createSearchRoutes } from './routes/search';
 import { createSiteRoutes } from './routes/site';
 
@@ -49,6 +52,11 @@ export interface AppDependencies {
    * mounted. Answering still works — it just produces no signal about what is missing.
    */
   readonly recorder?: GapRecorder | undefined;
+  /**
+   * Absent when `PREVIEW_BUCKET` is unset: `/previews` is never mounted, and a request for one
+   * falls through to the site catch-all and its 404 rather than to a route that cannot answer.
+   */
+  readonly previews?: PreviewClient | undefined;
   /**
    * Present only when `READER_AUTH_REQUIRED` is true.
    *
@@ -75,8 +83,24 @@ function resolveCmsDependencies(
       region: config.awsRegion,
       verifier,
       auth: config.auth,
+      previewBaseUrl: config.previews?.baseUrl,
     }),
   };
+}
+
+/**
+ * The preview reader, or nothing when `PREVIEW_BUCKET` is unset.
+ *
+ * A second bucket, not a second prefix on the corpus one: R21 says preview builds are never
+ * ingested, and a bucket Bedrock has never been pointed at cannot be. See ADR 0018.
+ */
+function resolvePreviewDependencies(
+  config: Config,
+  s3: S3Client,
+): Pick<AppDependencies, 'previews'> {
+  return config.previews === undefined
+    ? {}
+    : { previews: new PreviewClient({ s3, bucket: config.previews.bucket }) };
 }
 
 /**
@@ -126,6 +150,7 @@ export function createDependencies(config: Config, logger: Logger): AppDependenc
     askRateLimitPerMinute: config.askRateLimitPerMinute,
     corpusPrefix: config.corpusPrefix,
     ...resolveCmsDependencies(config, verifier),
+    ...resolvePreviewDependencies(config, s3),
     // Built once and shared. Two verifiers in one service could disagree about who is calling.
     ...(config.readerAuthRequired && verifier !== undefined ? { readerVerifier: verifier } : {}),
     ...(config.feedback === undefined
@@ -253,6 +278,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         allowMergeFromCms: cms.allowMergeFromCms,
         tokens: cms.tokens,
         client: cms.client,
+        previewBaseUrl: cms.previewBaseUrl,
         auth: createAuthMiddleware({ verifier: cms.verifier }),
       }),
     );
@@ -261,6 +287,12 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     // alongside rather than inside `/v1/cms`, so that sub-app's "everything here needs a token"
     // rule survives someone adding a route next to this one.
     app.route('/v1/admin', createAdminConfigRoutes({ auth: cms.auth }));
+  }
+
+  // Mounted only when PREVIEW_BUCKET is set, and before the catch-all — the site would otherwise
+  // answer for `/previews/...` with its own 404 page and a 200-shaped path never reaching S3.
+  if (dependencies.previews !== undefined) {
+    app.route(PREVIEW_MOUNT_PATH, createPreviewRoutes({ client: dependencies.previews }));
   }
 
   // Terminates `/v1` before the site can answer for it. Must stay after every API route.

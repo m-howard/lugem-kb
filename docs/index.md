@@ -48,8 +48,8 @@ actually fix.
 
 ## Status
 
-Phases 1 and 2 of [requirements](./requirements.md) §9 are built, the CMS half of Phase 3, and the
-answering slice of Phase 5.
+Phases 1, 2 and 3 of [requirements](./requirements.md) §9 are built, and the answering slice of
+Phase 5.
 
 Phase 1 put the corpus in git, stood the site up and deployed it. Phase 2 added the authoring
 gateway: authors authenticate against an identity provider, the gateway holds one GitHub App
@@ -57,7 +57,11 @@ credential they never see, and every write is confined to the documentation tree
 branches before that credential is used. Phase 5's answering slice generates a short answer from the
 retrieved passages rather than returning the passages alone.
 
-Phase 3 added the CMS itself: Decap at [`/admin`](./editing-in-the-cms.md), reaching the editorial
-API through an adapter in the gateway, so an author writes and submits a page without a git host
-account or any knowledge of markdown. Pull request previews and content quality gates — the rest of
-Phase 3 — are not built yet.
+Phase 3 is the pilot. Decap at [`/admin`](./editing-in-the-cms.md) reaches the editorial API
+through an adapter in the gateway, so an author writes and submits a page without a git host
+account or any knowledge of markdown. Every submission then gets a rendered preview at its own URL
+— linked from the card and from the pull request, served by the gateway rather than a public CDN
+([ADR 0018](./adr/0018-previews-behind-the-gateway.md)) — and a content check that reports a
+missing owner or a broken link as a comment the author can act on
+([ADR 0019](./adr/0019-content-quality-gates.md)). Image upload through the CMS (R15) is still not
+built: the corpus holds markdown only.

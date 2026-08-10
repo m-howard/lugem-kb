@@ -1,6 +1,7 @@
 import { type DecapContext } from './context';
 import { entriesByFiles, entriesByFolder } from './entries';
 import { persistEntry } from './persist';
+import { deployPreviewFor } from './preview';
 import {
   deleteFilesParams,
   entriesByFilesParams,
@@ -79,9 +80,10 @@ const ACTIONS: Readonly<Record<string, ActionHandler>> = {
   // media button from looking broken (requirements.md R15 is a separate, later change).
   getMedia: () => Promise.resolve([]),
 
-  // Previews are Phase 3's other half (requirements.md R12). `null` is how Decap spells "no
-  // preview for this entry", so this is the seam that work plugs into rather than a stub.
-  getDeployPreview: () => Promise.resolve(null),
+  // requirements.md R12. Answers `null` — Decap's spelling of "no preview for this entry" — for a
+  // draft with no open submission, and on any deployment with no preview bucket configured.
+  getDeployPreview: async (params, context) =>
+    deployPreviewFor(context, resolveEntryRef(unpublishedEntryParams.parse(params))),
 
   // Deleting a *published* page is a change to the corpus and has to be reviewed like any other.
   // Decap would send it as a direct write, which branch policy refuses anyway; refusing it here
