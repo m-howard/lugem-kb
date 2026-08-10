@@ -16,6 +16,15 @@
 /infra/pulumi/src/components/publish-pipeline.ts   @m-howard
 /infra/pulumi/src/components/cms-credential.ts     @m-howard
 
+# Reader questions and who can read them. The gateway may only write to this table and the report
+# may only read from it; a change loosening either is the one worth catching in review. See
+# docs/adr/0015-recording-documentation-gaps.md.
+/infra/pulumi/src/components/gap-feedback-table.ts   @m-howard
+/infra/pulumi/src/components/gap-report-pipeline.ts  @m-howard
+/apps/gateway/src/feedback/                          @m-howard
+/apps/gateway/src/routes/feedback.ts                 @m-howard
+/scripts/docs/gap-report.ts                          @m-howard
+
 # Who may push to the corpus, and under what review.
 /infra/pulumi/src/components/corpus-repository.ts  @m-howard
 
