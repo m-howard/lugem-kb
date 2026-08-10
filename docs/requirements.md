@@ -354,7 +354,7 @@ signal there.
 | Q4 | Does the IdP access token carry email and name claims, or must they come from the ALB header? | Platform | Yes, for R6 |
 | Q5 | Audit log retention period? | Compliance | No |
 | Q6 | Do any existing pages live outside the proposed writable prefixes? | Docs lead | No |
-| Q7 | Chat platform for R14 notifications? | Docs lead | No |
+| Q7 | Chat platform for R14 notifications? | Docs lead | **Resolved.** Email — no new chat platform dependency; reuses the org's existing SMTP/SES path |
 | Q8 | Does the AI assistant referenced in R11 already exist? Is R20–R23 an integration contract or a new service? | Platform | **Resolved.** A new service, in this repository — `apps/gateway` answers over the corpus directly |
 | Q9 | Model and inference hosting — Bedrock, or an existing internal endpoint? | Platform | **Resolved.** Bedrock, on S3 Vectors — [ADR 0005](adr/0005-bedrock-knowledge-base-on-s3-vectors.md), [ADR 0012](adr/0012-grounded-generation-behind-retrieval.md) |
 | Q10 | Where does chat surface: docs site, chat platform, or both? Drives the R22 auth model. | Docs lead / Platform | **Resolved.** The docs site, served by the same gateway. A chat platform surface would reopen it |
