@@ -23,6 +23,8 @@
   "scripts": {
     "build": "bun run docs:build && bun run gateway:build",
     "dev": "bun run --filter '@lugem/gateway' dev",
+    "dev:cms": "bun run scripts/build/build-admin.ts && bun run scripts/dev/serve-cms.ts",
+    "dev:proxy": "bun run scripts/dev/serve-dev.ts",
     "docs:start": "bun run --filter '@lugem/docs' start",
     "docs:build": "bun run --filter '@lugem/docs' build",
     "gateway:build": "bun run --filter '@lugem/gateway' build",

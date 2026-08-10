@@ -35,6 +35,10 @@ infra/*/Pulumi.*.yaml
 !infra/*/Pulumi.yaml
 !infra/*/Pulumi.*.yaml.example
 
+# The local CMS sandbox's repository — drafts in progress, not source. Disposable: delete it, or
+# run `bun run dev:cms --reset`. See scripts/dev/sandbox-store.ts.
+.lugem-local/
+
 # Misc
 .DS_Store
 *.pem

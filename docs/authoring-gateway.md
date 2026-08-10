@@ -249,7 +249,21 @@ not a suggestion.
 
 ## Run it locally
 
-Local development can read the App key from a file instead of Secrets Manager:
+Most of the time you want the sandbox, which needs no GitHub App and no identity provider:
+
+```bash
+bun run dev:cms      # http://127.0.0.1:4300/admin/
+```
+
+It runs the real gateway — same routes, same policies, real token verification — against a git host
+that keeps what it is given and an identity provider on the same origin. Drafts persist between
+runs; `--reset` starts over. See
+[ADR 0022](./adr/0022-a-local-sandbox-for-the-editorial-surface.md) for what it does and does not
+model, and [Getting started](./getting-started.md#run-the-cms-at-admin) for the options.
+
+What the sandbox cannot show you is branch protection, a second person reviewing, or anything the
+real git host decides. For that, point the gateway at a real repository. Local development can read
+the App key from a file instead of Secrets Manager:
 
 ```bash
 CMS_REPOSITORY=acme/handbook \
