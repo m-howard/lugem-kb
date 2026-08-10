@@ -33,6 +33,15 @@ updates:
       # See docs/adr/0002-typescript-pinned-to-6-x.md.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
+      # Pinned deliberately to whatever `@docusaurus/utils` resolves. `headingSlugs` in
+      # scripts/docs/links.ts documents the requirement: the slugger it checks links against must
+      # be the one Docusaurus uses, at the version it resolves, because that copy produces the
+      # anchors the published site carries.
+      # Docusaurus 3.10.2 asks for `^1.5.0`, so 2.0.0 installs a second copy beside it rather than
+      # upgrading the site's, and the gate would be checking a different implementation than the
+      # one that ships. Unpin when Docusaurus itself moves to 2.x.
+      - dependency-name: github-slugger
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: '/'
