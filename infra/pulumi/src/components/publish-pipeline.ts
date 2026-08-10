@@ -44,10 +44,20 @@ export interface PublishPipelineArgs {
 export class PublishPipeline extends pulumi.ComponentResource {
   public readonly roleArn: pulumi.Output<string>;
   public readonly environment: string;
+  /**
+   * The GitHub identity provider, exposed so a sibling component can reuse it.
+   *
+   * An account holds at most one per URL. A second component calling `resolveOidcProvider` for
+   * itself would pass `pulumi preview` and then fail at apply — and only in accounts that did not
+   * already have one, which is the worst way to find out. Passing this along makes the duplicate
+   * structurally impossible.
+   */
+  public readonly oidcProviderArn: pulumi.Output<string>;
 
   constructor(name: string, args: PublishPipelineArgs, opts?: pulumi.ComponentResourceOptions) {
     super('lugem:github:PublishPipeline', name, {}, opts);
 
+    this.oidcProviderArn = this.resolveOidcProvider(name, args.githubConfig);
     const role = this.createRole(name, args);
     this.createPolicy(name, args, role);
 
@@ -67,7 +77,11 @@ export class PublishPipeline extends pulumi.ComponentResource {
     this.roleArn = role.arn;
     this.environment = PUBLISH_ENVIRONMENT;
 
-    this.registerOutputs({ roleArn: this.roleArn, environment: this.environment });
+    this.registerOutputs({
+      roleArn: this.roleArn,
+      environment: this.environment,
+      oidcProviderArn: this.oidcProviderArn,
+    });
   }
 
   /**
@@ -78,7 +92,7 @@ export class PublishPipeline extends pulumi.ComponentResource {
    * assume the role at all, whatever ref it runs on.
    */
   private createRole(name: string, args: PublishPipelineArgs): aws.iam.Role {
-    const providerArn = this.resolveOidcProvider(name, args.githubConfig);
+    const providerArn = this.oidcProviderArn;
     const subject = `repo:${args.githubConfig.fullName}:environment:${PUBLISH_ENVIRONMENT}`;
 
     return new aws.iam.Role(

@@ -36,6 +36,7 @@ export function readStackConfig(): StackConfig {
     answerMaxTokens: config.getNumber('answerMaxTokens'),
     askRateLimitPerMinute: config.getNumber('askRateLimitPerMinute'),
     retrievalScoreThreshold: config.getNumber('retrievalScoreThreshold'),
+    gapFeedbackRetentionDays: config.getNumber('gapFeedbackRetentionDays'),
   });
 }
 

@@ -51,6 +51,17 @@ const DEFAULT_RETRIEVAL_SCORE_THRESHOLD = 0.4;
 const MIN_SCORE = 0;
 const MAX_SCORE = 1;
 
+/**
+ * How long a recorded question survives before DynamoDB expires it.
+ *
+ * Ninety days spans a quarter of reports without keeping a reader's words indefinitely. Bounded
+ * at ten years because a typo here is a retention policy nobody agreed to — see
+ * docs/adr/0015-recording-documentation-gaps.md and requirements.md open question Q11.
+ */
+const DEFAULT_GAP_FEEDBACK_RETENTION_DAYS = 90;
+const MIN_GAP_FEEDBACK_RETENTION_DAYS = 1;
+const MAX_GAP_FEEDBACK_RETENTION_DAYS = 3650;
+
 /** Raw, unvalidated values as they arrive from `pulumi.Config`. */
 export interface StackConfigInput {
   readonly region?: string | undefined;
@@ -72,6 +83,7 @@ export interface StackConfigInput {
   readonly answerMaxTokens?: number | undefined;
   readonly askRateLimitPerMinute?: number | undefined;
   readonly retrievalScoreThreshold?: number | undefined;
+  readonly gapFeedbackRetentionDays?: number | undefined;
 }
 
 export interface StackConfig {
@@ -100,6 +112,7 @@ export interface StackConfig {
   readonly answerMaxTokens: number;
   readonly askRateLimitPerMinute: number;
   readonly retrievalScoreThreshold: number;
+  readonly gapFeedbackRetentionDays: number;
 }
 
 /**
@@ -314,6 +327,14 @@ export function validateStackConfig(input: StackConfigInput): StackConfig {
       input.retrievalScoreThreshold ?? DEFAULT_RETRIEVAL_SCORE_THRESHOLD,
       'retrievalScoreThreshold',
       [MIN_SCORE, MAX_SCORE],
+    ),
+    gapFeedbackRetentionDays: requirePositiveInteger(
+      requireInRange(
+        input.gapFeedbackRetentionDays ?? DEFAULT_GAP_FEEDBACK_RETENTION_DAYS,
+        'gapFeedbackRetentionDays',
+        [MIN_GAP_FEEDBACK_RETENTION_DAYS, MAX_GAP_FEEDBACK_RETENTION_DAYS],
+      ),
+      'gapFeedbackRetentionDays',
     ),
   };
 }

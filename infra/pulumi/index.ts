@@ -6,6 +6,8 @@ import { CmsCredential } from './src/components/cms-credential';
 import { CorpusBucket } from './src/components/corpus-bucket';
 import { CorpusRepository } from './src/components/corpus-repository';
 import { DocsKnowledgeBase } from './src/components/docs-knowledge-base';
+import { GapFeedbackTable } from './src/components/gap-feedback-table';
+import { GapReportPipeline } from './src/components/gap-report-pipeline';
 import { GatewayImage } from './src/components/gateway-image';
 import { GatewayIngress } from './src/components/gateway-ingress';
 import { GatewayService } from './src/components/gateway-service';
@@ -47,6 +49,15 @@ const knowledgeBase = new DocsKnowledgeBase(
   onAws,
 );
 
+// Created unconditionally. R23 is a shipped feature, an idle on-demand table costs approximately
+// nothing, and making it optional would add a second configuration to test in exchange for a class
+// of "why does /v1/feedback answer 404" support questions.
+const gapFeedback = new GapFeedbackTable(
+  NAME,
+  { retentionDays: config.gapFeedbackRetentionDays },
+  onAws,
+);
+
 // The GitHub half is opt-in: it needs an admin token the AWS half does not, and a stack that
 // manages no repository is a supported configuration rather than a half-finished one.
 let corpusRepository: CorpusRepository | undefined;
@@ -74,6 +85,21 @@ if (githubConfig !== undefined) {
       knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
       knowledgeBaseId: knowledgeBase.knowledgeBaseId,
       dataSourceId: knowledgeBase.dataSourceId,
+    },
+    onBoth,
+  );
+
+  new GapReportPipeline(
+    NAME,
+    {
+      config,
+      githubConfig,
+      repositoryName: corpusRepository.name,
+      gapFeedbackTableName: gapFeedback.tableName,
+      gapFeedbackTableArn: gapFeedback.tableArn,
+      // Reused rather than resolved again: an account holds at most one provider per URL, and a
+      // second one would pass preview and fail at apply.
+      oidcProviderArn: publishPipeline.oidcProviderArn,
     },
     onBoth,
   );
@@ -138,6 +164,8 @@ const service = new GatewayService(
     knowledgeBaseId: knowledgeBase.knowledgeBaseId,
     knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
     accountId,
+    gapFeedbackTableName: gapFeedback.tableName,
+    gapFeedbackTableArn: gapFeedback.tableArn,
     ...(cmsCredential === undefined ? {} : { cmsSecretArn: cmsCredential.secretArn }),
     ...(cms === undefined ? {} : { cms }),
     ...(ingress.cmsTargetGroupArn === undefined
@@ -152,6 +180,7 @@ const service = new GatewayService(
 
 export const siteUrl = ingress.url;
 export const corpusBucketName = corpus.bucketName;
+export const gapFeedbackTableName = gapFeedback.tableName;
 export const knowledgeBaseId = knowledgeBase.knowledgeBaseId;
 export const dataSourceId = knowledgeBase.dataSourceId;
 export const vectorBucketName = knowledgeBase.vectorBucketName;

@@ -30,6 +30,7 @@ describe('validateStackConfig', () => {
       answerMaxTokens: 700,
       askRateLimitPerMinute: 20,
       retrievalScoreThreshold: 0.4,
+      gapFeedbackRetentionDays: 90,
     });
   });
 
@@ -242,12 +243,14 @@ describe('validateStackConfig', () => {
         answerMaxTokens: 1200,
         askRateLimitPerMinute: 5,
         retrievalScoreThreshold: 0.65,
+        gapFeedbackRetentionDays: 30,
       });
 
       expect(config).toMatchObject({
         answerMaxTokens: 1200,
         askRateLimitPerMinute: 5,
         retrievalScoreThreshold: 0.65,
+        gapFeedbackRetentionDays: 30,
       });
     });
 
@@ -259,6 +262,17 @@ describe('validateStackConfig', () => {
       ['a zero rate limit', { askRateLimitPerMinute: 0 }, 'askRateLimitPerMinute'],
       ['a threshold above 1', { retrievalScoreThreshold: 1.5 }, 'retrievalScoreThreshold'],
       ['a negative threshold', { retrievalScoreThreshold: -0.1 }, 'retrievalScoreThreshold'],
+      // Q11: a typo here is a retention policy nobody agreed to, in either direction. Zero would
+      // expire a reader's question before the weekly report ever read it; a decade would quietly
+      // keep it far longer than anyone was told.
+      ['a zero retention', { gapFeedbackRetentionDays: 0 }, 'gapFeedbackRetentionDays'],
+      ['a negative retention', { gapFeedbackRetentionDays: -1 }, 'gapFeedbackRetentionDays'],
+      ['a fractional retention', { gapFeedbackRetentionDays: 30.5 }, 'gapFeedbackRetentionDays'],
+      [
+        'a retention beyond ten years',
+        { gapFeedbackRetentionDays: 3651 },
+        'gapFeedbackRetentionDays',
+      ],
     ])('rejects %s and names the key', (_case, override, key) => {
       try {
         validateStackConfig({ ...VALID, ...override });
