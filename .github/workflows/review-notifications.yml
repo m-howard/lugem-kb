@@ -65,7 +65,7 @@ jobs:
       pull-requests: read
     steps:
       # No `ref:` — the default under `pull_request_target` is the base branch, which is the point.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
