@@ -33,9 +33,32 @@ never mounted, and the service behaves exactly as it did before — site, `/v1/d
 | `POST /v1/cms/submissions`             | Open a pull request against the default branch.                              |
 | `GET /v1/cms/submissions[/{number}]`   | Where a submission got to.                                                   |
 | `POST /v1/cms/submissions/{n}/merge`   | Refused unless `POLICY_ALLOW_MERGE_FROM_CMS` is set.                         |
+| `POST /v1/cms/proxy`                   | The Decap adapter. One endpoint carrying every editorial action.             |
 
 Saving and submitting are separate on purpose. A draft written over three days should not sit in a
 reviewer's queue the whole time.
+
+### The Decap adapter
+
+`/v1/cms/proxy` is what the editor at `/admin` talks to. Decap's `proxy` backend posts
+`{action, params}` to one URL, so the adapter translates that into the same services the REST
+routes use — the protocol changes, the policies do not. It is mounted inside the editorial sub-app,
+so it is authenticated and credential-guarded like everything else here.
+
+Two things follow from the gateway having two states where Decap's board has three columns:
+
+- A draft is a branch with no pull request; submitting opens one. That is R7, unchanged.
+- `pending_publish` is accepted but not distinguished, so a card dragged to the third column reads
+  as **In review** on reload. Publishing is not a CMS action — approval happens in the git host.
+
+[ADR 0015](./adr/0015-decap-adapter-in-the-gateway.md) records the mapping in full, including the
+one allowlist row it needed. Authors get [their own page](./editing-in-the-cms.md).
+
+One anonymous route comes with it: `GET /v1/admin/config`, which tells the `/admin` page how to
+sign in. Every field it serves is an OIDC public-client parameter that travels in the browser's
+redirect URL anyway, and the page that needs it is by definition the page with no token yet. It is
+mounted beside `/v1/cms` rather than inside it, so "everything under `/v1/cms` needs a token" stays
+literally true.
 
 ## Prerequisites
 
@@ -54,20 +77,21 @@ pulumi config set cmsAuthAudience api://lugem-cms
 pulumi up
 ```
 
-| Key                               | Required     | Notes                                                                                 |
-| --------------------------------- | ------------ | ------------------------------------------------------------------------------------- |
-| `cmsGitHubAppId`                  | yes          | Enables everything below. See [the corpus repository](./corpus-repository.md).        |
-| `cmsGitHubAppInstallationId`      | yes          | Must be set with the app id.                                                          |
-| `cmsAuthMode`                     | yes          | `bearer` or `alb`. No default — the gateway will not guess how to identify an author. |
-| `cmsAuthIssuerUrl`                | for `bearer` | OIDC issuer. Its discovery document names the key set.                                |
-| `cmsAuthAudience`                 | for `bearer` | The audience tokens must carry.                                                       |
-| `cmsAuthEmailClaim`               | no           | Default `email`. See the warning below.                                               |
-| `cmsAuthNameClaim`                | no           | Default `name`. Falls back to the email when absent.                                  |
-| `cmsOidcIssuer` and four siblings | for `alb`    | The endpoints the load balancer needs. All five, or none.                             |
-| `cmsOidcClientSecret`             | for `alb`    | Set with `--secret`. Never written to a config file in plaintext.                     |
-| `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                  |
-| `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                     |
-| `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                       |
+| Key                               | Required     | Notes                                                                                                                                                        |
+| --------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cmsGitHubAppId`                  | yes          | Enables everything below. See [the corpus repository](./corpus-repository.md).                                                                               |
+| `cmsGitHubAppInstallationId`      | yes          | Must be set with the app id.                                                                                                                                 |
+| `cmsAuthMode`                     | yes          | `bearer` or `alb`. No default — the gateway will not guess how to identify an author.                                                                        |
+| `cmsAuthIssuerUrl`                | for `bearer` | OIDC issuer. Its discovery document names the key set.                                                                                                       |
+| `cmsAuthAudience`                 | for `bearer` | The audience tokens must carry.                                                                                                                              |
+| `cmsAuthClientId`                 | for `bearer` | The public client `/admin` signs in as. Register `https://<site>/admin/` as a redirect URI. No secret — it is a public client, and PKCE proves the callback. |
+| `cmsAuthEmailClaim`               | no           | Default `email`. See the warning below.                                                                                                                      |
+| `cmsAuthNameClaim`                | no           | Default `name`. Falls back to the email when absent.                                                                                                         |
+| `cmsOidcIssuer` and four siblings | for `alb`    | The endpoints the load balancer needs. All five, or none.                                                                                                    |
+| `cmsOidcClientSecret`             | for `alb`    | Set with `--secret`. Never written to a config file in plaintext.                                                                                            |
+| `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                                                                                         |
+| `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                                                                                            |
+| `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                                                                                              |
 
 :::warning Confirm the email claim against a real token
 
@@ -233,5 +257,7 @@ HTTPS listener. Either set a certificate, or use `bearer`.
 
 - [ADR 0013 — two authentication modes](./adr/0013-two-authentication-modes.md)
 - [ADR 0014 — a purpose-built editorial API](./adr/0014-purpose-built-editorial-api.md)
+- [ADR 0015 — the Decap adapter runs in the gateway](./adr/0015-decap-adapter-in-the-gateway.md)
+- [Editing in the CMS](./editing-in-the-cms.md) — the same system, for the people writing pages
 - [The corpus repository](./corpus-repository.md) — the branch rules the gateway relies on
 - [Requirements](./requirements.md) — R1–R6, R9 and R10 are what this page implements

@@ -90,6 +90,8 @@ AWS account prerequisites before you run it.
                         │  │      └─ retrieve first │──┼──▶ Bedrock answer model
                         │  │  /v1/cms  (auth)       │──┼──▶ GitHub, as one App
                         │  │      └─ policy first   │  │      └─▶ cms/* branches only
+                        │  │  /v1/cms/proxy  (Decap)│  │
+                        │  │  /admin  Decap CMS     │  │
                         │  │  /*  built Docusaurus  │  │
                         │  └────────────────────────┘  │
                         └──────────────────────────────┘
@@ -210,6 +212,7 @@ Pulumi stack configuration is documented in
 ## 📖 Documentation
 
 - **[Asking questions](docs/asking-questions.md)** — the reader's guide to the assistant.
+- **[Editing in the CMS](docs/editing-in-the-cms.md)** — the author's guide to `/admin`.
 - **[The authoring gateway](docs/authoring-gateway.md)** — publishing without a git host account.
 - **[Getting started](docs/getting-started.md)** — run everything locally.
 - **[Deploying to AWS](docs/deploying-to-aws.md)** — prerequisites, config, costs, teardown.
@@ -217,7 +220,8 @@ Pulumi stack configuration is documented in
 - **[Architecture decision records](docs/adr/)** — why each piece is the way it is, and what it costs.
 - **[Requirements](docs/requirements.md)** — the product this scaffold is the first phase of.
 
-Notable decisions: [two authentication modes](docs/adr/0013-two-authentication-modes.md) ·
+Notable decisions: [the Decap adapter in the gateway](docs/adr/0015-decap-adapter-in-the-gateway.md) ·
+[two authentication modes](docs/adr/0013-two-authentication-modes.md) ·
 [a purpose-built editorial API](docs/adr/0014-purpose-built-editorial-api.md) ·
 [grounded generation behind retrieval](docs/adr/0012-grounded-generation-behind-retrieval.md) ·
 [Pulumi owns the corpus repository](docs/adr/0011-pulumi-owns-the-corpus-repository.md) ·
@@ -253,21 +257,25 @@ Security issues go to **[SECURITY.md](SECURITY.md)**, not the public issue track
 
 ## ⚠️ Status
 
-Phases 1 and 2 of [the requirements](docs/requirements.md) are built, plus the answering slice of
-Phase 5.
+Phases 1 and 2 of [the requirements](docs/requirements.md) are built, the CMS half of Phase 3, and
+the answering slice of Phase 5.
 
 - **Phase 1 — Foundation.** Corpus in git, site building, deployment stood up.
 - **Phase 2 — Gateway.** Authentication, the GitHub App credential broker, the path, branch and
   endpoint policies, human attribution, audit records and fail-closed configuration — R1–R6, R9 and
   R10. Verify a deployment with `scripts/check/verify-gateway.ts`, which is the phase's stated exit
   condition.
+- **Phase 3 (partial) — Pilot.** Decap CMS at `/admin`: authors sign in with their corporate
+  login, write pages in a rich text editor, save drafts and submit them for review, with their own
+  name on every commit. The editorial API is purpose-built, so the CMS reaches it through an
+  adapter in the gateway — [ADR 0015](docs/adr/0015-decap-adapter-in-the-gateway.md) records the
+  mapping, and [Editing in the CMS](docs/editing-in-the-cms.md) is the author's guide.
 - **Phase 5 (partial) — Answering.** Grounded generation with citations, a chat widget on every
   page, and a `/ask` page.
 
-**Not built yet:** Phase 3's pilot surface — Decap CMS at `/admin`, pull request previews and
-content quality gates — and Phase 4's notifications. The editorial API is a purpose-built one, so
-wiring a CMS to it needs an adapter; [ADR 0014](docs/adr/0014-purpose-built-editorial-api.md)
-records that cost.
+**Not built yet:** the rest of Phase 3 — pull request previews (R12) and content quality gates
+(R13) — and Phase 4's notifications. Image upload through the CMS (R15) is a P1 requirement and is
+not built: the corpus holds markdown only.
 
 Three known gaps, each recorded where it belongs:
 

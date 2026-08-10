@@ -9,6 +9,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The documentation CMS at `/admin`** — the CMS half of Phase 3, so an author writes and submits
+  a page without a git host account or any knowledge of markdown. See
+  [Editing in the CMS](docs/editing-in-the-cms.md).
+  - Decap CMS reaches the editorial API through an adapter in the gateway at `POST /v1/cms/proxy`.
+    Every action goes through the same document, draft and submission services the REST routes use,
+    so the path, branch and endpoint policies apply unchanged and a refusal still costs no upstream
+    call. See [ADR 0015](docs/adr/0015-decap-adapter-in-the-gateway.md).
+  - Decap's three editorial statuses map onto the gateway's two states: a draft is a `cms/*` branch
+    with no pull request, submitting opens one, and `pending_publish` is an alias rather than a
+    third state — publishing stays in the git host, where a code owner approves it.
+  - The endpoint allowlist gained one read-only row, `GET /git/matching-refs/heads/...`, because
+    the editorial board has to show drafts that have no pull request yet.
+  - `SubmissionService.close` withdraws a submission without touching its branch, reusing the same
+    confinement check as merge so an author cannot close a pull request that is not theirs.
+  - The `/admin` page runs its own OIDC sign-in with PKCE, because Decap's proxy backend sends no
+    `Authorization` header. `AUTH_CLIENT_ID` (stack key `cmsAuthClientId`) is required in `bearer`
+    mode; `GET /v1/admin/config` publishes the sign-in parameters anonymously, since they travel in
+    the browser's redirect URL regardless.
+  - Audit records carry the Decap action, so one endpoint carrying every operation still leaves a
+    log an operator can read (R9).
+  - Image upload is not supported: the corpus holds markdown only, so the media library lists
+    nothing and uploads are refused with an explanation. R15 is a separate change.
+
 - **The authoring gateway** — Phase 2 of [the requirements](docs/requirements.md), so that someone
   without a git host account can publish. Off unless `CMS_REPOSITORY` is set; with it set, every
   companion variable is required.

@@ -673,6 +673,52 @@ describe('the Decap adapter', () => {
       expect(status).toBe(400);
     });
 
+    // A stale save arrives as the git host's "Update is not a fast forward", which is true and
+    // useless to an author who has just lost track of what happened to their page.
+    it('explains a stale save in words an author can act on', async () => {
+      const cms = await buildCmsTestApp({
+        routes: [
+          ...MAIN_ROUTES,
+          {
+            method: 'GET',
+            path: `${REPO}/git/ref/heads/${DRAFT_BRANCH}`,
+            respond: { object: { sha: DRAFT_COMMIT } },
+          },
+          {
+            method: 'GET',
+            path: `${REPO}/git/commits/${DRAFT_COMMIT}`,
+            respond: { tree: { sha: DRAFT_TREE } },
+          },
+          { method: 'POST', path: `${REPO}/git/blobs`, respond: { sha: 'blob-written' } },
+          { method: 'POST', path: `${REPO}/git/trees`, respond: { sha: 'tree-written' } },
+          { method: 'POST', path: `${REPO}/git/commits`, respond: { sha: 'commit-written' } },
+          {
+            method: 'PATCH',
+            path: /\/git\/refs\/heads\/cms\//,
+            status: 422,
+            respond: { message: 'Update is not a fast forward' },
+          },
+        ],
+      });
+
+      const response = await cms.app.request(PROXY, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cms.authorize()) },
+        body: JSON.stringify({
+          action: 'persistEntry',
+          params: {
+            dataFiles: [{ path: 'docs/guides/leave-policy.md', slug: 'leave-policy', raw: '#\n' }],
+            options: { collectionName: 'guides' },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      expect((await response.json()) as { error: string }).toMatchObject({
+        error: expect.stringContaining('moved since you opened it') as unknown,
+      });
+    });
+
     // Decap shows `error` to the person editing, so a validation failure has to read as a sentence
     // rather than as the string "invalid_request".
     it('describes a bad payload in the field the editor displays', async () => {

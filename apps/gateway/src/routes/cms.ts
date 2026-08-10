@@ -171,6 +171,20 @@ function proxyRefusalFor(error: unknown): Refusal | undefined {
     return undefined;
   }
 
+  // A stale save reaches here as the git host's own words — "Update is not a fast forward" — which
+  // is true and useless to somebody who has just lost the thread of what happened to their page.
+  if (refusal.status === CONFLICT) {
+    return {
+      ...refusal,
+      body: {
+        error:
+          'This draft moved since you opened it — somebody else saved the same page. Reload, ' +
+          'check their change, and save again.',
+        reason: refusal.reason,
+      },
+    };
+  }
+
   const message = typeof refusal.body['message'] === 'string' ? refusal.body['message'] : undefined;
   const issues = Array.isArray(refusal.body['issues'])
     ? (refusal.body['issues'] as string[]).join('; ')
