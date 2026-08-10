@@ -3,15 +3,17 @@ import { type ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 
 import { type AppEnv } from '../app-env';
-import { recordAudit } from '../audit';
+import { type AuditRecord, recordAudit } from '../audit';
 import { type createAuthMiddleware } from '../auth/middleware';
 import { createCredentialGuard } from '../cms/credential-guard';
+import { dispatch } from '../cms/decap/dispatch';
+import { proxyRequestSchema } from '../cms/decap/protocol';
 import { DocumentMissingError, type DocumentReader } from '../cms/documents';
 import { type DraftService } from '../cms/drafts';
-import { CmsPolicyError } from '../cms/errors';
+import { CmsPolicyError, DraftMissingError, UnsupportedActionError } from '../cms/errors';
 import { type CmsSettings } from '../cms/settings';
 import { type SubmissionService } from '../cms/submissions';
-import { EndpointPolicyError, GitHubError } from '../git/github-client';
+import { EndpointPolicyError, type GitHubClient, GitHubError } from '../git/github-client';
 import { type InstallationTokenSource } from '../git/installation-token';
 import { PERMITTED_EXTENSIONS } from '../kb/key-policy';
 
@@ -60,6 +62,8 @@ export interface CmsRoutesOptions {
   readonly auth: ReturnType<typeof createAuthMiddleware>;
   /** Backs the readiness guard, which is what actually turns traffic away — see R10. */
   readonly tokens: InstallationTokenSource;
+  /** Passed to the Decap adapter, which enumerates draft branches. See `cms/decap/context.ts`. */
+  readonly client: GitHubClient;
 }
 
 interface Refusal {
@@ -128,6 +132,56 @@ function refusalFor(error: unknown): Refusal | undefined {
 
 type CmsHandler = (c: Context<AppEnv>) => Promise<Response>;
 
+type RefusalMapper = (error: unknown) => Refusal | undefined;
+
+/**
+ * The same refusals, in the body Decap can show an author.
+ *
+ * Decap's proxy client throws `APIError(json.error, status)` and puts `error` in front of the
+ * person editing, so `error` has to carry the sentence rather than the machine code. The REST
+ * routes keep their own shape — a scripted client wants the code in a stable field, and
+ * `scripts/check/verify-gateway.ts` asserts on it — which is why this is a second mapper rather
+ * than a change to the first.
+ *
+ * @param error - Whatever the action threw.
+ * @returns The response and audit decision, or `undefined` to rethrow.
+ */
+function proxyRefusalFor(error: unknown): Refusal | undefined {
+  if (error instanceof UnsupportedActionError) {
+    return {
+      status: BAD_REQUEST,
+      body: { error: error.message, reason: 'unsupported-action' },
+      decision: 'refused',
+      reason: 'unsupported-action',
+    };
+  }
+  if (error instanceof DraftMissingError) {
+    // Decap turns a 404 here into its own `EditorialWorkflowError`, which is what makes a finished
+    // card leave the board instead of showing the author an error they cannot act on.
+    return {
+      status: NOT_FOUND,
+      body: { error: error.message, reason: 'no-draft' },
+      decision: 'refused',
+      reason: 'no-draft',
+    };
+  }
+
+  const refusal = refusalFor(error);
+  if (refusal === undefined) {
+    return undefined;
+  }
+
+  const message = typeof refusal.body['message'] === 'string' ? refusal.body['message'] : undefined;
+  const issues = Array.isArray(refusal.body['issues'])
+    ? (refusal.body['issues'] as string[]).join('; ')
+    : undefined;
+
+  return {
+    ...refusal,
+    body: { error: message ?? issues ?? refusal.reason, reason: refusal.reason },
+  };
+}
+
 /**
  * Reads a wildcard route parameter.
  *
@@ -151,35 +205,38 @@ function routeParam(c: Context<AppEnv>, name: string): string {
  * @param handler - The route body, which may throw a policy or upstream error.
  * @returns A handler that records the outcome and never leaks an unmapped error (R9).
  */
-function handle(handler: CmsHandler): CmsHandler {
+function handle(handler: CmsHandler, mapRefusal: RefusalMapper = refusalFor): CmsHandler {
   return async (c) => {
     const startedAt = c.get('startedAt');
     const identity = c.get('identity');
-    const base = {
+    // Read after the handler has run, never before: the proxy route only learns which action it is
+    // serving once it has parsed the body, and a snapshot taken here would always be undefined.
+    const base = (): Omit<AuditRecord, 'decision' | 'durationMs'> => ({
       subject: identity.subject,
       email: identity.email,
       method: c.req.method,
       path: c.req.path,
-    };
+      action: c.get('decapAction'),
+    });
 
     try {
       const response = await handler(c);
       recordAudit(c.get('logger'), {
-        ...base,
+        ...base(),
         decision: 'allowed',
         upstreamStatus: response.status,
         durationMs: Date.now() - startedAt,
       });
       return response;
     } catch (error) {
-      const refusal = refusalFor(error);
+      const refusal = mapRefusal(error);
       if (refusal === undefined) {
         // Still a decision about this request, so it still gets a record (R9). Without this, the
         // failures nobody anticipated — the ones most worth reading about later — were the only
         // ones that produced no audit line, leaving just the app-level error log with no subject,
         // path or duration attached.
         recordAudit(c.get('logger'), {
-          ...base,
+          ...base(),
           decision: 'error',
           reason: 'unhandled',
           durationMs: Date.now() - startedAt,
@@ -187,7 +244,7 @@ function handle(handler: CmsHandler): CmsHandler {
         throw error;
       }
       recordAudit(c.get('logger'), {
-        ...base,
+        ...base(),
         decision: refusal.decision,
         reason: refusal.reason,
         upstreamStatus: refusal.upstreamStatus,
@@ -285,6 +342,40 @@ function registerSubmissionRoutes(app: Hono<AppEnv>, options: CmsRoutesOptions):
 }
 
 /**
+ * The Decap adapter (ADR 0014, ADR 0015).
+ *
+ * One endpoint carrying every editorial operation, because that is the protocol Decap speaks: its
+ * `proxy` backend posts `{action, params}` to a single URL. It sits inside this sub-app rather
+ * than beside it so that it inherits authentication and the credential guard — an adapter mounted
+ * separately would be one refactor away from being reachable without a token.
+ *
+ * Nothing here reaches the git host directly. Every action goes through the same services the REST
+ * routes use, so the path, branch and endpoint policies apply unchanged and a refusal still costs
+ * no upstream call.
+ */
+function registerProxyRoute(app: Hono<AppEnv>, options: CmsRoutesOptions): void {
+  app.post(
+    '/proxy',
+    handle(async (c) => {
+      const request = proxyRequestSchema.parse(await c.req.json());
+      // Recorded before the action runs, so a refusal is still attributable to what was asked.
+      c.set('decapAction', request.action);
+
+      const result = await dispatch(request, {
+        reader: options.reader,
+        drafts: options.drafts,
+        submissions: options.submissions,
+        settings: options.settings,
+        client: options.client,
+        identity: c.get('identity'),
+      });
+
+      return c.json(result ?? null);
+    }, proxyRefusalFor),
+  );
+}
+
+/**
  * The editorial surface (requirements.md R1, R3–R7, R9).
  *
  * Authentication is mounted for the whole sub-app rather than per handler, so a route added later
@@ -305,6 +396,7 @@ export function createCmsRoutes(options: CmsRoutesOptions): Hono<AppEnv> {
   registerReadRoutes(app, options);
   registerDraftRoutes(app, options);
   registerSubmissionRoutes(app, options);
+  registerProxyRoute(app, options);
 
   return app;
 }

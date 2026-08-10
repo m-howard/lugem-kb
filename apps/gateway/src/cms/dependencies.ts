@@ -21,6 +21,11 @@ export interface CmsDependencies {
   readonly verifier: IdentityVerifier;
   readonly tokens: InstallationTokenSource;
   readonly allowMergeFromCms: boolean;
+  /**
+   * The allowlisted git client itself, for the one editorial read no service expresses: listing
+   * the draft branches the editorial board is built from. Everything else goes through a service.
+   */
+  readonly client: GitHubClient;
 }
 
 /**
@@ -82,6 +87,7 @@ export function createCmsDependencies(cms: CmsConfig, region: string): CmsDepend
   return {
     settings,
     tokens,
+    client,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({ client, settings, allowMerge: cms.allowMergeFromCms }),

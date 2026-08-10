@@ -142,6 +142,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
         settings: cms.settings,
         allowMergeFromCms: cms.allowMergeFromCms,
         tokens: cms.tokens,
+        client: cms.client,
         auth: createAuthMiddleware({ verifier: cms.verifier }),
       }),
     );

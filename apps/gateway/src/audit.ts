@@ -20,6 +20,14 @@ export interface AuditRecord {
   readonly method: string;
   readonly path: string;
   readonly decision: AuditDecision;
+  /**
+   * What the caller asked for, when the path does not say.
+   *
+   * The Decap adapter is one endpoint carrying every editorial operation, so without this an
+   * operator reading the log would see a run of identical `POST /v1/cms/proxy` lines and could not
+   * tell a draft save from an attempt to publish.
+   */
+  readonly action?: string | undefined;
   /** Closed-set refusal reason from the policy that refused, absent when the decision allowed it. */
   readonly reason?: string | undefined;
   /** Status the git host returned, absent when no upstream call was made. */

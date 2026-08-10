@@ -5,6 +5,8 @@ import { type GitHubClient } from '../git/github-client';
 export interface BranchSnapshot {
   readonly commitSha: string;
   readonly treeSha: string;
+  /** When the tip commit was made, as the git host reported it. Absent if it did not. */
+  readonly updatedAt: string | undefined;
 }
 
 export interface TreeEntry {
@@ -20,6 +22,8 @@ interface RefResponse {
 
 interface CommitResponse {
   readonly tree?: { readonly sha?: string };
+  readonly committer?: { readonly date?: string };
+  readonly author?: { readonly date?: string };
 }
 
 interface TreeResponse {
@@ -54,7 +58,14 @@ export async function readBranchSnapshot(
     client.path(`/git/commits/${commitSha}`),
   );
   const treeSha = commit?.tree?.sha;
-  return treeSha === undefined ? undefined : { commitSha, treeSha };
+  if (treeSha === undefined) {
+    return undefined;
+  }
+
+  // The committer's date, not the author's: the committer is the App, so this is when the change
+  // actually landed on the branch. The author's date travels with a rebased commit and would make
+  // a draft look older than the work on it.
+  return { commitSha, treeSha, updatedAt: commit?.committer?.date ?? commit?.author?.date };
 }
 
 /**

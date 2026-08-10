@@ -25,5 +25,13 @@ export interface AppEnv {
      * same thing — including the authentication work, which is the part most likely to be slow.
      */
     startedAt: number;
+    /**
+     * Which Decap action the request carries, once the proxy handler has parsed the body.
+     *
+     * Set on the context rather than returned, because the audit record has to name the action
+     * even when the handler throws part-way through it — which is exactly the case an operator
+     * most wants to read later.
+     */
+    decapAction?: string;
   };
 }

@@ -126,6 +126,7 @@ export async function buildCmsTestApp(options: TestCmsOptions = {}): Promise<Tes
   const dependencies: CmsDependencies = {
     settings,
     tokens,
+    client,
     reader: new DocumentReader({ client, settings }),
     drafts: new DraftService({ client, settings }),
     submissions: new SubmissionService({

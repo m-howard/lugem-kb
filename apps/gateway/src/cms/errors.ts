@@ -13,3 +13,37 @@ export class CmsPolicyError extends Error {
     this.reason = reason;
   }
 }
+
+/**
+ * Thrown when an entry is not under editorial workflow — it has no draft branch, or its draft has
+ * already been published.
+ *
+ * Distinct from a refusal, and distinct from a missing document: the editor asks about entries it
+ * last saw, and "that draft is finished" is a normal answer to give an author whose colleague
+ * merged it. Decap turns the 404 this becomes into its own `EditorialWorkflowError`, which is what
+ * makes the card disappear from the board rather than showing an error.
+ */
+export class DraftMissingError extends Error {
+  constructor(contentKey: string) {
+    super(`No draft is in progress for "${contentKey}".`);
+    this.name = 'DraftMissingError';
+  }
+}
+
+/**
+ * Thrown when an editor asks for an operation this gateway does not offer.
+ *
+ * Answered as a bad request rather than a refusal, and the distinction is worth keeping: a refusal
+ * means the author asked for something they may not have, while this means they asked for
+ * something nobody here can have. Aggregating the two together would make a missing feature look
+ * like an access problem in the audit log.
+ */
+export class UnsupportedActionError extends Error {
+  public readonly action: string;
+
+  constructor(action: string, message: string) {
+    super(message);
+    this.name = 'UnsupportedActionError';
+    this.action = action;
+  }
+}
