@@ -56,7 +56,7 @@ jobs:
       # Scoped to this job rather than the workflow, so the configuration gate above cannot write.
       issues: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
