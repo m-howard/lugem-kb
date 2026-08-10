@@ -26,6 +26,7 @@
     "docs:start": "bun run --filter '@lugem/docs' start",
     "docs:build": "bun run --filter '@lugem/docs' build",
     "gateway:build": "bun run --filter '@lugem/gateway' build",
+    "docs:check": "bun run scripts/check/check-corpus.ts",
     "corpus:sync": "bun run scripts/docs/sync-corpus.ts",
     "gaps:report": "bun run scripts/docs/gap-report.ts",
     "format": "prettier --write .",

@@ -40,6 +40,13 @@ export default defineConfig({
         'infra/pulumi/src/config.ts',
         'infra/pulumi/src/github-config.ts',
         'scripts/docs/codeowners.ts',
+        // The content quality gates (requirements.md R13). Same reasoning as the CODEOWNERS
+        // parser: these decide whether a page may be published, so they are measured. The walker
+        // and the runner beside them are I/O orchestration and stay out.
+        'scripts/docs/frontmatter.ts',
+        'scripts/docs/links.ts',
+        'scripts/docs/ownership.ts',
+        'scripts/docs/problem-report.ts',
       ],
       exclude: ['**/*.test.ts', 'apps/gateway/src/index.ts'],
       thresholds: {

@@ -14,6 +14,70 @@ permissions:
   contents: read
 
 jobs:
+  # requirements.md R13. Its own job rather than a step inside `lint`, because the failure has an
+  # audience: an author who submitted a page through /admin sees "Content quality gates" red in the
+  # checks list, and the comment step below tells them why without them opening a log.
+  content:
+    name: Content quality gates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+
+      # `--github` adds ::error annotations on top of the readable report, so a broken link is
+      # pinned to its line in the diff as well as summarised.
+      - name: Check frontmatter, ownership and internal links
+        id: check
+        run: bun run docs:check --github
+
+      # R13's third criterion: "failures surface as a readable message, not a raw log". Runs on
+      # success too, so a comment left by an earlier failing push is corrected rather than left
+      # contradicting a green check. A fork's token cannot write comments, hence the head check.
+      # `|| true` because the runner exits non-zero when it found something, which is the case
+      # this step exists for. The report itself is on stdout either way.
+      - name: Render the report as a comment
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        run: bun run docs:check --markdown > "${RUNNER_TEMP}/docs-check.md" || true
+
+      - name: Post or update the comment
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        env:
+          PASSED: ${{ steps.check.outcome == 'success' }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const marker = '<!-- lugem-docs-check -->';
+            const body = `${marker}\n${fs.readFileSync(`${process.env.RUNNER_TEMP}/docs-check.md`, 'utf8')}`;
+            const scope = { owner: context.repo.owner, repo: context.repo.repo };
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...scope,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({ ...scope, comment_id: existing.id, body });
+            } else if (process.env.PASSED !== 'true') {
+              // Only a failure is worth introducing a comment for. A clean pull request stays
+              // quiet unless there is already a comment to correct.
+              await github.rest.issues.createComment({
+                ...scope,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
