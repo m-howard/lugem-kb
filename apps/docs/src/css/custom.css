@@ -223,9 +223,11 @@
   --ifm-h5-font-size: 0.9375rem;
   --ifm-h6-font-size: 0.8125rem;
 
-  /* `--text-base`, 15px. A variable rather than a literal because the Decap preview pane has to
-     set prose to the same size and `preview-style.test.ts` reads this to check that it does. */
+  /* `--text-base` 15px and `--text-3xl` 48px. Variables rather than literals because the Decap
+     preview pane has to set prose and its headings to the same sizes, and
+     `preview-style.test.ts` reads these to check that it does. */
   --lugem-prose-font-size: 0.9375rem;
+  --lugem-title-font-size: 3rem;
 
   /* The system's 4px card/input radius. Infima derives code, inputs, buttons, alerts, dropdowns
      and — at 2× — cards from this one value. */
@@ -461,7 +463,7 @@ h6 {
  * moving the largest type on the site without anything here noticing.
  */
 .markdown h1:first-child {
-  --ifm-h1-font-size: 3rem; /* --text-3xl */
+  --ifm-h1-font-size: var(--lugem-title-font-size); /* --text-3xl */
 }
 
 @media (max-width: 576px) {

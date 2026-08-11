@@ -32,16 +32,21 @@ const TOKENS = {
 } as const;
 
 /**
- * The site's rendered type scale, not the system's raw pixel values.
+ * The site's rendered type scale.
  *
- * They differ by one deliberate step: `custom.css` maps the system's ratios onto Infima's rem
- * scale against a 16px root rather than the system's 15px body, because Infima's root size drives
- * the whole layout. A preview that used the raw values would be on-system and still wrong, since
- * the page it is previewing is not set that way.
+ * Sized in rem against a 16px root, as `custom.css` is: the system's `--text-base` is the *prose*
+ * size, not the root, and the two are set separately there so the layout keeps its 16px rem. Both
+ * documents therefore agree on 0.9375rem meaning 15px.
+ *
+ * `h1` takes the *title* step, `--text-3xl`, not the in-body h1 size. Docusaurus gives the first
+ * heading of a page that step, and in this corpus a page's `# heading` is that heading — so 48px
+ * is what an author will actually see published. It is applied to every h1 rather than the first,
+ * because Decap renders the `title` field's own preview as an h1 above the body and scoping it to
+ * `:first-of-type` lands the title size on that instead of on the page's heading.
  */
 const SCALE = {
-  body: '16px',
-  h1: '2.25rem',
+  body: '0.9375rem',
+  title: '3rem',
   h2: '1.6875rem',
   h3: '1.3125rem',
   h4: '1.0625rem',
@@ -73,7 +78,7 @@ body {
   background: ${TOKENS.surface};
   color: ${TOKENS.ink};
   font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: ${SCALE.body};
+  font-size: ${SCALE.body}; /* --lugem-prose-font-size */
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }
@@ -89,7 +94,7 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.25;
 }
 
-h1 { font-size: ${SCALE.h1}; font-weight: 700; letter-spacing: -0.03em; }
+h1 { font-size: ${SCALE.title}; font-weight: 700; letter-spacing: -0.03em; }
 h2 { font-size: ${SCALE.h2}; font-weight: 600; letter-spacing: -0.02em; }
 h3 { font-size: ${SCALE.h3}; font-weight: 500; letter-spacing: -0.02em; }
 h4 { font-size: ${SCALE.h4}; font-weight: 500; }

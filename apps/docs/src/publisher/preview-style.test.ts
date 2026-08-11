@@ -38,7 +38,10 @@ describe('the Decap preview stylesheet', () => {
   });
 
   it.each([
-    ['--ifm-h1-font-size', 'h1'],
+    ['--lugem-prose-font-size', 'prose'],
+    // h1, not "the first heading": in this corpus a page's `# heading` is its title, and the
+    // preview gives every h1 that step. See the note in preview-style.ts.
+    ['--lugem-title-font-size', 'h1'],
     ['--ifm-h2-font-size', 'h2'],
     ['--ifm-h3-font-size', 'h3'],
     ['--ifm-h4-font-size', 'h4'],
