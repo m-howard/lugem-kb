@@ -10,22 +10,90 @@
     <meta name="robots" content="noindex" />
     <title>Documentation CMS</title>
     <style>
+      /*
+        The design system, inlined — the six tokens this page actually uses and nothing else.
+
+        Not a link to `src/css/custom.css`: this page is not built by Docusaurus and does not load
+        its stylesheet, and it should not start. It exists to be on screen *before* publisher.js
+        parses, so putting a site bundle in front of one status paragraph would lengthen the wait
+        the paragraph is there to explain. Decap replaces the page a moment later and brings its
+        own styling with it, so nothing here has a second reader.
+
+        The values are copies, and copies drift. They are the least volatile part of the system —
+        the slate ramp and coral — but `apps/docs/src/css/custom.css` is the original if they ever
+        disagree.
+      */
+      :root {
+        --c-bg: #f8fafc; /* slate-50 · page */
+        --c-panel: #f1f5f9; /* slate-100 · raised */
+        --c-ink: #0f172a; /* slate-900 · primary text */
+        --c-ink-muted: #475569; /* slate-600 · secondary text */
+        --c-coral: #ef4444; /* error */
+        --f-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+
+      /*
+        There is no theme toggle here and no Docusaurus to remember one, so the operating system is
+        the only signal there is. An author who works in the dark should not be flashed white by
+        the one page that greets them. Same ramp, read from the other end.
+      */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --c-bg: #0f172a;
+          --c-panel: #1e293b;
+          --c-ink: #f1f5f9;
+          --c-ink-muted: #94a3b8;
+        }
+      }
+
+      /*
+        `swap` is what makes this safe on a page that must render at once: text paints immediately
+        in the fallback and upgrades when the file lands, so the font is never on the critical
+        path. Same origin, from the docs site's `static/fonts/`. If it is missing — a `SITE_ROOT`
+        without it — the declaration fails quietly and the stack below is already correct.
+      */
+      @font-face {
+        font-family: 'DM Sans';
+        src: url('/fonts/dm-sans-latin.woff2') format('woff2');
+        font-weight: 300 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
       body {
         margin: 0;
-        font-family:
-          system-ui,
-          -apple-system,
-          'Segoe UI',
-          sans-serif;
+        background: var(--c-bg);
+        color: var(--c-ink);
+        font-family: var(--f-sans);
+        font-size: 15px;
+        line-height: 1.65;
       }
 
       #sign-in-status {
         margin: 4rem auto;
         max-width: 34rem;
         padding: 0 1.5rem;
+        color: var(--c-ink-muted);
         text-align: center;
-        color: #444;
-        line-height: 1.6;
+      }
+
+      /*
+        The other half of the message, and the reason it is worth styling at all.
+
+        "Signing you in…" and "that did not work" read identically as centred grey text, and the
+        difference between them is the only thing the author needs: one resolves itself, the other
+        never will. Weight, colour and a coral edge carry that — the system allows no shadow, and
+        the state is set by `src/publisher/main.ts`, which is the only code that knows which one
+        this is.
+      */
+      #sign-in-status[data-state='failed'] {
+        padding: 1rem 1.25rem;
+        border-left: 3px solid var(--c-coral);
+        border-radius: 4px;
+        background: var(--c-panel);
+        color: var(--c-ink);
+        font-weight: 500;
+        text-align: left;
       }
     </style>
   </head>
@@ -35,7 +103,7 @@
       gateway is asked how to sign them in — and what they are left with if it cannot be done.
       An empty page with an error in the console is not a message.
     -->
-    <p id="sign-in-status">Signing you in…</p>
+    <p id="sign-in-status" data-state="pending">Signing you in…</p>
 
     <!--
       Produced by scripts/build/build-publisher.ts from apps/docs/src/publisher/, and gitignored. Decap is
