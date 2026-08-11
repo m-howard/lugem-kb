@@ -57,7 +57,7 @@ credential they never see, and every write is confined to the documentation tree
 branches before that credential is used. Phase 5's answering slice generates a short answer from the
 retrieved passages rather than returning the passages alone.
 
-Phase 3 is the pilot. Decap at [`/admin`](./editing-in-the-cms.md) reaches the editorial API
+Phase 3 is the pilot. Decap at [`/publisher`](./editing-in-the-cms.md) reaches the editorial API
 through an adapter in the gateway, so an author writes and submits a page without a git host
 account or any knowledge of markdown. Every submission then gets a rendered preview at its own URL
 — linked from the card and from the pull request, served by the gateway rather than a public CDN

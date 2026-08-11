@@ -8,25 +8,25 @@ import {
   createState,
   parseCallback,
 } from './pkce';
-import { type AdminSession, authorizingFetch, createAdminSession } from './session';
+import { type PublisherSession, authorizingFetch, createPublisherSession } from './session';
 
 /**
- * The `/admin` page: sign in, then hand a configured Decap CMS an authorised `fetch`.
+ * The `/publisher` page: sign in, then hand a configured Decap CMS an authorised `fetch`.
  *
  * The thin layer. Everything with a decision in it — deriving a challenge, matching a callback,
  * deciding which requests may carry the token — lives in `pkce.ts` and `session.ts`, where it is
  * unit-tested. What is left here is redirects and DOM, which Playwright covers end to end.
  */
 
-const ADMIN_PATH = '/admin/';
+const PUBLISHER_PATH = '/publisher/';
 const PROXY_PATH = '/v1/cms/proxy';
-const ADMIN_CONFIG_PATH = '/v1/admin/config';
+const PUBLISHER_CONFIG_PATH = '/v1/publisher/config';
 const CMS_CONFIG_PATH = '/v1/cms/config';
 const IDENTITY_PATH = '/v1/cms/identity';
 const NOT_FOUND = 404;
 const UNAUTHORIZED = 401;
 
-interface AdminConfig {
+interface PublisherConfig {
   readonly authMode: 'bearer' | 'alb';
   readonly issuer?: string;
   readonly clientId?: string;
@@ -129,7 +129,7 @@ function decapConfig(cms: GatewayCmsConfig): DecapConfig {
 }
 
 /** Starts an authorization-code flow, remembering the verifier this browser will need back. */
-async function beginSignIn(config: AdminConfig, session: AdminSession): Promise<void> {
+async function beginSignIn(config: PublisherConfig, session: PublisherSession): Promise<void> {
   const { authorizationEndpoint } = await discover(config.issuer ?? '');
   const verifier = createCodeVerifier();
   const state = createState();
@@ -138,7 +138,7 @@ async function beginSignIn(config: AdminConfig, session: AdminSession): Promise<
   globalThis.location.assign(
     buildAuthorizeUrl(authorizationEndpoint, {
       clientId: config.clientId ?? '',
-      redirectUri: `${globalThis.location.origin}${ADMIN_PATH}`,
+      redirectUri: `${globalThis.location.origin}${PUBLISHER_PATH}`,
       scopes: config.scopes ?? 'openid profile email',
       state,
       challenge: await codeChallenge(verifier),
@@ -153,7 +153,7 @@ async function beginSignIn(config: AdminConfig, session: AdminSession): Promise<
  * The state is compared against the one this browser stored, which is what stops a callback from
  * somewhere else being accepted as this session's.
  */
-async function completeSignIn(config: AdminConfig, session: AdminSession): Promise<void> {
+async function completeSignIn(config: PublisherConfig, session: PublisherSession): Promise<void> {
   const callback = parseCallback(globalThis.location.search);
   if (!callback.ok) {
     throw new SignInError(callback.error);
@@ -171,16 +171,16 @@ async function completeSignIn(config: AdminConfig, session: AdminSession): Promi
       clientId: config.clientId ?? '',
       code: callback.code,
       verifier: flight.verifier,
-      redirectUri: `${globalThis.location.origin}${ADMIN_PATH}`,
+      redirectUri: `${globalThis.location.origin}${PUBLISHER_PATH}`,
     }),
   );
 
   // Drop the code from the address bar so a reload does not try to redeem it twice.
-  globalThis.history.replaceState({}, '', ADMIN_PATH);
+  globalThis.history.replaceState({}, '', PUBLISHER_PATH);
 }
 
 /** In `alb` mode the cookie does the work; the one path that issues it is the sign-in. */
-async function ensureAlbSession(config: AdminConfig): Promise<boolean> {
+async function ensureAlbSession(config: PublisherConfig): Promise<boolean> {
   const response = await fetch(IDENTITY_PATH);
   if (response.status === UNAUTHORIZED) {
     globalThis.location.assign(config.signInPath ?? IDENTITY_PATH);
@@ -214,13 +214,13 @@ async function startEditor(token: string | undefined): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const configResponse = await fetch(ADMIN_CONFIG_PATH);
+  const configResponse = await fetch(PUBLISHER_CONFIG_PATH);
   if (configResponse.status === NOT_FOUND) {
     status('The authoring CMS is not configured on this deployment.');
     return;
   }
 
-  const config = (await configResponse.json()) as AdminConfig;
+  const config = (await configResponse.json()) as PublisherConfig;
 
   if (config.authMode === 'alb') {
     if (await ensureAlbSession(config)) {
@@ -229,7 +229,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const session = createAdminSession(globalThis.sessionStorage);
+  const session = createPublisherSession(globalThis.sessionStorage);
   globalThis.fetch = authorizingFetch({
     fetch: globalThis.fetch.bind(globalThis),
     token: () => session.readToken()?.token,

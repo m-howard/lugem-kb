@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   # requirements.md R13. Its own job rather than a step inside `lint`, because the failure has an
-  # audience: an author who submitted a page through /admin sees "Content quality gates" red in the
+  # audience: an author who submitted a page through /publisher sees "Content quality gates" red in the
   # checks list, and the comment step below tells them why without them opening a log.
   content:
     name: Content quality gates

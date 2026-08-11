@@ -10,7 +10,7 @@ import { findMarkdownFiles } from '../docs/corpus-files';
  *
  * Real content rather than two fixture pages, because the frontmatter this repository actually
  * writes — `title`, `owner`, `last_reviewed`, `sidebar_position` — is exactly what the editor's
- * collection is configured for (`apps/docs/src/admin/main.ts`). Seeding from anything else would
+ * collection is configured for (`apps/docs/src/publisher/main.ts`). Seeding from anything else would
  * mean every page opened in the sandbox showed a schema mismatch that production would not have.
  *
  * Images are included so the media library has something in it. They are read as raw bytes and

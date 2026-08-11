@@ -21,7 +21,8 @@ describe('static site handler', () => {
     });
 
     // Serving the index at both spellings looks equivalent and is not: relative URLs in the page
-    // resolve against the last path segment, so `./admin.js` under `/admin` asks for `/admin.js`
+    // resolve against the last path segment, so `./publisher.js` under `/publisher` asks for
+    // `/publisher.js`
     // and 404s. Redirecting is what makes a pasted slashless link load the same page as a link
     // followed from inside the site.
     it('redirects a slashless directory route to its canonical slashed form', async () => {

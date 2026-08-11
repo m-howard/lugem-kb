@@ -115,7 +115,7 @@ const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
 const origin = `http://127.0.0.1:${String(port)}`;
 
 // The editorial half, stubbed the same way: a fake git host injected into the client, and an
-// identity provider the *browser* signs in against. `/admin` cannot be exercised without one.
+// identity provider the *browser* signs in against. `/publisher` cannot be exercised without one.
 const cms = await createE2eCms(origin);
 
 const corpus = new CorpusClient({ s3: stubS3, bucket: BUCKET, prefix: PREFIX });

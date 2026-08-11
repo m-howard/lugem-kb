@@ -40,7 +40,7 @@ export const TEST_PREVIEW_BASE_URL = 'https://kb.test/previews';
 
 export const TEST_REPOSITORY = 'acme/handbook';
 export const TEST_GITHUB_API = 'https://api.github.test';
-export const TEST_ADMIN_CLIENT_ID = 'lugem-cms-admin';
+export const TEST_PUBLISHER_CLIENT_ID = 'lugem-cms-admin';
 
 export const TEST_MEDIA_FOLDER = 'docs/assets/media/';
 
@@ -258,7 +258,7 @@ async function buildCmsHarness(
       mode: 'bearer',
       issuer: idp.issuer,
       audience: idp.audience,
-      clientId: TEST_ADMIN_CLIENT_ID,
+      clientId: TEST_PUBLISHER_CLIENT_ID,
       emailClaim: 'email',
       nameClaim: 'name',
     },

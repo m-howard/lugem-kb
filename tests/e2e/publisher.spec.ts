@@ -25,13 +25,13 @@ const SIGN_IN_TIMEOUT_MS = 30_000;
  * back from the identity provider still has one click to make. See `docs/editing-in-the-cms.md`.
  */
 async function openEditor(page: Page): Promise<void> {
-  await page.goto('/admin/');
+  await page.goto('/publisher/');
   await page.getByRole('button', { name: /login/i }).click({ timeout: SIGN_IN_TIMEOUT_MS });
 }
 
-test.describe('the documentation CMS at /admin', () => {
+test.describe('the documentation CMS at /publisher', () => {
   test('serves the editor shell', async ({ page }) => {
-    const response = await page.goto('/admin/');
+    const response = await page.goto('/publisher/');
 
     expect(response?.status()).toBe(200);
   });
@@ -98,7 +98,7 @@ test.describe('the adapter behind the editor', () => {
 
   // The sign-in parameters are public by nature and the page that needs them has no token yet.
   test('publishes the sign-in configuration anonymously', async ({ request }) => {
-    const response = await request.get('/v1/admin/config');
+    const response = await request.get('/v1/publisher/config');
 
     expect(response.status()).toBe(200);
     expect(await response.json()).toMatchObject({ authMode: 'bearer' });

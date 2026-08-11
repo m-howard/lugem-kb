@@ -6,7 +6,7 @@ import { checkPathSyntax, type KeyPolicyViolation, normalisePrefix } from '../kb
  * Two absences are decisions rather than omissions.
  *
  * **No `.svg`.** An SVG is a script carrier, and the site is served from the same origin as
- * `/admin` — where the author's access token lives in `sessionStorage`. An uploaded SVG would be
+ * `/publisher` — where the author's access token lives in `sessionStorage`. An uploaded SVG would be
  * stored cross-site scripting against the editor itself, reachable by anyone who opens the page it
  * is on. A screenshot is worth having; a scripting surface on the editor's origin is not.
  *

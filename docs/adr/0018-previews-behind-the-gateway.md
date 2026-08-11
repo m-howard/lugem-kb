@@ -38,7 +38,7 @@ And there is a trap in serving previews from the gateway rather than from somewh
 is MDX, so a page is a React component rather than a document: a pull request can carry script as
 easily as a paragraph. [ADR 0014](0014-purpose-built-editorial-api.md) then makes that reachable by
 someone who has no git account at all — the CMS opens `cms/*` branches on their behalf. Serving
-those bytes from the origin that also carries `/admin`, the editorial API and the reader's session
+those bytes from the origin that also carries `/publisher`, the editorial API and the reader's session
 means opening a preview runs unreviewed script with the privileges of whoever opened it: a sign-in
 token copied into the tab's `sessionStorage` in bearer mode, a credentialed call to the CMS in ALB
 mode. That is a lower-privileged author reaching a higher-privileged one, and no amount of

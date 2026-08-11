@@ -56,7 +56,7 @@ describe('pull request previews', () => {
 
   // The one that matters. `docs/**` is MDX, so a pull request can carry script, and the CMS lets
   // someone with no git account open one. Without the sandbox that script runs on the origin that
-  // holds `/admin`, the CMS API and the reader's session. See ADR 0018.
+  // holds `/publisher`, the CMS API and the reader's session. See ADR 0018.
   describe('sandboxing', () => {
     // Every path out of the route, including the ones that carry no pull request bytes at all: a
     // response that forgot the header is the one an attacker would look for.

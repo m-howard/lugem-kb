@@ -27,7 +27,7 @@ const BAD_GATEWAY = 502;
  * Everything the gateway owns. The rest is the site, which is the catch-all in production too.
  *
  * `/idp/` is not a production path: it is where `scripts/dev/serve-cms.ts` mounts its stub identity
- * provider. Forwarding it is what lets `/admin` sign in through this proxy — the browser's
+ * provider. Forwarding it is what lets `/publisher` sign in through this proxy — the browser's
  * discovery fetch and token exchange have to reach the same origin the page is served from.
  */
 const GATEWAY_PATHS = ['/v1/', '/healthz', '/readyz', '/previews/', '/idp/'];

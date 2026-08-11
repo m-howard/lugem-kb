@@ -139,8 +139,8 @@ For the answering capability specifically:
 Authors authenticate against the corporate IdP. No git host account is created,
 requested or referenced at any point in the author's journey.
 
-- [ ] Given an author with a corporate account and no git host account, when they open `/admin`, then they reach the editor without an account error
-- [ ] Given an author already signed in to the intranet, when they open `/admin`, then the IdP redirect completes without a second credential prompt
+- [ ] Given an author with a corporate account and no git host account, when they open `/publisher`, then they reach the editor without an account error
+- [ ] Given an author already signed in to the intranet, when they open `/publisher`, then the IdP redirect completes without a second credential prompt
 - [ ] Given an expired session, when the CMS calls the gateway, then it receives HTTP 401 and prompts re-authentication rather than failing opaquely
 - [ ] Given a request with no bearer token, when it reaches the gateway, then it is refused with 401 and no upstream call is made
 
@@ -278,7 +278,7 @@ published corpus. Answers come from the corpus or not at all.
 
 #### R22. Reader access and query handling
 
-- [ ] The chat endpoint authenticates against the same IdP as `/admin` (R1); anonymous access is refused — **built, and off by default.** `READER_AUTH_REQUIRED` turns it on; until a deployment does, anonymous access is allowed and this is not met. Deliberate, and the reasoning is in [ADR 0017](adr/0017-reader-authentication.md)
+- [ ] The chat endpoint authenticates against the same IdP as `/publisher` (R1); anonymous access is refused — **built, and off by default.** `READER_AUTH_REQUIRED` turns it on; until a deployment does, anonymous access is allowed and this is not met. Deliberate, and the reasoning is in [ADR 0017](adr/0017-reader-authentication.md)
 - [x] The answering service holds no git host credential and no write path through the gateway
 - [x] Paths excluded from the index by configuration never appear in an answer or citation
 - [x] Question text retention and access are restricted per the governance requirement — readers will ask people-ops questions about their own circumstances, so query logs are more sensitive than the corpus they search — settled by [ADR 0016](adr/0016-recording-documentation-gaps.md)
@@ -393,7 +393,7 @@ Engineers can publish; nothing has regressed. _Exit: site builds from the repo._
 **Phase 2 — Gateway.** Build and deploy the gateway. Verify with a scripted client
 before any human uses it. _Exit: R1–R6, R9, R10 pass._
 
-**Phase 3 — Pilot.** Decap at `/admin`, previews, quality gates. Three to five
+**Phase 3 — Pilot.** Decap at `/publisher`, previews, quality gates. Three to five
 authors from one department. _Exit: 8 of 10 pilot tasks completed unaided._
 
 **Phase 4 — Rollout.** Remaining departments, notifications, S3 sync for the AI

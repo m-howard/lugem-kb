@@ -74,7 +74,7 @@ at one directory listing.
 `MEDIA_EXTENSIONS` is `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, and the leading bytes of every upload
 are checked against the extension it claims. Two exclusions are decisions:
 
-- **No SVG.** An SVG is a script carrier, and the site is served from the same origin as `/admin`,
+- **No SVG.** An SVG is a script carrier, and the site is served from the same origin as `/publisher`,
   where the author's access token lives in `sessionStorage`. An uploaded SVG would be stored
   cross-site scripting against the editor, triggered by anyone opening the page it is on. A
   screenshot is worth having; a scripting surface on the editor's own origin is not.

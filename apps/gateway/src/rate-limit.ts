@@ -54,7 +54,7 @@ function clientKey(c: Context<AppEnv>): string {
  *   `n × limit`, and it resets on every deploy. Enforcing a real global limit needs a WAF
  *   rate-based rule or a shared store.
  * - It identifies someone only when reader authentication is switched on. requirements.md R22
- *   asks the endpoint to authenticate against the same IdP as `/admin`; ADR 0017 builds that and
+ *   asks the endpoint to authenticate against the same IdP as `/publisher`; ADR 0017 builds that and
  *   leaves it off by default, so on most deployments this still counts addresses and is not a
  *   substitute for access control. See docs/adr/0012-grounded-generation-behind-retrieval.md.
  *

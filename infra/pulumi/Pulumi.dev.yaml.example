@@ -121,8 +121,8 @@ config:
   # lugem-kb:cmsAuthIssuerUrl: https://login.microsoftonline.com/<tenant>/v2.0
   # lugem-kb:cmsAuthAudience: api://lugem-cms
 
-  # Required for cmsAuthMode: bearer. The public OIDC client the /admin editor signs in as, with
-  # https://<site>/admin/ registered as a redirect URI. Decap's proxy backend sends no
+  # Required for cmsAuthMode: bearer. The public OIDC client the /publisher editor signs in as, with
+  # https://<site>/publisher/ registered as a redirect URI. Decap's proxy backend sends no
   # Authorization header of its own, so the page obtains a token itself. No secret: it is a public
   # client, and PKCE is what proves the callback belongs to the browser that started it.
   # lugem-kb:cmsAuthClientId: lugem-cms-admin

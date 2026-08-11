@@ -1,8 +1,8 @@
 /**
- * The authorization-code-with-PKCE pieces the `/admin` page needs, as pure functions.
+ * The authorization-code-with-PKCE pieces the `/publisher` page needs, as pure functions.
  *
  * Decap's `proxy` backend sends no `Authorization` header and its `getToken` returns an empty
- * string, so the admin page obtains its own token and attaches it. PKCE rather than an implicit
+ * string, so the publisher page obtains its own token and attaches it. PKCE rather than an implicit
  * flow because the page is a public client with no secret to hold: the verifier never leaves the
  * browser, and an intercepted authorization code is useless without it.
  *

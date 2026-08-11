@@ -124,7 +124,7 @@ jobs:
               `This pull request renders at ${process.env.PREVIEW_URL}`,
               '',
               'It is rebuilt on every push, and deleted when this pull request is merged or',
-              "closed. The same link is on the entry's card in the CMS at `/admin`.",
+              "closed. The same link is on the entry's card in the CMS at `/publisher`.",
             ].join('\n');
 
             const scope = { owner: context.repo.owner, repo: context.repo.repo };

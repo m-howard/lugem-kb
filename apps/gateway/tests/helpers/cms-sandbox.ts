@@ -18,7 +18,7 @@ import { InstallationTokenSource } from '../../src/git/installation-token';
  * against.
  *
  * The gateway's editorial surface is mounted only when a GitHub App and an OIDC issuer are
- * configured, which makes `/admin` unreachable locally without production credentials. This
+ * configured, which makes `/publisher` unreachable locally without production credentials. This
  * assembles the same `CmsDependencies` production assembles, over collaborators that need neither.
  *
  * `createCmsDependencies` is deliberately not reused. It constructs its own `GitHubClient` with no

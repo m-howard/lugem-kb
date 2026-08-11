@@ -3,7 +3,7 @@
  *
  * Kept out of `serve-e2e.ts` because it is fixture data rather than wiring, and because the two
  * stubs have different jobs. The identity provider is reached **by the browser**, so it has to be
- * real HTTP on the same origin — that is the whole point of the `/admin` e2e, which exists to
+ * real HTTP on the same origin — that is the whole point of the `/publisher` e2e, which exists to
  * prove the sign-in the unit tests can only exercise in pieces. The git host is reached by the
  * gateway, so it stays an injected `fetch`.
  */
@@ -158,7 +158,7 @@ export async function createE2eCms(origin: string): Promise<E2eCms> {
   // No login form: the point of the spec is the redirect dance and the code exchange, not a
   // password box nobody here wrote.
   idp.get('/authorize', (c) => {
-    const redirectUri = c.req.query('redirect_uri') ?? `${origin}/admin/`;
+    const redirectUri = c.req.query('redirect_uri') ?? `${origin}/publisher/`;
     const state = c.req.query('state') ?? '';
     const target = new URL(redirectUri);
     target.searchParams.set('code', 'e2e-authorization-code');

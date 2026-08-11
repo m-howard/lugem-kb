@@ -211,11 +211,11 @@ describe('the Decap adapter', () => {
 
   // The one editorial path that is deliberately anonymous. It is mounted beside `/v1/cms` rather
   // than inside it, so that sub-app's "everything here needs a token" rule stays literally true.
-  describe('the admin sign-in configuration', () => {
+  describe('the publisher sign-in configuration', () => {
     it('is served without a token, because the page that needs it has none yet', async () => {
       const cms = await buildCmsTestApp();
 
-      const response = await cms.app.request('/v1/admin/config');
+      const response = await cms.app.request('/v1/publisher/config');
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ authMode: 'bearer' });
@@ -223,7 +223,7 @@ describe('the Decap adapter', () => {
     });
 
     it('is absent when the CMS is switched off', async () => {
-      const response = await buildTestApp().request('/v1/admin/config');
+      const response = await buildTestApp().request('/v1/publisher/config');
 
       expect(response.status).toBe(404);
       expect(await response.json()).toMatchObject({ error: 'not_found' });

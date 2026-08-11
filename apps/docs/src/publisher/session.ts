@@ -57,7 +57,7 @@ export function isExpired(token: AccessToken, now: number = Date.now()): boolean
  * longer-lived credential than anyone intended (requirements.md Q11 takes the same line about
  * query logs).
  */
-export interface AdminSession {
+export interface PublisherSession {
   readToken(): AccessToken | undefined;
   writeToken(token: AccessToken): void;
   readFlight(): SignInFlight | undefined;
@@ -72,7 +72,10 @@ export interface AdminSession {
  * @param now - Epoch milliseconds, injected so expiry is testable.
  * @returns The store.
  */
-export function createAdminSession(storage: Storage, now: () => number = Date.now): AdminSession {
+export function createPublisherSession(
+  storage: Storage,
+  now: () => number = Date.now,
+): PublisherSession {
   return {
     readToken() {
       const stored = readJson(storage, TOKEN_KEY);

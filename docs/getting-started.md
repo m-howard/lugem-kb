@@ -57,17 +57,17 @@ Without AWS credentials the site and `/healthz` work; `/readyz`, `/v1/documents`
 
 ### Endpoints
 
-| Method | Path                  | Purpose                                                            |
-| ------ | --------------------- | ------------------------------------------------------------------ |
-| `GET`  | `/healthz`            | Liveness. Touches nothing upstream.                                |
-| `GET`  | `/readyz`             | Readiness. Checks the corpus bucket.                               |
-| `GET`  | `/v1/documents`       | List documents under the corpus prefix.                            |
-| `GET`  | `/v1/documents/:path` | Fetch one document.                                                |
-| `POST` | `/v1/search`          | Retrieve passages with citations. Body: `{"question": "..."}`.     |
-| `POST` | `/v1/ask`             | Grounded answer, streamed as SSE. Body: `{"question", "history"}`. |
-| `*`    | `/v1/cms/*`           | The authoring gateway. Only mounted when `CMS_REPOSITORY` is set.  |
-| `GET`  | `/v1/admin/config`    | Sign-in parameters for `/admin`. Mounted with the CMS.             |
-| `GET`  | `/*`                  | The built documentation site, including `/admin/`.                 |
+| Method | Path                   | Purpose                                                            |
+| ------ | ---------------------- | ------------------------------------------------------------------ |
+| `GET`  | `/healthz`             | Liveness. Touches nothing upstream.                                |
+| `GET`  | `/readyz`              | Readiness. Checks the corpus bucket.                               |
+| `GET`  | `/v1/documents`        | List documents under the corpus prefix.                            |
+| `GET`  | `/v1/documents/:path`  | Fetch one document.                                                |
+| `POST` | `/v1/search`           | Retrieve passages with citations. Body: `{"question": "..."}`.     |
+| `POST` | `/v1/ask`              | Grounded answer, streamed as SSE. Body: `{"question", "history"}`. |
+| `*`    | `/v1/cms/*`            | The authoring gateway. Only mounted when `CMS_REPOSITORY` is set.  |
+| `GET`  | `/v1/publisher/config` | Sign-in parameters for `/publisher`. Mounted with the CMS.         |
+| `GET`  | `/*`                   | The built documentation site, including `/publisher/`.             |
 
 `/v1/ask` answers in one of two shapes. A question the corpus covers gets `text/event-stream`: a
 `citations` frame, then `token` frames, then `done`. A question it does not gets ordinary JSON —
@@ -76,10 +76,10 @@ Without AWS credentials the site and `/healthz` work; `/readyz`, `/v1/documents`
 Any other `/v1/...` path answers JSON `404`. The site is a catch-all mounted last, so without that
 terminator a mistyped API path would return the site's HTML with a `200`.
 
-## Run the CMS at `/admin` {#run-the-cms-at-admin}
+## Run the CMS at `/publisher` {#run-the-cms-at-publisher}
 
 ```bash
-bun run dev:cms      # http://127.0.0.1:4300/admin/
+bun run dev:cms      # http://127.0.0.1:4300/publisher/
 ```
 
 That is the whole setup. No AWS account, no GitHub App, no identity provider, no `.env`. It signs
@@ -99,22 +99,22 @@ start over:
 bun run dev:cms --reset
 ```
 
-| Variable                                      | Default              | Why you would set it                                         |
-| --------------------------------------------- | -------------------- | ------------------------------------------------------------ |
-| `PORT`                                        | `4300`               | Something else holds the port.                               |
-| `SITE_ROOT`                                   | `apps/docs/static`   | `apps/docs/build`, to get the whole site alongside `/admin`. |
-| `PUBLIC_ORIGIN`                               | the listening origin | You are reaching it through the proxy below.                 |
-| `SANDBOX_AUTHOR_EMAIL`, `SANDBOX_AUTHOR_NAME` | a placeholder author | See your own name on the commits and pull requests.          |
+| Variable                                      | Default              | Why you would set it                                             |
+| --------------------------------------------- | -------------------- | ---------------------------------------------------------------- |
+| `PORT`                                        | `4300`               | Something else holds the port.                                   |
+| `SITE_ROOT`                                   | `apps/docs/static`   | `apps/docs/build`, to get the whole site alongside `/publisher`. |
+| `PUBLIC_ORIGIN`                               | the listening origin | You are reaching it through the proxy below.                     |
+| `SANDBOX_AUTHOR_EMAIL`, `SANDBOX_AUTHOR_NAME` | a placeholder author | See your own name on the commits and pull requests.              |
 
 `SITE_ROOT` points at `apps/docs/static` rather than a built site on purpose: Docusaurus copies
-`static/` verbatim, so `/admin/` resolves out of it and only the editor bundle has to be built,
+`static/` verbatim, so `/publisher/` resolves out of it and only the editor bundle has to be built,
 which takes seconds. Every other path answers a plain-text 404 until you build the site.
 
 The sandbox is loopback-only and is not a security boundary: its identity provider signs anyone in.
 
 ### Working on the editor itself, with hot reload
 
-`apps/docs/src/admin/` holds the sign-in shim. To iterate on it with the site rebuilding as you
+`apps/docs/src/publisher/` holds the sign-in shim. To iterate on it with the site rebuilding as you
 type, three terminals:
 
 ```bash

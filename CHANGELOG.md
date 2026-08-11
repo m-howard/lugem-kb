@@ -9,10 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **A local sandbox for `/admin`** — `bun run dev:cms` runs the editorial surface with no AWS
+- **A local sandbox for `/publisher`** — `bun run dev:cms` runs the editorial surface with no AWS
   account, no GitHub App and no identity provider. See
   [ADR 0022](docs/adr/0022-a-local-sandbox-for-the-editorial-surface.md).
-  - Until now `/admin` was the one part of the system nobody could run locally: `CMS_REPOSITORY` is
+  - Until now `/publisher` was the one part of the system nobody could run locally: `CMS_REPOSITORY` is
     a master switch that makes an App credential and a reachable OIDC issuer required, and the only
     credential-free path stubbed the git host with a table of canned responses — you could watch
     the editor render, but not save a page and see it come back.
@@ -54,7 +54,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     Docusaurus build with its file and line, which is the guarantee R13 gives links, obtained
     without adding a check.
   - PNG, JPEG, GIF and WebP only, and the leading bytes of every file are checked against its
-    extension. **No SVG:** it can carry a script, and the site shares an origin with `/admin`, where
+    extension. **No SVG:** it can carry a script, and the site shares an origin with `/publisher`, where
     the author's token lives in `sessionStorage`.
   - `CMS_MAX_UPLOAD_BYTES` defaults to 2 MiB. An oversized image is answered `413` with a message
     naming the file and both sizes, and **nothing is written** — one bad image refuses the whole
@@ -93,7 +93,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     That is the criterion the Docusaurus build could not meet — it already fails on a broken link,
     but a stack trace in an Actions log is not a message an author who has never seen this
     repository can act on. See [ADR 0019](docs/adr/0019-content-quality-gates.md).
-- **The documentation CMS at `/admin`** — the CMS half of Phase 3, so an author writes and submits
+- **The documentation CMS at `/publisher`** — the CMS half of Phase 3, so an author writes and submits
   a page without a git host account or any knowledge of markdown. See
   [Editing in the CMS](docs/editing-in-the-cms.md).
   - Decap CMS reaches the editorial API through an adapter in the gateway at `POST /v1/cms/proxy`.
@@ -107,9 +107,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     the editorial board has to show drafts that have no pull request yet.
   - `SubmissionService.close` withdraws a submission without touching its branch, reusing the same
     confinement check as merge so an author cannot close a pull request that is not theirs.
-  - The `/admin` page runs its own OIDC sign-in with PKCE, because Decap's proxy backend sends no
+  - The `/publisher` page runs its own OIDC sign-in with PKCE, because Decap's proxy backend sends no
     `Authorization` header. `AUTH_CLIENT_ID` (stack key `cmsAuthClientId`) is required in `bearer`
-    mode; `GET /v1/admin/config` publishes the sign-in parameters anonymously, since they travel in
+    mode; `GET /v1/publisher/config` publishes the sign-in parameters anonymously, since they travel in
     the browser's redirect URL regardless.
   - Audit records carry the Decap action, so one endpoint carrying every operation still leaves a
     log an operator can read (R9).
@@ -217,6 +217,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The editor moved from `/admin` to `/publisher`** — the route now says what the page is for.
+  What lives there publishes documentation; it administers nothing, and "admin" invited the guess
+  that it did.
+  - **Breaking, and it needs a change outside this repository.** The page signs in with an
+    authorization-code flow, and an OIDC provider matches `redirect_uri` against a pre-registered
+    allowlist. Register `https://<site>/publisher/` with the identity provider **before** deploying
+    this, or sign-in fails with `redirect_uri_mismatch`. The old `/admin/` entry can be dropped once
+    the deploy lands.
+  - `GET /v1/admin/config` is now `GET /v1/publisher/config`. Versioned and read only by the editor
+    itself, so nothing outside the site consumes it.
+  - There is no redirect from the old path: `/admin` and `/v1/admin/config` return 404. Anyone
+    holding a bookmark needs the new link.
+  - The client id (`cmsAuthClientId`, `AUTH_CLIENT_ID`) is unchanged — it is registered with the
+    provider, not derived from the path.
 - **`/v1` is terminated before the static site.** An unknown API path answered 200 with the site's
   HTML, because the site is a catch-all mounted last. It now answers JSON 404. This is a behaviour
   change for any client that was relying on the old response, and the reason it matters is
@@ -246,15 +260,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **`/admin` without a trailing slash sat on "Signing you in…" forever.** The site handler answers
-  a directory route at both spellings, but only redirected at neither — so `/admin` returned the
-  editor's `index.html` while the browser resolved its relative `./admin.js` against `/`, asking
-  for `/admin.js` and getting a 404. The bundle never ran, and because the "Signing you in…" text
+- **`/publisher` without a trailing slash sat on "Signing you in…" forever.** The site handler answers
+  a directory route at both spellings, but only redirected at neither — so `/publisher` returned the
+  editor's `index.html` while the browser resolved its relative `./publisher.js` against `/`, asking
+  for `/publisher.js` and getting a 404. The bundle never ran, and because the "Signing you in…" text
   is the static placeholder the script replaces, the page reported nothing: the only evidence was
   a 404 in a console the author had no reason to open. A slashless path that resolves to a
   directory with an `index.html` now answers `301` to the canonical form, query string intact so
   an OIDC callback landing there keeps its `code` and `state`. This applies to every directory
-  route, not just `/admin`.
+  route, not just `/publisher`.
 
 - **`bun run docs:build` failed on a clean clone.** `apps/docs/package.json` runs
   `scripts/build/build-admin.ts` as its `prebuild` hook, and that file had never been committed:

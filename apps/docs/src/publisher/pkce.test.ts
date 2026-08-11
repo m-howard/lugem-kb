@@ -12,7 +12,7 @@ const AUTHORIZE = 'https://idp.example.com/authorize';
 
 const PARAMS = {
   clientId: 'lugem-cms-admin',
-  redirectUri: 'https://docs.internal/admin/',
+  redirectUri: 'https://docs.internal/publisher/',
   scopes: 'openid profile email',
   state: 'state-1',
   challenge: 'challenge-1',
@@ -63,7 +63,7 @@ describe('buildAuthorizeUrl', () => {
     expect(Object.fromEntries(url.searchParams)).toEqual({
       response_type: 'code',
       client_id: 'lugem-cms-admin',
-      redirect_uri: 'https://docs.internal/admin/',
+      redirect_uri: 'https://docs.internal/publisher/',
       scope: 'openid profile email',
       state: 'state-1',
       code_challenge: 'challenge-1',

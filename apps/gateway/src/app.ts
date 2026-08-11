@@ -20,7 +20,6 @@ import { Retriever } from './kb/retrieve';
 import { PreviewClient } from './previews/preview-client';
 import { PREVIEW_MOUNT_PATH } from './previews/preview-key';
 import { createRateLimit } from './rate-limit';
-import { createAdminConfigRoutes } from './routes/admin-config';
 import { createApiNotFoundRoutes } from './routes/api-not-found';
 import { createAskRoutes } from './routes/ask';
 import { createCmsRoutes } from './routes/cms';
@@ -29,6 +28,7 @@ import { createFeedbackRoutes } from './routes/feedback';
 import { createHealthRoutes } from './routes/health';
 import { createIdentityRoutes } from './routes/identity';
 import { createPreviewRoutes } from './routes/previews';
+import { createPublisherConfigRoutes } from './routes/publisher-config';
 import { createSearchRoutes } from './routes/search';
 import { createSiteRoutes } from './routes/site';
 
@@ -287,7 +287,7 @@ export function createApp(dependencies: AppDependencies): Hono<AppEnv> {
     // Unauthenticated on purpose, and only these fields — see the route's own note. Mounted
     // alongside rather than inside `/v1/cms`, so that sub-app's "everything here needs a token"
     // rule survives someone adding a route next to this one.
-    app.route('/v1/admin', createAdminConfigRoutes({ auth: cms.auth }));
+    app.route('/v1/publisher', createPublisherConfigRoutes({ auth: cms.auth }));
   }
 
   // Mounted only when PREVIEW_BUCKET is set, and before the catch-all — the site would otherwise

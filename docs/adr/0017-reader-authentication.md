@@ -13,7 +13,7 @@ last_reviewed: 2026-08-10
 
 ## Context
 
-R22 asks the chat endpoint to authenticate against the same identity provider as `/admin`, and to
+R22 asks the chat endpoint to authenticate against the same identity provider as `/publisher`, and to
 refuse anonymous access. ADR 0013 built two verification modes behind one interface but wired them
 only to the editorial surface, recording the reason plainly: turning authentication on for readers
 "would put a login in front of every reader for a benefit nobody has asked for yet".
