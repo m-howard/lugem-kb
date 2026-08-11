@@ -1,27 +1,218 @@
 /**
- * Docusaurus Infima overrides. Kept minimal on purpose: the default theme is accessible in both
- * colour modes, and every override here is a contrast decision someone has to re-check later.
+ * The design system, mapped onto Infima's variable names.
+ *
+ * Still minimal, but the minimum moved: the baseline is no longer Docusaurus's default theme, it is
+ * the system in `.claude/skills/design-system/`. Every override here is a contrast decision someone
+ * has to re-check later, so this file overrides *one layer* — the ramps and the type — and lets
+ * Infima derive the rest. Infima builds `--ifm-color-emphasis-*`, content colours, borders, tables,
+ * the table of contents, the menu, the footer, the navbar and dropdowns out of `--ifm-color-gray-*`,
+ * so replacing that ramp with the system's slate scale restyles the whole theme without this file
+ * naming a single component.
+ *
+ * Measured contrast, primary on page background:
+ *   light  #4f46e5 on #f8fafc  6.01:1  AA
+ *   dark   #9590ef on #0f172a  6.39:1  AA
+ *
+ * The system's own stylesheet is light-mode only. The dark palette is authored here — derived, not
+ * invented; see the note above the `[data-theme='dark']` block.
+ *
+ * Semantic colours (emerald/amber/coral/violet) are deliberately *not* mapped. Each one is a base
+ * plus six shades plus a contrast pair per theme, and the system carries a live accessibility
+ * caveat — white text fails on amber. Infima's defaults are already accessible in both modes, so
+ * that stays a separate, separately-reviewable change rather than a silent one.
  */
 
-:root {
-  --ifm-color-primary: #2a6f5f;
-  --ifm-color-primary-dark: #266456;
-  --ifm-color-primary-darker: #245e51;
-  --ifm-color-primary-darkest: #1d4d43;
-  --ifm-color-primary-light: #2e7a68;
-  --ifm-color-primary-lighter: #30806d;
-  --ifm-color-primary-lightest: #379180;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgb(0 0 0 / 10%);
+/*
+ * Self-hosted, latin subset, variable — one file per family covering every weight.
+ *
+ * The system's `colors_and_type.css` pulls these from Google Fonts with an `@import`, which is the
+ * most expensive place to put one: it sits *inside* a stylesheet, so the preload scanner never sees
+ * it, and it serializes a render-blocking CSS fetch from `fonts.googleapis.com` behind our own
+ * bundle, then a woff2 fetch from `fonts.gstatic.com` behind that — three connection setups before
+ * the first glyph. Same-origin, the connection is already open and nothing render-blocking is
+ * added. Cache partitioning ended the shared-cache argument in 2020, so the third party cost a
+ * critical-path round trip and bought nothing back.
+ *
+ * `/fonts/…` is a webpack path here, not a served one. Docusaurus puts every static directory on
+ * `resolve.roots` exactly so a root-absolute `url()` in CSS resolves out of `static/`, and it then
+ * emits a content-hashed copy carrying the base URL: a preview build serves the same declaration as
+ * `/previews/pr-<n>/assets/fonts/…` (`.github/workflows/preview.yml` sets `DOCUSAURUS_BASE_URL`).
+ * A path written relative to this file would *not* get that treatment — it resolves to a root
+ * absolute `/assets/fonts/…` and 404s under any base but `/`.
+ *
+ * `static/` also copies the originals to `/fonts/` verbatim, which is the stable path the
+ * standalone `/publisher` page uses. Webpack never sees that one.
+ *
+ * Aeonik is the system's first choice and is commercial. With no licence, the face this site ships
+ * is DM Sans — the system's own stated fallback. Licences in `static/fonts/OFL.txt`.
+ */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans-latin.woff2') format('woff2');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-[data-theme='dark'] {
-  --ifm-color-primary: #6fc8b1;
-  --ifm-color-primary-dark: #57c0a5;
-  --ifm-color-primary-darker: #4bbc9f;
-  --ifm-color-primary-darkest: #3b9a82;
-  --ifm-color-primary-light: #87d0bd;
-  --ifm-color-primary-lighter: #93d4c3;
-  --ifm-color-primary-lightest: #b6e2d7;
-  --docusaurus-highlighted-code-line-bg: rgb(0 0 0 / 30%);
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* Indigo, the system's primary. The shades are Infima's own ±10/15/30% lightness steps, so hover
+     and active states behave the way the rest of the theme expects — and they land on the system's
+     indigo tint ladder anyway (`lightest` #9a95f0 is `--c-indigo-60`, `lighter` #746deb is -80). */
+  --ifm-color-primary: #4f46e5;
+  --ifm-color-primary-dark: #362ce1;
+  --ifm-color-primary-darker: #2a1fdf;
+  --ifm-color-primary-darkest: #231ab8;
+  --ifm-color-primary-light: #6860e9;
+  --ifm-color-primary-lighter: #746deb;
+  --ifm-color-primary-lightest: #9a95f0;
+
+  /*
+   * The system's slate scale in place of Infima's greys. This is the load-bearing override: nine
+   * declarations restyle every border, divider, muted label, table rule and menu item on the site,
+   * and the dark theme inherits them for free, because Infima's dark block re-points the emphasis
+   * scale at this same ramp reversed.
+   *
+   * The system names slate-50/100/300/400/600/900 and `--c-mist` is slate-200, so the ramp it is
+   * drawing from is Tailwind's slate. 500 and 700 are that same ramp continued, not new colours.
+   */
+  --ifm-color-gray-100: #f8fafc; /* slate-50  · --c-bg */
+  --ifm-color-gray-200: #f1f5f9; /* slate-100 · --c-bg-2 */
+  --ifm-color-gray-300: #e2e8f0; /* slate-200 · --c-mist */
+  --ifm-color-gray-400: #cbd5e1; /* slate-300 · --c-border */
+  --ifm-color-gray-500: #94a3b8; /* slate-400 · --c-ink-3 */
+  --ifm-color-gray-600: #64748b; /* slate-500 */
+  --ifm-color-gray-700: #475569; /* slate-600 · --c-ink-2 */
+  --ifm-color-gray-800: #334155; /* slate-700 */
+  --ifm-color-gray-900: #0f172a; /* slate-900 · --c-ink · --c-slate */
+
+  /* Page and surface differ so the navbar, cards and the ask panel separate from the page by
+     colour. With shadows gone this is the only elevation cue left, which is what the system asks
+     for: hierarchy from weight and colour. */
+  --ifm-background-color: #f8fafc;
+  --ifm-background-surface-color: #ffffff;
+
+  /* Infima hardcodes a neutral #525860 here, which is the one grey left on the page that is not
+     on the slate ramp. `--c-ink-2` is the system's secondary tier; 7.6:1 on the page. */
+  --ifm-color-content-secondary: #475569;
+
+  --ifm-font-family-base: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --ifm-code-font-size: 95%;
+
+  /* The system's 4px card/input radius. Infima derives code, inputs, buttons, alerts, dropdowns
+     and — at 2× — cards from this one value. */
+  --ifm-global-radius: 4px;
+
+  /*
+   * No drop shadows. A system rule, and three declarations enforce it site-wide: Infima routes the
+   * navbar, dropdowns, cards, alerts and the mobile drawer through these. What the shadows were
+   * actually carrying is dealt with at the bottom of this file.
+   */
+  --ifm-global-shadow-lw: none;
+  --ifm-global-shadow-md: none;
+  --ifm-global-shadow-tl: none;
+
+  --docusaurus-highlighted-code-line-bg: rgb(79 70 229 / 12%);
+}
+
+/*
+ * The dark palette, authored here because the system ships none.
+ *
+ * Nothing below is picked by eye. The surfaces are the slate ramp read from the dark end —
+ * slate-900 for the page, slate-800 for anything raised above it — and the ink is the same ramp
+ * read from the light end, which is exactly what Infima's dark block already does to the emphasis
+ * scale.
+ *
+ * The primary is the one real decision. Indigo #4f46e5 on slate-900 is 2.84:1 and fails outright.
+ * The system's `--c-indigo-80` #726bea reaches 4.26:1 and still fails body text. `--c-indigo-60`
+ * #9590ef — the next tint up the system's own ladder — is 6.39:1 on the page and 5.23:1 on a
+ * raised surface. A system token, not a hand-mixed one.
+ *
+ * `html[data-theme='dark']`, not the bare attribute selector this file used to carry. Infima
+ * defines its own dark background, surface and content colours under `html[data-theme='dark']`,
+ * and a bare `[data-theme='dark']` is one specificity point short of it — the old block only
+ * worked because the shades it set were ones Infima's dark block never mentions. Matching the
+ * selector, and coming later in the cascade, is what makes the surfaces below actually apply.
+ */
+html[data-theme='dark'] {
+  --ifm-color-primary: #9590ef; /* --c-indigo-60 */
+  /* 6% rather than Infima's 10% darkening step. Hover is where the launcher's ink gets closest to
+     failing: at -10% (#756fea) slate-on-fill is 4.44:1, under AA for 14px semibold. -6% is 5.14:1. */
+  --ifm-color-primary-dark: #827cec;
+  --ifm-color-primary-darker: #6e66e9;
+  --ifm-color-primary-darkest: #352ce1;
+  --ifm-color-primary-light: #b5b1f4; /* --c-indigo-40, near enough */
+  --ifm-color-primary-lighter: #c5c2f6;
+  --ifm-color-primary-lightest: #f5f4fd;
+
+  --ifm-background-color: #0f172a; /* slate-900 · --c-slate */
+  --ifm-background-surface-color: #1e293b; /* slate-800, one step up the same ramp */
+
+  --ifm-color-content: #f1f5f9; /* slate-100 on slate-900 · 16.30:1 */
+
+  /*
+   * Infima's dark default here is pure white, which makes table-of-contents links louder than the
+   * prose they point at. Slate-400 is the system's muted tier and still clears AA at 6.96:1.
+   */
+  --ifm-color-content-secondary: #94a3b8;
+
+  /*
+   * Ink for text sitting on a coloured fill. Infima derives this from the emphasis scale, which
+   * reverses in dark to pure black; the system has no black, and its darkest ink is slate. This is
+   * what puts readable text on the lightened indigo — white on #9590ef is 2.79:1 and fails, slate
+   * ink is 6.39:1. The same substitution the system makes for amber, for the same reason.
+   */
+  --ifm-color-content-inverse: #0f172a;
+
+  --docusaurus-highlighted-code-line-bg: rgb(149 144 239 / 16%);
+}
+
+/*
+ * What the shadows were carrying.
+ *
+ * A shadow was the only thing separating the navbar, an open dropdown and the mobile drawer from
+ * the page behind them. Deleting it and leaving them flat would lose real information, so each gets
+ * the border the system asks for instead. Cards already differ from the page by surface colour and
+ * only needed an edge to close the shape.
+ */
+.navbar {
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.dropdown__menu,
+.card {
+  border: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.navbar-sidebar {
+  border-right: 1px solid var(--ifm-color-emphasis-300);
+}
+
+/*
+ * The system's heading ramp: 700 / 600 / 500, descending. Infima applies one weight to every level,
+ * which flattens the hierarchy the system builds out of weight in the first place.
+ */
+h2 {
+  font-weight: 600;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 500;
 }

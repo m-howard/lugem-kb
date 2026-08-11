@@ -5,34 +5,56 @@
  * for both themes, so consuming variables means dark mode works with no second set of rules to
  * keep in step. A hardcoded hex here would be a contrast decision someone has to re-check later,
  * in a file they would have no reason to open.
+ *
+ * The design system forbids drop shadows, so nothing here casts one. Where a shadow was doing a
+ * job, a border and a colour do it instead — see `.launcher` and `.panel`.
  */
 
+/*
+ * The pill floats over whatever the reader is reading, and separation used to come from a shadow.
+ *
+ * Most of it never did: the indigo fill is already 6.01:1 against the page in light and 6.39:1 in
+ * dark, which is well past the 3:1 a non-text boundary needs. What the shadow added was an edge
+ * that survived landing on top of a code block or a screenshot, and an ink-coloured rim does that
+ * better — `emphasis-900` is the system's own `--border-strong`, and it flips to slate-50 in dark
+ * because Infima reverses the ramp, so it stays ~17:1 against the page in both themes.
+ *
+ * `content-inverse`, not `white`: dark mode lightens the primary to `--c-indigo-60`, where white
+ * text falls to 2.79:1 and fails. It resolves to white in light and slate ink in dark, 6.3:1 both.
+ */
 .launcher {
   position: fixed;
   right: 1.5rem;
   bottom: 1.5rem;
   z-index: 200;
   padding: 0.6rem 1.1rem;
-  border: 1px solid var(--ifm-color-primary);
+  border: 1px solid var(--ifm-color-emphasis-900);
   border-radius: 2rem;
   background: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
+  color: var(--ifm-color-content-inverse);
   font-family: var(--ifm-font-family-base);
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: var(--ifm-global-shadow-md);
 }
 
 .launcher:hover {
   background: var(--ifm-color-primary-dark);
 }
 
+/* Ink rather than a primary tint: `primary-lightest` is 2.53:1 against the light page, which is
+   not a focus ring anyone can find. Ink is 17:1 in light and 16:1 in dark. */
 .launcher:focus-visible {
-  outline: 2px solid var(--ifm-color-primary-lightest);
+  outline: 2px solid var(--ifm-color-content);
   outline-offset: 2px;
 }
 
+/*
+ * Also floating, also shadowless. Its surface colour separates it from the page, but only just —
+ * 1.22:1 in dark — so the border carries the boundary and steps up from the `300` that inline
+ * surfaces use to `600`: 4.55:1 against the light page, 12:1 against the dark one. One step of
+ * weight is the whole difference between "part of the page" and "on top of it".
+ */
 .panel {
   position: fixed;
   right: 1.5rem;
@@ -42,10 +64,9 @@
   flex-direction: column;
   width: min(26rem, calc(100vw - 3rem));
   max-height: min(34rem, calc(100vh - 8rem));
-  border: 1px solid var(--ifm-color-emphasis-300);
+  border: 1px solid var(--ifm-color-emphasis-600);
   border-radius: var(--ifm-global-radius);
   background: var(--ifm-background-surface-color);
-  box-shadow: var(--ifm-global-shadow-md);
 }
 
 .panelHeader {
@@ -245,10 +266,11 @@
   cursor: pointer;
 }
 
+/* `content-inverse` for the same reason as the launcher: white fails on the dark theme's primary. */
 .primary {
   border: 1px solid var(--ifm-color-primary);
   background: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
+  color: var(--ifm-color-content-inverse);
 }
 
 .primary:disabled {
