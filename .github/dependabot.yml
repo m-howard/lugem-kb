@@ -43,7 +43,21 @@ updates:
       prefix: 'ci(deps)'
 
   - package-ecosystem: docker
-    directory: '/apps/gateway'
+    directories:
+      - '/apps/gateway'
+      # The dev container image. Left unwatched, its base tag went two Debian releases stale
+      # before anyone noticed.
+      - '/.devcontainer'
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: 'chore(deps)'
+
+  # Feature pins in .devcontainer/devcontainer.json and its lock file. Feature majors can change
+  # behaviour, so these arrive as reviewable pull requests rather than a floating tag.
+  - package-ecosystem: devcontainers
+    directory: '/'
     schedule:
       interval: weekly
       day: monday
