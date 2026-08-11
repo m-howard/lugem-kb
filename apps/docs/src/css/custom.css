@@ -114,14 +114,107 @@
   --ifm-code-font-size: 95%;
 
   /*
+   * The system's secondary palette on Infima's semantic names. Shades are Infima's own ±10/15/30%
+   * lightness steps, as the primary's are.
+   *
+   * The contrast pairs below them are what Docusaurus admonitions actually render, and they are
+   * the reason this block is worth its length. The system warns that white fails on amber; it is
+   * worse than that once measured — white is 2.15:1 on amber, 2.54:1 on emerald and 3.76:1 on
+   * coral, so *no* solid fill in this palette can carry white text. Every pair here is therefore
+   * a tint of the hue behind ink of the same hue, which is how the base colour stays recognisable
+   * without ever being asked to sit behind white.
+   */
+  /*
+   * The neutral semantic, and the one the corpus leans on hardest: `:::note` renders as
+   * `alert--secondary`, not as info.
+   *
+   * There is no hue to darken here, so the shades walk the slate ramp instead of taking Infima's
+   * lightness steps. `-dark` is doing a specific job — it is the only source of the note's accent
+   * bar — and mist darkened 10% is 1.4:1 against its own fill, invisible. Slate-500 puts that bar
+   * at 4.34:1, inside the 2.4–4.9:1 band the other four land in.
+   */
+  --ifm-color-secondary: #e2e8f0; /* --c-mist */
+  --ifm-color-secondary-dark: #64748b; /* slate-500 · the accent bar */
+  --ifm-color-secondary-darker: #475569; /* slate-600 */
+  --ifm-color-secondary-darkest: #334155; /* slate-700 */
+  --ifm-color-secondary-light: #f1f5f9; /* slate-100 */
+  --ifm-color-secondary-lighter: #f8fafc; /* slate-50 */
+  --ifm-color-secondary-lightest: #ffffff;
+  --ifm-color-secondary-contrast-background: #f1f5f9;
+  --ifm-color-secondary-contrast-foreground: #0f172a; /* 16.30:1 */
+
+  --ifm-color-success: #10b981; /* --c-emerald */
+  --ifm-color-success-dark: #0ea674;
+  --ifm-color-success-darker: #0e9d6e;
+  --ifm-color-success-darkest: #0b825a;
+  --ifm-color-success-light: #12cc8e;
+  --ifm-color-success-lighter: #12d594;
+  --ifm-color-success-lightest: #1aeba6;
+  --ifm-color-success-contrast-background: #e2f7f0;
+  --ifm-color-success-contrast-foreground: #0f343a;
+
+  --ifm-color-warning: #f59e0b; /* --c-amber */
+  --ifm-color-warning-dark: #dd8e09;
+  --ifm-color-warning-darker: #d18709;
+  --ifm-color-warning-darkest: #ac6f07;
+  --ifm-color-warning-light: #f6a824;
+  --ifm-color-warning-lighter: #f7ad30;
+  --ifm-color-warning-lightest: #f8bb55;
+  --ifm-color-warning-contrast-background: #fef3e2;
+  --ifm-color-warning-contrast-foreground: #382f24;
+
+  --ifm-color-danger: #ef4444; /* --c-coral */
+  --ifm-color-danger-dark: #ed2828;
+  --ifm-color-danger-darker: #eb1a1a;
+  --ifm-color-danger-darkest: #c61111;
+  --ifm-color-danger-light: #f16060;
+  --ifm-color-danger-lighter: #f36e6e;
+  --ifm-color-danger-lightest: #f69999;
+  --ifm-color-danger-contrast-background: #fde9e9;
+  --ifm-color-danger-contrast-foreground: #371f2f;
+
+  --ifm-color-info: #8b5cf6; /* --c-violet */
+  --ifm-color-info-dark: #743cf4;
+  --ifm-color-info-darker: #692cf3;
+  --ifm-color-info-darkest: #4d0ce0;
+  --ifm-color-info-light: #a27cf8;
+  --ifm-color-info-lighter: #ad8cf9;
+  --ifm-color-info-lightest: #cfbcfb;
+  --ifm-color-info-contrast-background: #f1ebfe;
+  --ifm-color-info-contrast-foreground: #25234f;
+
+  /*
+   * Code surfaces. Infima hardcodes `rgb(246, 247, 248)` for both, which is the one remaining grey
+   * on a page that is otherwise entirely slate. `--c-mist` is the system's stated code background.
+   */
+  --ifm-code-background: #e2e8f0;
+  --ifm-pre-background: #e2e8f0;
+
+  /*
+   * Syntax colours, consumed by `src/prism/prism-theme.ts` through `var()`.
+   *
+   * They live here rather than in that file so every colour in this project has one home, and so
+   * light and dark switch in CSS — which is why there is one Prism theme object rather than two.
+   * The families are the system's own; each is stepped until it clears AA against the code
+   * background it sits on (#e2e8f0 here, slate-800 in dark), which the base tints do not:
+   * emerald is 2.06:1 on mist and amber 1.74:1.
+   */
+  --lugem-code-plain: #0f172a; /* slate-900 · 14.48:1 */
+  --lugem-code-comment: #475569; /* slate-600 · 6.15:1 */
+  --lugem-code-keyword: #231ab8; /* indigo, darkest step · 8.91:1 */
+  --lugem-code-string: #065f46; /* emerald-800 · 6.23:1 */
+  --lugem-code-number: #6d28d9; /* violet-700 · 5.76:1 */
+  --lugem-code-function: #b91c1c; /* coral-700 · 5.25:1 */
+
+  /*
    * The system's type scale — 36 / 27 / 21 / 17 / 15 / 13 — in rem against Infima's root.
    *
-   * `--ifm-font-size-base` deliberately stays at 100%. The system's `--text-base` is 15px, but
-   * Infima's root size is not a body-copy setting: every rem in the theme hangs off it, so
-   * dropping to 15px rescales the navbar, the sidebar and the container widths rather than the
-   * prose. What the system is really specifying here is the *ratios* between levels, and those
-   * are what this maps. Body copy stays 16px, which is the right call for a page of long-form
-   * documentation anyway. `--ifm-line-height-base` is already 1.65 — the system's `--lh-relaxed`.
+   * `--ifm-font-size-base` deliberately stays at 100%, and prose is sized separately below. The
+   * system's `--text-base` is 15px, but Infima's root size is not a body-copy setting: every rem
+   * in the theme hangs off it, so dropping it to 15px rescales the navbar, the sidebar and the
+   * container widths rather than the prose. Setting the two independently is what gets the
+   * system's body size *and* leaves the layout alone. `--ifm-line-height-base` is already 1.65 —
+   * the system's `--lh-relaxed`.
    */
   --ifm-h1-font-size: 2.25rem;
   --ifm-h2-font-size: 1.6875rem;
@@ -129,6 +222,10 @@
   --ifm-h4-font-size: 1.0625rem;
   --ifm-h5-font-size: 0.9375rem;
   --ifm-h6-font-size: 0.8125rem;
+
+  /* `--text-base`, 15px. A variable rather than a literal because the Decap preview pane has to
+     set prose to the same size and `preview-style.test.ts` reads this to check that it does. */
+  --lugem-prose-font-size: 0.9375rem;
 
   /* The system's 4px card/input radius. Infima derives code, inputs, buttons, alerts, dropdowns
      and — at 2× — cards from this one value. */
@@ -195,6 +292,37 @@ html[data-theme='dark'] {
    */
   --ifm-color-content-inverse: #0f172a;
 
+  /*
+   * Only the admonition pairs flip. The semantic *bases* are hues rather than surfaces, so emerald
+   * stays emerald in both themes and Infima never redefines them in dark — but a light tint behind
+   * dark ink is unreadable on a dark page, so these are the same recipe inverted: a deep tint of
+   * the hue on slate-900, behind a light tint of the same hue. All four clear 10:1.
+   */
+  --ifm-color-secondary-contrast-background: #1e293b;
+  --ifm-color-secondary-contrast-foreground: #f1f5f9; /* 13.35:1 */
+  --ifm-color-success-contrast-background: #0f3138;
+  --ifm-color-success-contrast-foreground: #c0e8df;
+  --ifm-color-warning-contrast-background: #342d25;
+  --ifm-color-warning-contrast-foreground: #f2e2c5;
+  --ifm-color-danger-contrast-background: #331e2e;
+  --ifm-color-danger-contrast-foreground: #f1ced1;
+  --ifm-color-info-contrast-background: #23224b;
+  --ifm-color-info-contrast-foreground: #dbd3f8;
+
+  /* Slate-800 rather than Infima's `rgba(255,255,255,0.1)`: a code block should read as raised off
+     the slate-900 page, which is the same job `--ifm-background-surface-color` does elsewhere. */
+  --ifm-code-background: #1e293b;
+  --ifm-pre-background: #1e293b;
+
+  /* Same families as light, stepped the other way — the first step of each that clears AA on
+     slate-800. The base tints do not: violet is 3.45:1 there and coral 3.89:1. */
+  --lugem-code-plain: #f1f5f9; /* slate-100 · 13.35:1 */
+  --lugem-code-comment: #94a3b8; /* slate-400 · 5.71:1 */
+  --lugem-code-keyword: #b9b5f5; /* --c-indigo-40 · 7.66:1 */
+  --lugem-code-string: #34d399; /* emerald-400 · 7.61:1 */
+  --lugem-code-number: #a78bfa; /* violet-400 · 5.38:1 */
+  --lugem-code-function: #f87171; /* coral-400 · 5.29:1 */
+
   --docusaurus-highlighted-code-line-bg: rgb(149 144 239 / 16%);
 }
 
@@ -217,6 +345,84 @@ html[data-theme='dark'] {
 
 .navbar-sidebar {
   border-right: 1px solid var(--ifm-color-emphasis-300);
+}
+
+/* Infima gives inline code a `rgba(0, 0, 0, 0.1)` edge, which is a grey wash in light and all but
+   invisible in dark. Same border every other raised surface here gets. */
+code {
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+/*
+ * A code block reads as raised off the page by 1.18:1 in light and 1.22:1 in dark — enough to see,
+ * not enough to define an edge, and the shadow that used to close the shape is gone. Same treatment
+ * as the card and the navbar.
+ */
+.theme-code-block {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-global-radius);
+}
+
+/*
+ * Docusaurus hardcodes `#00d600` for the copied-to-clipboard tick, in a CSS module, with no
+ * variable in front of it — so this is the one selector here that reaches past a token, matching
+ * the module's hashed class by its readable prefix. It degrades harmlessly: if Docusaurus renames
+ * the class the tick goes back to their green, which is a wrong colour rather than a broken page.
+ *
+ * The `svg` is load-bearing, not decoration. The module's own `.copyButtonSuccessIcon_TxL3` is a
+ * class selector and so is a bare `[class*=…]`, and theme CSS modules are emitted *after* this
+ * file — so at equal specificity the hardcoded green wins. The element qualifier is what tips it.
+ *
+ * `--lugem-code-string` and not `--ifm-color-success`, because the tick sits *on* the code block
+ * and emerald is 2.06:1 there. This is the emerald step already chosen for that background.
+ */
+svg[class*='copyButtonSuccessIcon'] {
+  color: var(--lugem-code-string);
+}
+
+/*
+ * Inline code inside an admonition.
+ *
+ * Infima gives each alert variant its own hardcoded tint for this — `rgba(235, 237, 240, 0.15)`
+ * on a note, `rgba(255, 186, 0, 0.15)` on a warning — which are its old grey and its old amber,
+ * the last two literals from the default theme still reaching the page. One translucent ink covers
+ * every variant instead, and being ink rather than a hue it stays correct whatever the alert
+ * beneath it is. Infima declares `.alert` after its variants, so this single rule wins for all
+ * five without naming any of them.
+ */
+.alert {
+  --ifm-alert-background-color-highlight: rgb(15 23 42 / 8%);
+}
+
+html[data-theme='dark'] .alert {
+  --ifm-alert-background-color-highlight: rgb(241 245 249 / 10%);
+}
+
+/*
+ * The footer is the last surface off the ramp. `footer.style: 'dark'` puts Infima's `.footer--dark`
+ * in play, which hardcodes `#303846` and `#ebedf0` — a blue-grey that sits beside slate-800 without
+ * matching it, in both themes. A dark band under a light page is a deliberate choice and it stays;
+ * only the colours change. Slate-800 in dark mode rather than slate-900, so the band still reads as
+ * a band against a slate-900 page.
+ */
+.footer--dark {
+  --ifm-footer-background-color: #0f172a;
+  --ifm-footer-color: #cbd5e1; /* 12.02:1 */
+  --ifm-footer-link-color: #9590ef; /* --c-indigo-60 · 6.39:1 */
+  --ifm-footer-title-color: #f8fafc;
+}
+
+html[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: #1e293b; /* 9.85:1 for the text above */
+}
+
+/*
+ * Prose at the system's `--text-base`, set here rather than on the root so the layout keeps its
+ * 16px rem. Headings are rem-based and unaffected, which is the point: 15px body under a 36px h1
+ * is the ratio the system specifies.
+ */
+.markdown {
+  font-size: var(--lugem-prose-font-size);
 }
 
 /*
@@ -243,4 +449,23 @@ h4,
 h5,
 h6 {
   font-weight: 500;
+}
+
+/*
+ * The first heading on a page is a title, not a heading, and Infima already treats it as one — it
+ * sets 3rem here and 2rem under 576px. The system draws the same distinction: `--text-3xl` 48px is
+ * "Title", one step above `--text-2xl` 36px "Heading 1". 3rem is 48px, so the large end already
+ * lands on a system value by coincidence; 2rem is 32px, which is not a step the system has.
+ *
+ * Pinning both is what turns the coincidence into a decision, and stops a Docusaurus release
+ * moving the largest type on the site without anything here noticing.
+ */
+.markdown h1:first-child {
+  --ifm-h1-font-size: 3rem; /* --text-3xl */
+}
+
+@media (max-width: 576px) {
+  .markdown h1:first-child {
+    --ifm-h1-font-size: 2.25rem; /* --text-2xl, the system's next step down */
+  }
 }

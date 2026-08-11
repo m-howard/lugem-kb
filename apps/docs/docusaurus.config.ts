@@ -1,4 +1,4 @@
-import { themes as prismThemes } from 'prism-react-renderer';
+import { PRISM_THEME } from './src/prism/prism-theme';
 
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config } from '@docusaurus/types';
@@ -108,9 +108,12 @@ const config: Config = {
       style: 'dark',
       copyright: `MIT licensed. Built with Docusaurus.`,
     },
+    // The same theme in both slots on purpose: its colours are CSS variables, so `custom.css`
+    // swaps the palette per colour mode and there is no second object to drift. See
+    // `src/prism/prism-theme.ts`.
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: PRISM_THEME,
+      darkTheme: PRISM_THEME,
       additionalLanguages: ['bash', 'json', 'yaml'],
     },
   } satisfies Preset.ThemeConfig,
