@@ -46,9 +46,14 @@ RUN BUN_VERSION="$(tr -d ' \n' < /tmp/versions/.bun-version)" && \
 
 # Pulumi CLI, matched to the `@pulumi/pulumi` SDK the infra program already pins so the two move
 # together. Pulumi.yaml requires >= 3.226.0; the SDK pin has been comfortably above that.
+# The installer derives its install root from `--install-root` alone and overwrites any inherited
+# PULUMI_INSTALL_ROOT, so the path has to be a flag or the CLI lands in root's ~/.pulumi, invisible
+# to the remote user. `--no-edit-path` then skips the .profile rewrite /usr/local/bin makes moot.
 RUN PULUMI_VERSION="$(jq -r '.dependencies["@pulumi/pulumi"]' /tmp/versions/package.json)" && \
-    export PULUMI_INSTALL_ROOT=/usr/local && \
-    curl -fsSL https://get.pulumi.com | sh -s -- --version "$PULUMI_VERSION"
+    curl -fsSL https://get.pulumi.com | sh -s -- \
+    --version "$PULUMI_VERSION" \
+    --install-root /usr/local \
+    --no-edit-path
 
 # AWS CLI v2. `docs/corpus-repository.md` and the publish workflows shell out to it.
 RUN set -eu; \
