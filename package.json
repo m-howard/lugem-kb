@@ -36,7 +36,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "lint:md": "markdownlint-cli2 \"**/*.md\" \"!**/node_modules/**\" \"!docs/requirements.md\"",
+    "lint:md": "markdownlint-cli2 \"**/*.md\" \"!**/node_modules/**\" \"!docs/requirements.md\" \"!.claude/skills/**\"",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

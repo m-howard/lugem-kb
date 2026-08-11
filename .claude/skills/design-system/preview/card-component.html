@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Cards" subtitle="Standard, accent-bar, and stat card variants" viewport="700x260" -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Aeonik', 'DM Sans', sans-serif; background: #f8fafc; color: #0f172a; padding: 24px; -webkit-font-smoothing: antialiased; }
+.grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; overflow: hidden; }
+.card-body { padding: 20px; }
+.card-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: #475569; margin-bottom: 8px; }
+.card-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; color: #0f172a; line-height: 1.25; }
+.card-body-text { font-size: 13px; color: #475569; line-height: 1.55; margin-bottom: 16px; }
+.card-meta { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 8px; }
+.card-divider { border-top: 1px solid #e2e8f0; }
+.card-actions { padding: 12px 20px; display: flex; gap: 8px; align-items: center; }
+.card-accent-bar { height: 4px; background: #4f46e5; }
+.stat-num { font-size: 36px; font-weight: 700; letter-spacing: -0.03em; color: #0f172a; line-height: 1; margin-bottom: 6px; }
+.stat-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
+.stat-delta { font-size: 13px; font-weight: 600; color: #10b981; margin-top: 8px; }
+.btn-sm { display:inline-flex; align-items:center; padding:0 12px; height:30px; font-family:inherit; font-size:12px; font-weight:600; border:none; border-radius:4px; cursor:pointer; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="card">
+      <div class="card-body">
+        <div class="card-label">Pull Request · #4821</div>
+        <div class="card-title">Refactor auth middleware pipeline</div>
+        <div class="card-body-text">Adds JWT rotation and consolidates session validation into a single Express middleware chain.</div>
+        <div class="card-meta"><span>opened 2h ago</span><span style="color:#cbd5e1;">·</span><span>+412 −187</span></div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="card-actions">
+        <button class="btn-sm" style="background:#4f46e5; color:#fff;">Review</button>
+        <button class="btn-sm" style="background:transparent; color:#475569;">Comment</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-accent-bar"></div>
+      <div class="card-body">
+        <div class="card-label" style="color:#4f46e5;">Incident · P1</div>
+        <div class="card-title">API gateway 5xx spike</div>
+        <div class="card-body-text">Error rate elevated 8.2% on us-east-1 since 14:02 UTC. Investigating upstream timeout cascade.</div>
+        <div class="card-meta"><span>Active</span><span style="color:#cbd5e1;">·</span><span style="color:#10b981; font-weight:500;">3 responders</span></div>
+      </div>
+      <div class="card-divider"></div>
+      <div class="card-actions"><button class="btn-sm" style="background:#4f46e5; color:#fff;">Open Runbook</button></div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="padding:24px 20px;">
+        <div class="card-label">Deploys this week</div>
+        <div class="stat-num">142</div>
+        <div class="stat-label">Across 18 services</div>
+        <div class="stat-delta">↑ 21% vs last week</div>
+      </div>
+      <div style="background:#0f172a; padding:10px 20px; display:flex; gap:12px;">
+        <span style="font-size:11px; color:#cbd5e1;">P50: 4m</span>
+        <span style="color:#475569; font-size:11px;">·</span>
+        <span style="font-size:11px; color:#cbd5e1;">Success: 98.6%</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
