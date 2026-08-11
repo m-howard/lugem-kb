@@ -44,7 +44,9 @@ preview`, not discovered halfway through `up`.
 
 ## 🚀 Quick start
 
-Requires [Bun](https://bun.sh) 1.3.14+ and Node 24 (see `.bun-version` / `.nvmrc`).
+Requires [Bun](https://bun.sh) 1.3.14+ and Node 24 (see `.bun-version` / `.nvmrc`). Or open the
+repository in the dev container (VS Code **Reopen in Container**, or a Codespace) and skip the
+prerequisites entirely — it builds those exact versions from those exact files.
 
 ```bash
 git clone https://github.com/m-howard/lugem-kb.git

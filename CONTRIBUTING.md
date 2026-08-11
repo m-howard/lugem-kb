@@ -12,6 +12,11 @@ request; the project-wide conventions live in [`AGENTS.md`](AGENTS.md).
 | [Pulumi CLI](https://www.pulumi.com/docs/install/) | 3.226.0+              | Only if you touch `infra/`.                  |
 | Docker                                             | any recent            | Only if you touch the image.                 |
 
+The dev container ships all four at those versions — it reads `.nvmrc`, `.bun-version` and the
+`@pulumi/pulumi` pin at build time, so it cannot drift from the table above. **Reopen in Container**
+in VS Code, or start a Codespace, and `bun install` has already run. Browsers for the e2e suite are
+deliberately left out of the image; the `playwright install` step below still applies inside it.
+
 **Bun is required.** There is one lockfile and it is `bun.lock` — please do not add
 `pnpm-lock.yaml`, `package-lock.json` or `yarn.lock`. The reasoning is in
 [ADR 0007](docs/adr/0007-single-lockfile-no-pnpm-parity.md), including what would make us revisit

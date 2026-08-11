@@ -2,10 +2,9 @@
   "name": "Lugem KB",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      // "VARIANT": "22-bullseye"
-    }
+    // The repo root, not `.devcontainer/`. The image reads `.nvmrc`, `.bun-version` and
+    // `infra/pulumi/package.json` at build time so its toolchain cannot drift from the repo.
+    "context": ".."
   },
   // The webpack client compile in `docs:build` sizes its default V8 heap off total container
   // memory, which collides with the IDE/tsserver/extension-host baseline already resident here
@@ -13,6 +12,8 @@
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=1536"
   },
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   // Configure tool-specific properties.
   "customizations": {
     "vscode": {
@@ -28,17 +29,12 @@
           }
         },
         "editor.formatOnSave": true,
-        "typescript.tsserver.trace": "verbose",
-        "editor.tabSize": 4,
-        "[javascript]": {
-          "editor.tabSize": 4
-        },
-        "[typescript]": {
-          "editor.tabSize": 4
-        },
-        "[json]": {
-          "editor.tabSize": 4
-        },
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        // Matches .editorconfig and .prettierrc. Anything else means the editor and the formatter
+        // disagree on every save.
+        "editor.tabSize": 2,
+        // The repo pins TypeScript ~6.0.3, ahead of the version VS Code bundles.
+        "typescript.tsdk": "node_modules/typescript/lib",
         "explorer.sortOrder": "type"
       },
       "extensions": [
@@ -52,7 +48,10 @@
         "GitHub.copilot-chat",
         "openai.chatgpt",
         "Anthropic.claude-code",
-        "EditorConfig.EditorConfig"
+        "EditorConfig.EditorConfig",
+        "oven.bun-vscode",
+        "ms-playwright.playwright",
+        "pulumi.pulumi"
       ],
       "mcp": {
         "servers": {
@@ -79,7 +78,12 @@
       "installOhMyZshConfig": true,
       "upgradePackages": true,
       "installSsl": true,
-      "username": "devcontainer"
+      // The base image already ships this user. Naming anything else creates a second, unused
+      // account and leaves `remoteUser` pointing at the one without the shell setup.
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
     },
     "ghcr.io/devcontainers/features/docker-in-docker:3": {
       "moby": true,

@@ -7,15 +7,16 @@
 
 This is a Bun workspace monorepo. Every file belongs to exactly one workspace or to the root.
 
-| Path            | Holds                                                                        |
-| --------------- | ---------------------------------------------------------------------------- |
-| `apps/docs/`    | Docusaurus site. Its content root is repo-root `docs/`, not a local copy.    |
-| `apps/gateway/` | The Bun + Hono service deployed to ECS. Owns its own `Dockerfile`.           |
-| `infra/pulumi/` | The Pulumi program. `runtime: bun` — no ts-node, no build step.              |
-| `docs/`         | The corpus. Published by `apps/docs` and synced to S3 for ingestion.         |
-| `docs/assets/`  | The corpus's non-prose half. Published as static site assets, never indexed. |
-| `scripts/`      | Repo-level tooling, in a subfolder (see below).                              |
-| `tests/e2e/`    | Playwright only.                                                             |
+| Path             | Holds                                                                        |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `apps/docs/`     | Docusaurus site. Its content root is repo-root `docs/`, not a local copy.    |
+| `apps/gateway/`  | The Bun + Hono service deployed to ECS. Owns its own `Dockerfile`.           |
+| `infra/pulumi/`  | The Pulumi program. `runtime: bun` — no ts-node, no build step.              |
+| `docs/`          | The corpus. Published by `apps/docs` and synced to S3 for ingestion.         |
+| `docs/assets/`   | The corpus's non-prose half. Published as static site assets, never indexed. |
+| `scripts/`       | Repo-level tooling, in a subfolder (see below).                              |
+| `tests/e2e/`     | Playwright only.                                                             |
+| `.devcontainer/` | The dev image. Reads `.nvmrc`/`.bun-version` — never pin a toolchain here.   |
 
 ## File placement & repo-root hygiene
 
