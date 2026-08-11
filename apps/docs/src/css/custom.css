@@ -113,6 +113,23 @@
   --ifm-font-family-monospace: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --ifm-code-font-size: 95%;
 
+  /*
+   * The system's type scale — 36 / 27 / 21 / 17 / 15 / 13 — in rem against Infima's root.
+   *
+   * `--ifm-font-size-base` deliberately stays at 100%. The system's `--text-base` is 15px, but
+   * Infima's root size is not a body-copy setting: every rem in the theme hangs off it, so
+   * dropping to 15px rescales the navbar, the sidebar and the container widths rather than the
+   * prose. What the system is really specifying here is the *ratios* between levels, and those
+   * are what this maps. Body copy stays 16px, which is the right call for a page of long-form
+   * documentation anyway. `--ifm-line-height-base` is already 1.65 — the system's `--lh-relaxed`.
+   */
+  --ifm-h1-font-size: 2.25rem;
+  --ifm-h2-font-size: 1.6875rem;
+  --ifm-h3-font-size: 1.3125rem;
+  --ifm-h4-font-size: 1.0625rem;
+  --ifm-h5-font-size: 0.9375rem;
+  --ifm-h6-font-size: 0.8125rem;
+
   /* The system's 4px card/input radius. Infima derives code, inputs, buttons, alerts, dropdowns
      and — at 2× — cards from this one value. */
   --ifm-global-radius: 4px;
@@ -203,14 +220,25 @@ html[data-theme='dark'] {
 }
 
 /*
- * The system's heading ramp: 700 / 600 / 500, descending. Infima applies one weight to every level,
- * which flattens the hierarchy the system builds out of weight in the first place.
+ * The system's heading ramp: 700 / 600 / 500, descending, tightening as it goes up. Infima applies
+ * one weight and no tracking to every level, which flattens the hierarchy the system builds out of
+ * weight in the first place — and leaves DM Sans set loose at display sizes, where it wants the
+ * opposite.
  */
-h2 {
-  font-weight: 600;
+h1 {
+  letter-spacing: -0.03em; /* --ls-tight */
 }
 
-h3,
+h2 {
+  font-weight: 600;
+  letter-spacing: -0.02em; /* --ls-snug */
+}
+
+h3 {
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
 h4,
 h5,
 h6 {
