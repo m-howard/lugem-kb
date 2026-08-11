@@ -56,6 +56,9 @@ bun install
 bun run docs:start   # documentation site on http://localhost:3001
 ```
 
+**Ask** and **Publisher** in the navbar need the API behind them; `bun run dev:all` below starts
+the site and a stubbed gateway together on that same port.
+
 To run the service, which serves the built site alongside its API:
 
 ```bash
@@ -81,7 +84,7 @@ Or run **everything at once** — the site with hot reload, the CMS, and the API
 the way production serves them:
 
 ```bash
-bun run dev:all   # http://127.0.0.1:4000
+bun run dev:all   # http://127.0.0.1:3001
 ```
 
 The real gateway, against a local git host that keeps what you save. Sign in, edit a page, submit
@@ -260,9 +263,8 @@ bun run test           # unit + integration
 bun run test:coverage  # the same, against the 80% gate
 bun run test:e2e       # Playwright, real server and real build, AWS stubbed
 
-bun run dev:all        # the whole stack on one origin — http://127.0.0.1:4000
+bun run dev:all        # the whole stack on one origin — http://127.0.0.1:3001
 bun run dev:cms        # the /publisher CMS on :4300, no credentials needed
-bun run dev:proxy      # one origin over a separate gateway and Docusaurus
 
 bun run scripts/check/verify-gateway.ts --base-url http://127.0.0.1:3000
 ```

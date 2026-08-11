@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { discover, exchangeCode, SignInError } from './oidc-client';
+import { buildAuthorizeUrl } from './pkce';
 
 const ISSUER = 'https://idp.example.com/realm';
 const TOKEN_ENDPOINT = `${ISSUER}/token`;
@@ -8,6 +9,12 @@ const TOKEN_ENDPOINT = `${ISSUER}/token`;
 const DISCOVERY = {
   authorization_endpoint: `${ISSUER}/authorize`,
   token_endpoint: TOKEN_ENDPOINT,
+};
+
+/** The shape the local sandbox publishes: same document, endpoints as paths. */
+const RELATIVE_DISCOVERY = {
+  authorization_endpoint: '/idp/authorize',
+  token_endpoint: '/idp/token',
 };
 
 interface FakeCall {
@@ -77,6 +84,44 @@ describe('discover', () => {
     const host = fakeFetch(() => Response.json(document));
 
     await expect(discover(ISSUER, host.fetch)).rejects.toThrow(SignInError);
+  });
+
+  // The local sandbox publishes paths so that one document works from every port the site might be
+  // open on. A path is fine for the `fetch` calls either side of this and useless to the one caller
+  // that navigates, so this is where it stops being a path.
+  it('resolves endpoints published as paths against the document that named them', async () => {
+    const host = fakeFetch(() => Response.json(RELATIVE_DISCOVERY));
+
+    await expect(discover(ISSUER, host.fetch)).resolves.toEqual({
+      authorizationEndpoint: 'https://idp.example.com/idp/authorize',
+      tokenEndpoint: 'https://idp.example.com/idp/token',
+    });
+  });
+});
+
+/**
+ * The seam, driven end to end: what `discover` returns is what starts a sign-in.
+ *
+ * Both halves passed on their own while this was broken. `discover` is relative-safe — its own
+ * `fetch` resolves a path — and every `buildAuthorizeUrl` test passed an absolute endpoint, so
+ * nothing asserted that the first function returns what the second one requires. A browser said
+ * `Failed to construct 'URL': Invalid URL` instead.
+ */
+describe('discover into buildAuthorizeUrl', () => {
+  it('produces a URL the browser can be sent to, from a document of paths', async () => {
+    const host = fakeFetch(() => Response.json(RELATIVE_DISCOVERY));
+
+    const { authorizationEndpoint } = await discover(ISSUER, host.fetch);
+    const authorizeUrl = buildAuthorizeUrl(authorizationEndpoint, {
+      clientId: 'lugem-cms-admin',
+      redirectUri: 'https://docs.internal/publisher/',
+      scopes: 'openid profile email',
+      state: 'state-1',
+      challenge: 'challenge-1',
+    });
+
+    expect(new URL(authorizeUrl).pathname).toBe('/idp/authorize');
+    expect(new URL(authorizeUrl).searchParams.get('response_type')).toBe('code');
   });
 });
 

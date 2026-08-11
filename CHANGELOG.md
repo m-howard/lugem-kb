@@ -9,16 +9,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **The whole local stack in one command** — `bun run dev:all` starts the sandbox gateway,
-  Docusaurus and the proxy together and serves them on one origin at `http://127.0.0.1:4000`.
-  - Three terminals was three chances to get the environment variables wrong: `PUBLIC_ORIGIN` on
-    the sandbox and `GATEWAY_ORIGIN` on the proxy have to agree about ports, and a stale process
-    from the last session is invisible until a request lands on the wrong one. Ports are checked
-    before anything starts, output is prefixed per process, and one process exiting stops the rest
-    rather than leaving a stack that answers with a `502`.
+- **A way into the editor from the documentation site** — a **Publisher** entry in the navbar,
+  beside **Ask** and **GitHub**. `/publisher` was reachable only by typing the URL, which meant the
+  people it exists for had to be told it existed.
+  - The page no longer answers a misconfigured origin with a JSON parse error. It classifies the
+    reply to `/v1/publisher/config` before parsing it and says which of four things happened —
+    including "nothing that is a gateway answered", the one a developer meets first.
+- **The whole local stack in one command** — `bun run dev:all` starts the sandbox gateway and
+  Docusaurus together on one origin at `http://127.0.0.1:3001`.
+  - Two terminals was two chances to get the environment variables wrong, and a stale process from
+    the last session is invisible until a request lands on it. Ports are checked before anything
+    starts, output is prefixed per process, and one process exiting stops the other rather than
+    leaving a stack that answers with a proxy error.
   - `--gateway` swaps the sandbox for the real service on `3000`; `--reset` reseeds the sandbox.
   - Docusaurus is started with `--host 127.0.0.1`. Its default binds `localhost`, which resolves to
-    `::1` alone inside the dev container, where the proxy's IPv4 forward could not reach it.
+    `::1` alone inside the dev container, where an IPv4 forward could not reach it.
+
 - **A local sandbox for `/publisher`** — `bun run dev:cms` runs the editorial surface with no AWS
   account, no GitHub App and no identity provider. See
   [ADR 0022](docs/adr/0022-a-local-sandbox-for-the-editorial-surface.md).
@@ -227,6 +233,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`docusaurus start` is a working origin on its own.** The dev server proxies `/v1/*`, `/idp/`,
+  `/previews/`, `/healthz` and `/readyz` to the gateway named by `GATEWAY_ORIGIN`, so **Ask** and
+  **Publisher** work on `:3001` rather than only behind a separate proxy. Streaming passes through
+  unbuffered, and so does the hot-reload WebSocket that the old proxy dropped.
+- **The sandbox identity provider publishes a path, not a URL.** Its issuer is `/idp`, so the
+  browser's discovery fetch and code exchange resolve against whatever page is asking. Sign-in
+  works from any local port and from either spelling of the loopback host, and `PUBLIC_ORIGIN` is
+  gone — there is no longer one blessed origin for an environment variable to name.
+  - `discover()` is what makes that safe: it resolves the endpoints against the document that named
+    them, because `buildAuthorizeUrl` navigates to one and a path is not somewhere a browser can be
+    sent. A real provider's absolute endpoints resolve to themselves.
+  - The Playwright harness now drives the same relative shape. It was the absolute one, which is
+    how a broken sign-in reached a browser with the suite green.
 - **The editor moved from `/admin` to `/publisher`** — the route now says what the page is for.
   What lives there publishes documentation; it administers nothing, and "admin" invited the guess
   that it did.
@@ -290,6 +309,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- **`bun run dev:proxy` and `scripts/dev/serve-dev.ts`.** The Docusaurus dev server now does the
+  same job with fewer moving parts, one origin instead of two, and without breaking hot reload.
 - Stale `spec/` entries from `.prettierignore` and `.markdownlintignore` — no such tree exists.
 
 [Unreleased]: https://github.com/m-howard/lugem-kb/commits/main

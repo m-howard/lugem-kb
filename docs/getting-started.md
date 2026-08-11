@@ -39,25 +39,31 @@ Docusaurus serves on `http://localhost:3001` with hot reload. Its content root i
 Port 3001, not 3000, because the gateway wants 3000 and the two need to run side by side — see
 [working on the ask widget](#working-on-the-ask-widget).
 
+The site alone cannot answer a question or save a draft, so **Ask** and **Publisher** need a
+gateway behind them. The dev server proxies to one; the next section starts both.
+
 ## The whole stack in one command {#the-whole-stack-in-one-command}
 
-The site alone cannot answer a question or save a draft: `/v1/*` belongs to the gateway, and in
-production the gateway serves the site, so the two are one origin. Locally that is three processes.
-This starts all of them:
+`/v1/*` belongs to the gateway, and in production the gateway serves the site, so the two are one
+origin. Locally they are two processes, and this starts both:
 
 ```bash
-bun run dev:all      # then open http://127.0.0.1:4000
+bun run dev:all      # then open http://127.0.0.1:3001
 ```
 
-| What            | Port   | Notes                                                        |
-| --------------- | ------ | ------------------------------------------------------------ |
-| Proxy           | `4000` | **Open this one.** Everything else is behind it.             |
-| Docusaurus      | `3001` | Hot reload, same as `docs:start`.                            |
-| Sandbox gateway | `4300` | The API and `/publisher`, with AWS and the git host stubbed. |
+| What            | Port   | Notes                                                              |
+| --------------- | ------ | ------------------------------------------------------------------ |
+| Docusaurus      | `3001` | **Open this one.** Hot reload, with the gateway proxied behind it. |
+| Sandbox gateway | `4300` | The API and `/publisher`, with AWS and the git host stubbed.       |
 
-Output is prefixed per process, and if any of the three exits the other two are stopped with it —
-a half-running stack answers with a `502` that reads like a bug in whatever you were working on.
-`Ctrl-C` stops everything.
+One origin, without a proxy in front: the dev server forwards `/v1/*`, `/healthz`, `/readyz`,
+`/previews/` and `/idp/` to whichever gateway `dev:all` started, and answers everything else
+itself. `GATEWAY_ORIGIN` is what points it at one — set it if you start the two by hand. Streaming
+passes through untouched, and so does the hot-reload WebSocket.
+
+Output is prefixed per process, and if either exits the other is stopped with it — a half-running
+stack answers with an error that reads like a bug in whatever you were working on. `Ctrl-C` stops
+everything.
 
 | Flag        | Effect                                                                       |
 | ----------- | ---------------------------------------------------------------------------- |
@@ -131,7 +137,6 @@ bun run dev:cms --reset
 | --------------------------------------------- | -------------------- | ---------------------------------------------------------------- |
 | `PORT`                                        | `4300`               | Something else holds the port.                                   |
 | `SITE_ROOT`                                   | `apps/docs/static`   | `apps/docs/build`, to get the whole site alongside `/publisher`. |
-| `PUBLIC_ORIGIN`                               | the listening origin | You are reaching it through the proxy below.                     |
 | `SANDBOX_AUTHOR_EMAIL`, `SANDBOX_AUTHOR_NAME` | a placeholder author | See your own name on the commits and pull requests.              |
 
 `SITE_ROOT` points at `apps/docs/static` rather than a built site on purpose: Docusaurus copies
@@ -146,21 +151,22 @@ The sandbox is loopback-only and is not a security boundary: its identity provid
 type, one terminal:
 
 ```bash
-bun run dev:all      # open http://127.0.0.1:4000/publisher/
+bun run dev:all      # open http://127.0.0.1:3001/publisher/, or click Publisher in the navbar
 ```
 
-That is [the whole stack](#the-whole-stack-in-one-command) — sandbox, Docusaurus and the proxy —
-which is the same three processes as:
+That is [the whole stack](#the-whole-stack-in-one-command) — sandbox and Docusaurus — which is the
+same two processes as:
 
 ```bash
-PUBLIC_ORIGIN=http://127.0.0.1:4000 bun run dev:cms         # sandbox gateway on :4300
-bun run docs:start                                          # Docusaurus on :3001
-GATEWAY_ORIGIN=http://127.0.0.1:4300 bun run dev:proxy      # proxy on :4000 — open this one
+bun run dev:cms                                        # sandbox gateway on :4300
+GATEWAY_ORIGIN=http://127.0.0.1:4300 bun run docs:start # Docusaurus on :3001 — open this one
 ```
 
-`PUBLIC_ORIGIN` is what makes this work. The sign-in parameters the gateway publishes name the
-identity provider the browser will fetch, and the browser is on the proxy's port — an issuer naming
-`:4300` would be cross-origin, and there is no CORS in this repository.
+Sign-in works from either port, and from `localhost` or `127.0.0.1`. The sandbox publishes its
+identity provider as a path (`/idp`) rather than a URL, so it resolves against whatever page is
+asking — no environment variable has to name the door you came in by, and nothing is ever
+cross-origin. The publisher page resolves what discovery gives it back into URLs before using them,
+so a real provider's absolute endpoints work the same way.
 
 ### Against a real repository
 
@@ -192,21 +198,17 @@ bun run dev:all              # against the sandbox gateway, no credentials
 bun run dev:all --gateway    # against the real gateway, which needs .env
 ```
 
-Or the same three processes by hand, in three terminals:
+Or the same two processes by hand, in two terminals:
 
 ```bash
 bun run dev            # gateway on :3000
-bun run docs:start     # Docusaurus on :3001
-bun run dev:proxy      # proxy on :4000 — open this one
+bun run docs:start     # Docusaurus on :3001 — open this one
 ```
 
-The proxy forwards `/v1/*`, `/healthz`, `/readyz`, `/previews/` and `/idp/` to the gateway and
-everything else to Docusaurus, so the browser sees a single origin. Streaming passes through
-untouched. Docusaurus's
-hot-reload WebSocket does not, so edits rebuild but the page needs a manual refresh; the console
-logs a WebSocket error, which is expected.
+`docs:start` proxies the gateway's paths to `http://127.0.0.1:3000` unless `GATEWAY_ORIGIN` says
+otherwise, so the browser sees a single origin. Streaming passes through untouched.
 
-A proxy rather than CORS on purpose: there is no CORS anywhere in this repository, and adding it
+One origin rather than CORS on purpose: there is no CORS anywhere in this repository, and adding it
 would put a permanent production surface in place to solve a local problem.
 
 ## Checks
@@ -259,8 +261,9 @@ matched before the API. It must stay mounted last in `apps/gateway/src/app.ts`; 
 **Port 3000 is already in use.** The gateway and Docusaurus both used to want it. `docs:start` now
 binds 3001; if something else holds 3000, set `PORT` for the gateway.
 
-**The widget says it cannot reach the assistant.** You are probably on `:3001` directly, where
-`/v1/ask` is served by Docusaurus and 404s. Use the proxy on `:4000`, or the built site on `:4173`.
+**The widget says it cannot reach the assistant, or Publisher says the gateway is not answering.**
+Same cause: the dev server proxies `/v1/*` to a gateway, and there is no gateway to proxy to — or
+it is on a port `GATEWAY_ORIGIN` does not name. `bun run dev:all` starts both together.
 
 **`docs:build` fails on a broken link.** `onBrokenLinks` is set to `throw` on purpose — a broken
 link in the corpus becomes a broken citation once the page is indexed.

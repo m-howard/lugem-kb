@@ -36,6 +36,30 @@ test.describe('the documentation CMS at /publisher', () => {
     expect(response?.status()).toBe(200);
   });
 
+  /**
+   * The navbar link is one config line and three ways to get it wrong, all of which look fine in
+   * the built HTML: a `to` would be handed to react-router and answered with the site's 404 page,
+   * a `_self` target would do the same, and base URL prefixing would point at a per-build copy
+   * whose sign-in redirects elsewhere. Only a real click proves which kind of link shipped.
+   */
+  test('is reachable from the documentation site, without typing a URL', async ({
+    context,
+    page,
+  }) => {
+    await page.goto('/');
+
+    const [editor] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('link', { name: 'Publisher' }).first().click(),
+    ]);
+    await editor.waitForLoadState();
+
+    expect(new URL(editor.url()).pathname).toBe('/publisher/');
+    await expect(editor.getByRole('button', { name: /login/i })).toBeVisible({
+      timeout: SIGN_IN_TIMEOUT_MS,
+    });
+  });
+
   // The whole point: a browser with no token ends up with one, without anybody typing a URL.
   test('signs an author in and loads the editor', async ({ page }) => {
     await openEditor(page);

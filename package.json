@@ -25,7 +25,6 @@
     "dev": "bun run --filter '@lugem/gateway' dev",
     "dev:all": "bun run scripts/dev/serve-stack.ts",
     "dev:cms": "bun run scripts/build/build-publisher.ts && bun run scripts/dev/serve-cms.ts",
-    "dev:proxy": "bun run scripts/dev/serve-dev.ts",
     "docs:start": "bun run --filter '@lugem/docs' start",
     "docs:build": "bun run --filter '@lugem/docs' build",
     "gateway:build": "bun run --filter '@lugem/gateway' build",

@@ -3,38 +3,40 @@
  * The whole local stack under one command, on one origin.
  *
  * ```bash
- * bun run dev:all            # sandbox gateway + Docusaurus + proxy — open http://127.0.0.1:4000
+ * bun run dev:all            # sandbox gateway + Docusaurus — open http://127.0.0.1:3001
  * bun run dev:all --gateway  # the real gateway instead of the sandbox; needs .env and AWS
  * bun run dev:all --reset    # sandbox only: throw away yesterday's drafts and reseed from docs/
  * ```
  *
- * Local development wants three processes — a gateway, Docusaurus, and the proxy that puts them
- * on one origin (see `serve-dev.ts` for why a proxy rather than CORS) — each with environment
- * variables that have to agree about ports. Three terminals is three chances to get that wrong,
- * and a stale process from the last session is invisible until a request lands on the wrong one.
- * This starts them together, prefixes their output so you can tell who said what, and tears the
- * whole set down when any one of them exits.
+ * Local development wants two processes — a gateway and Docusaurus — that have to agree about
+ * ports, and a stale one from the last session is invisible until a request lands on it. This
+ * starts them together, prefixes their output so you can tell who said what, and tears both down
+ * when either exits.
+ *
+ * There is no third process putting them on one origin any more: the Docusaurus dev server does
+ * that itself, proxying everything the gateway owns (`apps/docs/src/dev/gateway-proxy.ts`). One
+ * origin matters because in production the gateway serves the site, so every call the browser
+ * makes is a relative path — and there is no CORS anywhere in this repository, deliberately.
  *
  * The default gateway is the **sandbox** (`dev:cms`), because it is the half that runs without an
  * AWS account or a GitHub App. `--gateway` swaps in the real service for working against real
  * infrastructure.
  */
-const PROXY_PORT = 4000;
 const SITE_PORT = 3001;
 const SANDBOX_PORT = 4300;
 const GATEWAY_PORT = 3000;
 
 /**
  * Docusaurus binds `localhost`, which on an IPv6-capable machine — every dev container — resolves
- * to `::1` alone, and the proxy forwards to `127.0.0.1`. Naming the address makes the two agree
- * instead of leaving the site unreachable behind a 502.
+ * to `::1` alone, while its proxy forwards to `127.0.0.1`. Naming the address makes the two agree
+ * instead of leaving half the stack unreachable.
  */
 const SITE_HOST = '127.0.0.1';
 
 const useRealGateway = process.argv.includes('--gateway');
 const resetSandbox = process.argv.includes('--reset');
 
-const proxyOrigin = `http://127.0.0.1:${String(PROXY_PORT)}`;
+const siteOrigin = `http://${SITE_HOST}:${String(SITE_PORT)}`;
 const gatewayPort = useRealGateway ? GATEWAY_PORT : SANDBOX_PORT;
 
 interface ProcessSpec {
@@ -47,22 +49,21 @@ interface ProcessSpec {
 
 const repoRoot = new URL('../..', import.meta.url).pathname;
 
-/**
- * The sandbox publishes its identity provider's issuer to the browser, and the browser is on the
- * proxy's port — so it has to name the proxy, not itself. `PUBLIC_ORIGIN` is that correction; the
- * real gateway takes the equivalent from `.env` and needs nothing here.
- */
 const gatewaySpec: ProcessSpec = useRealGateway
   ? { name: 'gateway', command: ['bun', 'run', 'dev'], env: {} }
   : {
       name: 'sandbox',
       command: ['bun', 'run', 'scripts/dev/serve-cms.ts', ...(resetSandbox ? ['--reset'] : [])],
-      env: { PUBLIC_ORIGIN: proxyOrigin },
+      env: {},
     };
 
 /**
  * Docusaurus is started through its own CLI rather than `docs:start`, for the `--host` above. Its
  * `prestart` hook is the publisher bundle, which this script builds once for both processes.
+ *
+ * `GATEWAY_ORIGIN` is what makes its port a working origin rather than a site with no API behind
+ * it: the dev server proxies everything the gateway owns to whichever gateway this run started.
+ * See `apps/docs/src/dev/gateway-proxy.ts`.
  */
 const SPECS: readonly ProcessSpec[] = [
   gatewaySpec,
@@ -70,13 +71,6 @@ const SPECS: readonly ProcessSpec[] = [
     name: 'site',
     command: ['bun', 'x', 'docusaurus', 'start', '--port', String(SITE_PORT), '--host', SITE_HOST],
     cwd: 'apps/docs',
-    env: {},
-  },
-  {
-    name: 'proxy',
-    // The script rather than `dev:proxy`: a `bun run` wrapper reports a stopped child as an error,
-    // and Ctrl-C on a dev stack is not one.
-    command: ['bun', 'run', 'scripts/dev/serve-dev.ts'],
     env: { GATEWAY_ORIGIN: `http://127.0.0.1:${String(gatewayPort)}` },
   },
 ];
@@ -84,7 +78,6 @@ const SPECS: readonly ProcessSpec[] = [
 const PORTS: readonly (readonly [number, string])[] = [
   [gatewayPort, gatewaySpec.name],
   [SITE_PORT, 'site'],
-  [PROXY_PORT, 'proxy'],
 ];
 
 const useColor = process.env['NO_COLOR'] === undefined && process.stdout.isTTY;
@@ -179,17 +172,16 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, shutdown);
 }
 
-console.log(`The local stack is on ${proxyOrigin} — open that one.`);
-console.log(`  ${gatewaySpec.name.padEnd(labelWidth)}  :${String(gatewayPort)}`);
+console.log(`The local stack is on ${siteOrigin} — open that one.`);
 console.log(`  ${'site'.padEnd(labelWidth)}  :${String(SITE_PORT)} (Docusaurus, hot reload)`);
-console.log(`  ${'proxy'.padEnd(labelWidth)}  :${String(PROXY_PORT)}`);
+console.log(`  ${gatewaySpec.name.padEnd(labelWidth)}  :${String(gatewayPort)} (behind the site)`);
 if (!useRealGateway) {
   console.log('  real gateway instead of the sandbox: bun run dev:all --gateway');
 }
 
 /**
- * One process exiting takes the rest with it. A stack missing a third of itself answers requests
- * with a 502 from the proxy, which reads like a bug in whatever you were working on.
+ * One process exiting takes the other with it. A stack missing its gateway answers every API call
+ * with a proxy error, which reads like a bug in whatever you were working on.
  */
 const first = await Promise.race(
   children.map(async ({ spec, child }) => ({ spec, code: await child.exited })),

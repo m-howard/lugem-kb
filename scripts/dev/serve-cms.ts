@@ -52,15 +52,7 @@ const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
 const siteRoot = process.env['SITE_ROOT'] ?? DEFAULT_SITE_ROOT;
 const reset = process.argv.includes('--reset');
 
-/**
- * The origin the *browser* uses, which is not always this server's own.
- *
- * The identity provider's issuer is published to the publisher page, which then fetches discovery and
- * exchanges its code against it. Behind `scripts/dev/serve-dev.ts` the browser is on the proxy's
- * port, so an issuer naming this one would be cross-origin — and there is no CORS in this
- * repository. Set `PUBLIC_ORIGIN` to the address you actually open.
- */
-const origin = process.env['PUBLIC_ORIGIN'] ?? `http://127.0.0.1:${String(port)}`;
+const origin = `http://127.0.0.1:${String(port)}`;
 
 const store = createSandboxStore();
 if (reset) {
@@ -77,7 +69,6 @@ const published = await loadSandboxCorpus();
 const stored = await store.load();
 
 const sandbox = await createCmsSandbox({
-  origin,
   seed: published,
   state: stored,
   ...(process.env['SANDBOX_AUTHOR_EMAIL'] === undefined
