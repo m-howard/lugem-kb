@@ -246,6 +246,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`/admin` without a trailing slash sat on "Signing you in…" forever.** The site handler answers
+  a directory route at both spellings, but only redirected at neither — so `/admin` returned the
+  editor's `index.html` while the browser resolved its relative `./admin.js` against `/`, asking
+  for `/admin.js` and getting a 404. The bundle never ran, and because the "Signing you in…" text
+  is the static placeholder the script replaces, the page reported nothing: the only evidence was
+  a 404 in a console the author had no reason to open. A slashless path that resolves to a
+  directory with an `index.html` now answers `301` to the canonical form, query string intact so
+  an OIDC callback landing there keeps its `code` and `state`. This applies to every directory
+  route, not just `/admin`.
+
 - **`bun run docs:build` failed on a clean clone.** `apps/docs/package.json` runs
   `scripts/build/build-admin.ts` as its `prebuild` hook, and that file had never been committed:
   `.gitignore`'s bare `build/` pattern matches `scripts/build/` as well as the Docusaurus and

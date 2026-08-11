@@ -7,6 +7,7 @@ import { contentTypeFor, HTML_CONTENT_TYPE } from './content-types';
 import { type AppEnv } from '../app-env';
 
 const OK = 200;
+const MOVED_PERMANENTLY = 301;
 const NOT_FOUND = 404;
 const INDEX_FILE = 'index.html';
 const NOT_FOUND_FILE = '404.html';
@@ -86,6 +87,25 @@ async function findSiteFile(root: string, urlPath: string): Promise<string | und
 }
 
 /**
+ * Whether a slashless request path is really a directory whose index should answer it.
+ *
+ * The distinction the redirect turns on: `/adr` names a directory holding an `index.html`, while
+ * `/assets/styles.css` names a file. Only the former is a route wearing the wrong spelling.
+ */
+async function isDirectoryRoute(root: string, urlPath: string): Promise<boolean> {
+  if (urlPath === '/' || urlPath.endsWith('/')) {
+    return false;
+  }
+
+  const resolved = resolveWithinRoot(root, urlPath);
+  if (resolved === undefined || (await readIfFile(resolved)) !== undefined) {
+    return false;
+  }
+
+  return (await readIfFile(join(resolved, INDEX_FILE))) !== undefined;
+}
+
+/**
  * Serves the built documentation site.
  *
  * Mounted last in {@link import('../app').createApp} so `/healthz` and `/v1/*` are matched first.
@@ -104,6 +124,13 @@ export function createSiteRoutes(options: SiteRoutesOptions): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.get('*', async (c) => {
+    // Before serving anything: a directory index answered at the slashless spelling loads, but
+    // every relative URL inside it resolves one level too high. See `isDirectoryRoute`.
+    if (await isDirectoryRoute(options.root, c.req.path)) {
+      const { search } = new URL(c.req.url);
+      return c.redirect(`${c.req.path}/${search}`, MOVED_PERMANENTLY);
+    }
+
     const filePath = await findSiteFile(options.root, c.req.path);
 
     if (filePath === undefined) {
