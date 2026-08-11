@@ -11,3 +11,7 @@ playwright-report
 # non-sequential (see the provenance comment in the file itself). Also excluded in the
 # `lint:md` script glob, because markdownlint-cli2 only consults this file in some invocations.
 docs/requirements.md
+
+# Exported verbatim from Claude Design and re-synced wholesale. Also excluded in the `lint:md`
+# script glob, for the same reason as above.
+.claude/skills/
