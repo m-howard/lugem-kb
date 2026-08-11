@@ -1,0 +1,156 @@
+/*
+ * DESIGN SYSTEM — CORE TOKENS
+ * ─────────────────────────────────────────────────────────────
+ * Optimised for software engineering web apps:
+ * dashboards, IDEs, observability, CI/CD, repos, docs.
+ *
+ * Font     : Aeonik (commercial, Cos Type Foundry)
+ *            Fallback: DM Sans (Google Fonts)
+ *            Mono   : JetBrains Mono (Google Fonts)
+ *
+ * Rules    : No drop shadows · No strong gradients
+ *            No decorative outlines or effects
+ *            Weight + color = hierarchy
+ * ─────────────────────────────────────────────────────────────
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+
+  /* ─── Primary Colors ──────────────────────────── */
+  /* Use for: headers, background blocks, brand surfaces */
+  --c-indigo: #4f46e5;     /* primary action, links, focus */
+  --c-slate:  #0f172a;     /* ink, dark surfaces, headers */
+  --c-mist:   #e2e8f0;     /* neutral surface, dividers */
+
+  /* ─── Secondary Colors ───────────────────────── */
+  /* Use for: charts, semantic state, accents          */
+  --c-emerald: #10b981;    /* success · passing · merge */
+  --c-amber:   #f59e0b;    /* warning · modified · review */
+  --c-coral:   #ef4444;    /* error · failing · breaking */
+  --c-violet:  #8b5cf6;    /* accent · highlight · featured */
+
+  /* ─── Color Tints (blended with white) ──────── */
+  --c-indigo-80: #726bea;
+  --c-indigo-60: #9590ef;
+  --c-indigo-40: #b9b5f5;
+  --c-indigo-20: #dcdafa;
+  --c-indigo-10: #eeedfd;
+
+  --c-slate-80: #3f4555;
+  --c-slate-60: #6f747f;
+  --c-slate-40: #9fa2aa;
+  --c-slate-20: #cfd1d4;
+  --c-slate-10: #e8e8ea;
+
+  --c-emerald-20: #cff1e6;
+  --c-emerald-10: #e8f8f3;
+  --c-amber-20:   #fce6c3;
+  --c-amber-10:   #fef3e1;
+  --c-coral-20:   #fbd0d0;
+  --c-coral-10:   #fde8e8;
+  --c-violet-20:  #e0d4fc;
+  --c-violet-10:  #efeafd;
+
+  /* ─── Neutrals (slate scale) ────────────────── */
+  --c-white:    #ffffff;
+  --c-bg:       #f8fafc;     /* slate-50  · page background */
+  --c-bg-2:     #f1f5f9;     /* slate-100 · panel background */
+  --c-ink:      #0f172a;     /* primary text → slate-900 */
+  --c-ink-2:    #475569;     /* secondary text → slate-600 */
+  --c-ink-3:    #94a3b8;     /* muted / disabled → slate-400 */
+  --c-border:   #cbd5e1;     /* slate-300 · default border */
+
+  /* ─── Text-on-color (accessibility) ──────────── */
+  /* On --c-indigo:   white   */
+  /* On --c-slate:    white   */
+  /* On --c-mist:     --c-ink */
+  /* On --c-emerald:  white   */
+  /* On --c-amber:    --c-ink (white fails contrast)  */
+  /* On --c-coral:    white   */
+  /* On --c-violet:   white   */
+
+  /* ─── Typography ─────────────────────────────── */
+  --f-sans: 'Aeonik', 'DM Sans', sans-serif;                            /* @kind font */
+  --f-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace; /* @kind font */
+
+  --fw-light:    300; /* @kind other */
+  --fw-regular:  400; /* @kind other */
+  --fw-medium:   500; /* @kind other */
+  --fw-semibold: 600; /* @kind other */
+  --fw-bold:     700; /* @kind other */
+
+  /* Type Scale */
+  --text-xs:   11px;   /* Caption             */
+  --text-sm:   13px;   /* Label / overline     */
+  --text-base: 15px;   /* Body                 */
+  --text-md:   17px;   /* Body large           */
+  --text-lg:   21px;   /* Subheading           */
+  --text-xl:   27px;   /* Heading 2            */
+  --text-2xl:  36px;   /* Heading 1            */
+  --text-3xl:  48px;   /* Title                */
+  --text-4xl:  64px;   /* Display              */
+
+  /* Line Heights */
+  --lh-tight:   1.1;  /* @kind other */
+  --lh-snug:    1.25; /* @kind other */
+  --lh-normal:  1.5;  /* @kind other */
+  --lh-relaxed: 1.65; /* @kind other */
+
+  /* Letter Spacing */
+  --ls-tight:  -0.03em; /* @kind other */
+  --ls-snug:   -0.02em; /* @kind other */
+  --ls-normal:  0em;    /* @kind other */
+  --ls-wide:    0.06em; /* @kind other */
+  --ls-wider:   0.12em; /* @kind other */
+
+  /* ─── Spacing Scale (4px base) ──────────────── */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --s-20: 80px;
+  --s-24: 96px;
+
+  /* ─── Border Radius ─────────────────────────── */
+  --r-sm:   2px;
+  --r-md:   4px;
+  --r-lg:   8px;
+  --r-xl:   16px;
+  --r-full: 9999px;
+
+  /* ─── Borders ────────────────────────────────── */
+  --border-subtle: 1px solid #cbd5e1; /* @kind other */
+  --border-strong: 1px solid #0f172a; /* @kind other */
+  --border-brand:  1px solid #4f46e5; /* @kind other */
+
+  /* ─── Prohibited ─────────────────────────────── */
+  /* drop-shadow, box-shadow, text-shadow: NONE      */
+  /* strong gradient backgrounds: NONE               */
+  /* decorative borders / outlines: NONE             */
+}
+
+body {
+  font-family: var(--f-sans);
+  font-size: var(--text-base);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--c-ink);
+  background: var(--c-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+code, pre, kbd, samp { font-family: var(--f-mono); font-size: 0.92em; }
+
+h1 { font-size: var(--text-2xl); font-weight: var(--fw-bold);     letter-spacing: var(--ls-tight); line-height: var(--lh-tight); }
+h2 { font-size: var(--text-xl);  font-weight: var(--fw-semibold);  letter-spacing: var(--ls-snug);  line-height: var(--lh-snug);  }
+h3 { font-size: var(--text-lg);  font-weight: var(--fw-medium);   letter-spacing: var(--ls-snug);  line-height: var(--lh-snug);  }
+h4 { font-size: var(--text-md);  font-weight: var(--fw-medium);   letter-spacing: var(--ls-normal); }
+p  { font-size: var(--text-base); line-height: var(--lh-relaxed); }
