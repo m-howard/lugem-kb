@@ -13,11 +13,41 @@ describe('static site handler', () => {
 
     // Docusaurus emits a directory per route with an index.html inside, and readers arrive with
     // both spellings — a trailing slash from in-site navigation, none from a pasted link.
-    it.each([['/adr/'], ['/adr']])('resolves %s to the directory index', async (path) => {
-      const response = await buildTestApp().request(path);
+    it('resolves a directory route to its index', async () => {
+      const response = await buildTestApp().request('/adr/');
 
       expect(response.status).toBe(200);
       await expect(response.text()).resolves.toContain('Architecture decision records');
+    });
+
+    // Serving the index at both spellings looks equivalent and is not: relative URLs in the page
+    // resolve against the last path segment, so `./admin.js` under `/admin` asks for `/admin.js`
+    // and 404s. Redirecting is what makes a pasted slashless link load the same page as a link
+    // followed from inside the site.
+    it('redirects a slashless directory route to its canonical slashed form', async () => {
+      const response = await buildTestApp().request('/adr');
+
+      expect(response.status).toBe(301);
+      expect(response.headers.get('location')).toBe('/adr/');
+    });
+
+    it('keeps the query string when redirecting', async () => {
+      const response = await buildTestApp().request('/adr?code=abc&state=xyz');
+
+      expect(response.status).toBe(301);
+      expect(response.headers.get('location')).toBe('/adr/?code=abc&state=xyz');
+    });
+
+    it('does not redirect a path that resolves to a file', async () => {
+      const response = await buildTestApp().request('/assets/styles.css');
+
+      expect(response.status).toBe(200);
+    });
+
+    it('does not redirect a route with no directory behind it', async () => {
+      const response = await buildTestApp().request('/no-such-page');
+
+      expect(response.status).toBe(404);
     });
 
     it('serves an asset with the right content type', async () => {
