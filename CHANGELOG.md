@@ -9,6 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The whole local stack in one command** — `bun run dev:all` starts the sandbox gateway,
+  Docusaurus and the proxy together and serves them on one origin at `http://127.0.0.1:4000`.
+  - Three terminals was three chances to get the environment variables wrong: `PUBLIC_ORIGIN` on
+    the sandbox and `GATEWAY_ORIGIN` on the proxy have to agree about ports, and a stale process
+    from the last session is invisible until a request lands on the wrong one. Ports are checked
+    before anything starts, output is prefixed per process, and one process exiting stops the rest
+    rather than leaving a stack that answers with a `502`.
+  - `--gateway` swaps the sandbox for the real service on `3000`; `--reset` reseeds the sandbox.
+  - Docusaurus is started with `--host 127.0.0.1`. Its default binds `localhost`, which resolves to
+    `::1` alone inside the dev container, where the proxy's IPv4 forward could not reach it.
 - **A local sandbox for `/publisher`** — `bun run dev:cms` runs the editorial surface with no AWS
   account, no GitHub App and no identity provider. See
   [ADR 0022](docs/adr/0022-a-local-sandbox-for-the-editorial-surface.md).

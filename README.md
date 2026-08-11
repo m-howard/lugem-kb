@@ -77,6 +77,13 @@ To work on the **`/publisher` CMS**, which normally wants a GitHub App and an id
 bun run dev:cms   # http://127.0.0.1:4300/publisher/
 ```
 
+Or run **everything at once** — the site with hot reload, the CMS, and the API behind one origin,
+the way production serves them:
+
+```bash
+bun run dev:all   # http://127.0.0.1:4000
+```
+
 The real gateway, against a local git host that keeps what you save. Sign in, edit a page, submit
 it for review — no accounts, no `.env`, and your drafts survive a restart.
 
@@ -253,6 +260,7 @@ bun run test           # unit + integration
 bun run test:coverage  # the same, against the 80% gate
 bun run test:e2e       # Playwright, real server and real build, AWS stubbed
 
+bun run dev:all        # the whole stack on one origin — http://127.0.0.1:4000
 bun run dev:cms        # the /publisher CMS on :4300, no credentials needed
 bun run dev:proxy      # one origin over a separate gateway and Docusaurus
 

@@ -39,6 +39,34 @@ Docusaurus serves on `http://localhost:3001` with hot reload. Its content root i
 Port 3001, not 3000, because the gateway wants 3000 and the two need to run side by side — see
 [working on the ask widget](#working-on-the-ask-widget).
 
+## The whole stack in one command {#the-whole-stack-in-one-command}
+
+The site alone cannot answer a question or save a draft: `/v1/*` belongs to the gateway, and in
+production the gateway serves the site, so the two are one origin. Locally that is three processes.
+This starts all of them:
+
+```bash
+bun run dev:all      # then open http://127.0.0.1:4000
+```
+
+| What            | Port   | Notes                                                        |
+| --------------- | ------ | ------------------------------------------------------------ |
+| Proxy           | `4000` | **Open this one.** Everything else is behind it.             |
+| Docusaurus      | `3001` | Hot reload, same as `docs:start`.                            |
+| Sandbox gateway | `4300` | The API and `/publisher`, with AWS and the git host stubbed. |
+
+Output is prefixed per process, and if any of the three exits the other two are stopped with it —
+a half-running stack answers with a `502` that reads like a bug in whatever you were working on.
+`Ctrl-C` stops everything.
+
+| Flag        | Effect                                                                       |
+| ----------- | ---------------------------------------------------------------------------- |
+| `--gateway` | Run the real gateway on `3000` instead of the sandbox. Needs `.env` and AWS. |
+| `--reset`   | Discard the sandbox's saved drafts and reseed from `docs/`.                  |
+
+The sandbox is the default because it is the half that needs no account. For what it stubs and
+what it does not, see [Run the CMS at `/publisher`](#run-the-cms-at-publisher).
+
 ## Run the gateway
 
 The gateway serves the built site alongside its API, so build the site first:
@@ -115,7 +143,14 @@ The sandbox is loopback-only and is not a security boundary: its identity provid
 ### Working on the editor itself, with hot reload
 
 `apps/docs/src/publisher/` holds the sign-in shim. To iterate on it with the site rebuilding as you
-type, three terminals:
+type, one terminal:
+
+```bash
+bun run dev:all      # open http://127.0.0.1:4000/publisher/
+```
+
+That is [the whole stack](#the-whole-stack-in-one-command) — sandbox, Docusaurus and the proxy —
+which is the same three processes as:
 
 ```bash
 PUBLIC_ORIGIN=http://127.0.0.1:4000 bun run dev:cms         # sandbox gateway on :4300
@@ -150,7 +185,14 @@ This is the same harness Playwright drives. It needs no AWS credentials and no `
 stubbed assistant answers anything except questions mentioning unicorns, which return the
 no-coverage response so you can see that state too.
 
-**With hot reload**, for iterating on the component itself. Three terminals:
+**With hot reload**, for iterating on the component itself. One terminal:
+
+```bash
+bun run dev:all              # against the sandbox gateway, no credentials
+bun run dev:all --gateway    # against the real gateway, which needs .env
+```
+
+Or the same three processes by hand, in three terminals:
 
 ```bash
 bun run dev            # gateway on :3000
