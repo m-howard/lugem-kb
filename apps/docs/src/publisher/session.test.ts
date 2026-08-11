@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type AccessToken } from './oidc-client';
-import { authorizingFetch, createAdminSession, isExpired } from './session';
+import { authorizingFetch, createPublisherSession, isExpired } from './session';
 
 const PROXY_PATH = '/v1/cms/proxy';
 
@@ -39,21 +39,21 @@ describe('isExpired', () => {
   });
 });
 
-describe('createAdminSession', () => {
+describe('createPublisherSession', () => {
   it('round-trips a token', () => {
-    const session = createAdminSession(memoryStorage(), () => 0);
+    const session = createPublisherSession(memoryStorage(), () => 0);
     session.writeToken(LIVE_TOKEN);
 
     expect(session.readToken()).toEqual(LIVE_TOKEN);
   });
 
   it('answers with no token before anyone has signed in', () => {
-    expect(createAdminSession(memoryStorage(), () => 0).readToken()).toBeUndefined();
+    expect(createPublisherSession(memoryStorage(), () => 0).readToken()).toBeUndefined();
   });
 
   it('discards an expired token rather than handing it to the editor', () => {
     const storage = memoryStorage();
-    const session = createAdminSession(storage, () => 5_000);
+    const session = createPublisherSession(storage, () => 5_000);
     session.writeToken(LIVE_TOKEN);
 
     expect(session.readToken()).toBeUndefined();
@@ -65,13 +65,13 @@ describe('createAdminSession', () => {
     ['unparseable', '{not json'],
     ['the wrong shape', '{"nope":1}'],
   ])('treats %s storage as signed out', (_case, raw) => {
-    const session = createAdminSession(memoryStorage({ 'lugem-cms.token': raw }), () => 0);
+    const session = createPublisherSession(memoryStorage({ 'lugem-cms.token': raw }), () => 0);
 
     expect(session.readToken()).toBeUndefined();
   });
 
   it('round-trips an in-flight sign-in', () => {
-    const session = createAdminSession(memoryStorage(), () => 0);
+    const session = createPublisherSession(memoryStorage(), () => 0);
     session.startFlight({ verifier: 'v', state: 's' });
 
     expect(session.readFlight()).toEqual({ verifier: 'v', state: 's' });
@@ -80,7 +80,7 @@ describe('createAdminSession', () => {
   // Once a token exists the verifier has done its job. Leaving it behind would let a replayed
   // callback be matched a second time.
   it('forgets the in-flight sign-in once a token arrives', () => {
-    const session = createAdminSession(memoryStorage(), () => 0);
+    const session = createPublisherSession(memoryStorage(), () => 0);
     session.startFlight({ verifier: 'v', state: 's' });
     session.writeToken(LIVE_TOKEN);
 
@@ -88,7 +88,7 @@ describe('createAdminSession', () => {
   });
 
   it('clears both on sign-out', () => {
-    const session = createAdminSession(memoryStorage(), () => 0);
+    const session = createPublisherSession(memoryStorage(), () => 0);
     session.startFlight({ verifier: 'v', state: 's' });
     session.writeToken(LIVE_TOKEN);
 

@@ -3,15 +3,15 @@ import { Hono } from 'hono';
 import { type AppEnv } from '../app-env';
 import { type AuthConfig } from '../config';
 
-/** Scopes the admin page asks for. `openid` yields the subject; the rest carry R6's attribution. */
+/** Scopes the publisher asks for. `openid` yields the subject; the rest carry R6's attribution. */
 const SIGN_IN_SCOPES = 'openid profile email';
 
-export interface AdminConfigRoutesOptions {
+export interface PublisherConfigRoutesOptions {
   readonly auth: AuthConfig;
 }
 
 /**
- * What the `/admin` page needs before it can sign anybody in.
+ * What the `/publisher` page needs before it can sign anybody in.
  *
  * **Deliberately unauthenticated**, and it is worth being explicit about why that is safe. Every
  * field here is an OIDC *public client* parameter: the issuer, the client id, the audience and the
@@ -29,9 +29,9 @@ export interface AdminConfigRoutesOptions {
  * reported so the page knows to redirect there instead of starting its own flow.
  *
  * @param options - The resolved auth configuration.
- * @returns A Hono app to mount at `/v1/admin`.
+ * @returns A Hono app to mount at `/v1/publisher`.
  */
-export function createAdminConfigRoutes(options: AdminConfigRoutesOptions): Hono<AppEnv> {
+export function createPublisherConfigRoutes(options: PublisherConfigRoutesOptions): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.get('/config', (c) =>

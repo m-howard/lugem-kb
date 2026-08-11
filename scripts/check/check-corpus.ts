@@ -10,7 +10,7 @@
  *
  * Docusaurus already fails its build on a broken link, and that safety net stays. This exists for
  * R13's third criterion — "failures surface as a readable message, not a raw log" — and because it
- * runs in seconds without building the site, so an author submitting through `/admin` learns what
+ * runs in seconds without building the site, so an author submitting through `/publisher` learns what
  * is wrong from a comment on their own pull request rather than from a stack trace in a log they
  * have no reason to open.
  *

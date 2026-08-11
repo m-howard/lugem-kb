@@ -21,7 +21,7 @@ The first two are, on the face of it, already true. `docusaurus.config.ts` sets
 builds the site on every pull request. A broken link already fails.
 
 The third is not true at all, and it is the one that decides whether Phase 3's pilot works. An
-author who submitted a page through the CMS at `/admin` has never seen this repository. They have a
+author who submitted a page through the CMS at `/publisher` has never seen this repository. They have a
 pull request with a red X on it. Behind the X is a job named "Build" whose log ends in a Docusaurus
 exception, several hundred lines down, in terms — `Docs markdown link couldn't be resolved` against
 a source file path — that assume they know where the corpus lives. Nothing routes them back to the

@@ -89,7 +89,7 @@ export function formatAnnotations(problems: readonly Problem[]): string {
  * The pull request comment.
  *
  * This is the half of R13's third criterion that matters most. An author who submitted a page
- * through the CMS at `/admin` has a pull request and no reason to know what GitHub Actions is;
+ * through the CMS at `/publisher` has a pull request and no reason to know what GitHub Actions is;
  * a comment on their submission is the only place they will meet the failure.
  *
  * Rendered for a clean run too, so a comment left by an earlier failing push can be updated to say

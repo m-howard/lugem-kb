@@ -42,7 +42,7 @@ const EXCHANGE = {
   clientId: 'lugem-cms-admin',
   code: 'auth-code',
   verifier: 'verifier-1',
-  redirectUri: 'https://docs.internal/admin/',
+  redirectUri: 'https://docs.internal/publisher/',
 };
 
 describe('discover', () => {
@@ -91,7 +91,7 @@ describe('exchangeCode', () => {
       client_id: 'lugem-cms-admin',
       code: 'auth-code',
       code_verifier: 'verifier-1',
-      redirect_uri: 'https://docs.internal/admin/',
+      redirect_uri: 'https://docs.internal/publisher/',
     });
     expect(body.has('client_secret')).toBe(false);
   });

@@ -136,7 +136,7 @@ export interface CmsGatewayConfig {
   readonly issuerUrl: string | undefined;
   readonly audience: string | undefined;
   /**
-   * The public OIDC client the `/admin` editor signs in as. Present only in `bearer` mode; in
+   * The public OIDC client the `/publisher` editor signs in as. Present only in `bearer` mode; in
    * `alb` mode the load balancer runs the exchange with its own client and secret.
    */
   readonly clientId: string | undefined;
@@ -341,7 +341,7 @@ function resolveCmsGateway(input: GithubConfigInput): CmsGatewayConfig {
     throw new StackConfigError(
       missing,
       'are required when cmsAuthMode is "bearer": the gateway verifies the editor\'s token against ' +
-        'that issuer, for that audience, and the /admin editor signs in as that client',
+        'that issuer, for that audience, and the /publisher editor signs in as that client',
     );
   }
 

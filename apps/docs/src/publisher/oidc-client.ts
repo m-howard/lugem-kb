@@ -73,7 +73,7 @@ export interface CodeExchange {
 /**
  * Trades an authorization code for an access token.
  *
- * No client secret, because the admin page is a public client: the code verifier is what proves
+ * No client secret, because the publisher page is a public client: the code verifier is what proves
  * this is the same browser that started the sign-in.
  *
  * @param exchange - The token endpoint, client id, code, verifier and redirect.

@@ -22,7 +22,7 @@ const CACHE_CONTROL = 'no-cache';
  *
  * `docs/**` is MDX, so a page compiles to a React component: an author can put script in a pull
  * request as easily as a paragraph, and the CMS lets someone with no git account open one
- * (see ADR 0014). Those bytes are served from the origin that also carries `/admin`, the CMS API
+ * (see ADR 0014). Those bytes are served from the origin that also carries `/publisher`, the CMS API
  * and the reader session, so without this header opening a preview runs unreviewed script with
  * the privileges of the person reading it — a sign-in token copied into the tab's `sessionStorage`
  * in bearer mode, a credentialed call to the editorial API in ALB mode. `x-robots-tag` says

@@ -18,8 +18,8 @@ export interface CmsDependencyOptions {
   /** Built once by `createDependencies` and shared with the reader routes — see ADR 0017. */
   readonly verifier: IdentityVerifier;
   /**
-   * The resolved auth configuration, published (never the verifier) so `/v1/admin/config` can
-   * tell the admin page how to sign in. Auth was lifted out of `CmsConfig` by ADR 0017, so it is
+   * The resolved auth configuration, published (never the verifier) so `/v1/publisher/config` can
+   * tell the publisher page how to sign in. Auth was lifted out of `CmsConfig` by ADR 0017, so it is
    * `createDependencies` that resolves it now, from the same config the verifier is built from.
    */
   readonly auth: AuthConfig;
@@ -47,7 +47,7 @@ export interface CmsDependencies {
    */
   readonly client: GitHubClient;
   /**
-   * The resolved auth configuration, so `/v1/admin/config` can tell the admin page how to sign in.
+   * The resolved auth configuration, so `/v1/publisher/config` can tell the publisher page how to sign in.
    * The verifier is built from the same block and remains the only thing that decides who someone
    * is — this is published for the browser's benefit, and grants nothing.
    */

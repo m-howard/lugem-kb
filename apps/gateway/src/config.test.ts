@@ -268,7 +268,7 @@ describe('loadConfig', () => {
         ['AUTH_MODE'],
         ['AUTH_ISSUER_URL'],
         ['AUTH_AUDIENCE'],
-        // Without it the `/admin` page cannot start a sign-in, and the failure would surface as an
+        // Without it the `/publisher` page cannot start a sign-in, and the failure would surface as an
         // editor that loads and then cannot authenticate — long after the deploy looked healthy.
         ['AUTH_CLIENT_ID'],
       ])('rejects a missing %s and names it', (variable) => {
@@ -325,7 +325,7 @@ describe('loadConfig', () => {
     });
 
     describe('auth modes', () => {
-      it('reads the issuer, audience and admin client id in bearer mode', () => {
+      it('reads the issuer, audience and publisher client id in bearer mode', () => {
         expect(loadConfig({ ...VALID_ENV, ...CMS_ENV }).auth).toEqual({
           mode: 'bearer',
           issuer: 'https://idp.example.com/realm',

@@ -15,7 +15,7 @@ messages mean when something is refused.
 
 :::note
 
-The CMS is part of the documentation site. If your deployment has not configured it, `/admin` says
+The CMS is part of the documentation site. If your deployment has not configured it, `/publisher` says
 so rather than showing an empty editor — ask a platform engineer to work through
 [the authoring gateway](./authoring-gateway.md).
 
@@ -23,7 +23,7 @@ so rather than showing an empty editor — ask a platform engineer to work throu
 
 ## Sign in
 
-Open **`/admin`** on the documentation site.
+Open **`/publisher`** on the documentation site.
 
 You are sent to your organisation's login page and straight back. If you are already signed in to
 the intranet, you may not see it at all.
@@ -205,7 +205,7 @@ there is a sandbox: a copy of the documentation you can edit freely, on your own
 nothing.
 
 ```bash
-bun run dev:cms      # then open http://127.0.0.1:4300/admin/
+bun run dev:cms      # then open http://127.0.0.1:4300/publisher/
 ```
 
 It signs you in automatically, and everything on this page works — writing, images, saving,
@@ -214,7 +214,7 @@ submitting. Nothing leaves your machine, and `bun run dev:cms --reset` puts it a
 ## Related
 
 - [The authoring gateway](./authoring-gateway.md) — how this works, for whoever operates it
-- [Getting started](./getting-started.md#run-the-cms-at-admin) — running the sandbox above
+- [Getting started](./getting-started.md#run-the-cms-at-publisher) — running the sandbox above
 - [ADR 0015](./adr/0015-decap-adapter-in-the-gateway.md) — why the editor works the way it does
 - [ADR 0021](./adr/0021-images-travel-with-the-draft.md) — why an image is saved with its page
 - [ADR 0022](./adr/0022-a-local-sandbox-for-the-editorial-surface.md) — how the sandbox works

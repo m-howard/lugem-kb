@@ -69,16 +69,16 @@ bun run docs:build
 bun run scripts/dev/serve-e2e.ts   # http://127.0.0.1:4173
 ```
 
-To work on the **`/admin` CMS**, which normally wants a GitHub App and an identity provider:
+To work on the **`/publisher` CMS**, which normally wants a GitHub App and an identity provider:
 
 ```bash
-bun run dev:cms   # http://127.0.0.1:4300/admin/
+bun run dev:cms   # http://127.0.0.1:4300/publisher/
 ```
 
 The real gateway, against a local git host that keeps what you save. Sign in, edit a page, submit
 it for review — no accounts, no `.env`, and your drafts survive a restart.
 
-See [Getting started](docs/getting-started.md#run-the-cms-at-admin) for what's stubbed and the
+See [Getting started](docs/getting-started.md#run-the-cms-at-publisher) for what's stubbed and the
 hot-reload alternative.
 
 Deploying needs the [Pulumi CLI](https://www.pulumi.com/docs/install/) **3.226.0+** — the `bun`
@@ -100,7 +100,7 @@ AWS account prerequisites before you run it.
                         │  │  /v1/cms  (auth)       │──┼──▶ GitHub, as one App
                         │  │      └─ policy first   │  │      └─▶ cms/* branches only
                         │  │  /v1/cms/proxy  (Decap)│  │
-                        │  │  /admin  Decap CMS     │  │
+                        │  │  /publisher  Decap CMS │  │
                         │  │  /*  built Docusaurus  │  │
                         │  └────────────────────────┘  │
                         └──────────────────────────────┘
@@ -221,7 +221,7 @@ Pulumi stack configuration is documented in
 ## 📖 Documentation
 
 - **[Asking questions](docs/asking-questions.md)** — the reader's guide to the assistant.
-- **[Editing in the CMS](docs/editing-in-the-cms.md)** — the author's guide to `/admin`.
+- **[Editing in the CMS](docs/editing-in-the-cms.md)** — the author's guide to `/publisher`.
 - **[The authoring gateway](docs/authoring-gateway.md)** — publishing without a git host account.
 - **[Getting started](docs/getting-started.md)** — run everything locally.
 - **[Deploying to AWS](docs/deploying-to-aws.md)** — prerequisites, config, costs, teardown.
@@ -251,7 +251,7 @@ bun run test           # unit + integration
 bun run test:coverage  # the same, against the 80% gate
 bun run test:e2e       # Playwright, real server and real build, AWS stubbed
 
-bun run dev:cms        # the /admin CMS on :4300, no credentials needed
+bun run dev:cms        # the /publisher CMS on :4300, no credentials needed
 bun run dev:proxy      # one origin over a separate gateway and Docusaurus
 
 bun run scripts/check/verify-gateway.ts --base-url http://127.0.0.1:3000
@@ -278,7 +278,7 @@ half of Phase 4.
   endpoint policies, human attribution, audit records and fail-closed configuration — R1–R6, R9 and
   R10. Verify a deployment with `scripts/check/verify-gateway.ts`, which is the phase's stated exit
   condition.
-- **Phase 3 — Pilot.** Decap CMS at `/admin`: authors sign in with their corporate login, write
+- **Phase 3 — Pilot.** Decap CMS at `/publisher`: authors sign in with their corporate login, write
   pages in a rich text editor, save drafts and submit them for review, with their own name on every
   commit. The editorial API is purpose-built, so the CMS reaches it through an adapter in the
   gateway — [ADR 0015](docs/adr/0015-decap-adapter-in-the-gateway.md) records the mapping, and

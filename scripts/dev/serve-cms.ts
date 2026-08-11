@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 /**
- * The `/admin` editor, running locally against nothing you have to sign up for.
+ * The `/publisher` editor, running locally against nothing you have to sign up for.
  *
  * ```bash
- * bun run dev:cms          # then open http://127.0.0.1:4300/admin/
+ * bun run dev:cms          # then open http://127.0.0.1:4300/publisher/
  * bun run dev:cms --reset  # throw away yesterday's drafts and reseed from docs/
  * ```
  *
  * The gateway mounts its editorial surface only when a GitHub App and an OIDC issuer are
- * configured, so without this there is no way to open `/admin` without production credentials.
+ * configured, so without this there is no way to open `/publisher` without production credentials.
  * Here the app is the real one — the same `createApp`, the same route order, the same branch, path
  * and endpoint policies, real JWT verification — and only its collaborators are local: a git host
  * that keeps what it is given, an identity provider on this origin, and stubbed AWS.
@@ -18,7 +18,7 @@
  * `Ctrl-C` does not throw the draft away.
  *
  * `SITE_ROOT` points at `apps/docs/static` rather than a built site. Docusaurus copies `static/`
- * verbatim, so `/admin/` resolves out of it directly and only the editor bundle has to be built
+ * verbatim, so `/publisher/` resolves out of it directly and only the editor bundle has to be built
  * first — seconds, rather than a full `docs:build`. Set `SITE_ROOT=apps/docs/build` once you have
  * one and the whole site is served alongside the editor.
  */
@@ -55,7 +55,7 @@ const reset = process.argv.includes('--reset');
 /**
  * The origin the *browser* uses, which is not always this server's own.
  *
- * The identity provider's issuer is published to the admin page, which then fetches discovery and
+ * The identity provider's issuer is published to the publisher page, which then fetches discovery and
  * exchanges its code against it. Behind `scripts/dev/serve-dev.ts` the browser is on the proxy's
  * port, so an issuer naming this one would be cross-origin — and there is no CORS in this
  * repository. Set `PUBLIC_ORIGIN` to the address you actually open.
@@ -174,7 +174,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 const fileCount = Object.keys(stored?.blobs ?? published).length;
 
-console.log(`The documentation CMS sandbox is on ${origin}/admin/`);
+console.log(`The documentation CMS sandbox is on ${origin}/publisher/`);
 console.log(`  listening    http://127.0.0.1:${String(port)}`);
 console.log(`  repository   ${sandbox.settings.repository} (local, not a real git host)`);
 console.log(

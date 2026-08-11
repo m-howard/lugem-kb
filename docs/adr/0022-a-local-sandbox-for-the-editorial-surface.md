@@ -12,15 +12,15 @@ last_reviewed: 2026-08-10
 
 ## Context
 
-The `/admin` editor was, until now, the one part of this system nobody could run on their own
+The `/publisher` editor was, until now, the one part of this system nobody could run on their own
 machine.
 
 That follows from decisions made deliberately elsewhere.
 [ADR 0009](./0009-fail-closed-configuration.md) makes configuration fail closed, and
 `CMS_REPOSITORY` is a master switch: setting it makes a GitHub App id, an installation id, a
 private key and an entire [auth block](./0013-two-authentication-modes.md) required, and leaving it
-unset means `/v1/cms/*` and `/v1/admin/config` are never mounted at all. The bearer verifier
-discovers its key set from a live `AUTH_ISSUER_URL`. So to open `/admin` you needed a real GitHub
+unset means `/v1/cms/*` and `/v1/publisher/config` are never mounted at all. The bearer verifier
+discovers its key set from a live `AUTH_ISSUER_URL`. So to open `/publisher` you needed a real GitHub
 App installed on a real repository _and_ a reachable identity provider — before writing a line of
 code.
 
@@ -84,14 +84,14 @@ gets written; a sandbox that forgot every restart would be a demo rather than so
 
 ### `SITE_ROOT` defaults to `apps/docs/static`
 
-Docusaurus copies `static/` verbatim, so `/admin/` resolves out of it directly and only the editor
+Docusaurus copies `static/` verbatim, so `/publisher/` resolves out of it directly and only the editor
 bundle has to be built first — seconds, rather than a full site build. `createSiteRoutes` answers a
 plain-text 404 for everything else, which is the right trade when the editor is what you came for.
 Point `SITE_ROOT` at `apps/docs/build` to get the whole site.
 
 ## Consequences
 
-- **`/admin` is runnable with one command.** `bun run dev:cms`, no accounts, no `.env`. Sign in,
+- **`/publisher` is runnable with one command.** `bun run dev:cms`, no accounts, no `.env`. Sign in,
   edit a page, save, watch it reach the editorial board, submit it for review.
 - **The editorial round trip is tested.** `tests/integration/editorial-round-trip.test.ts` asserts
   save-then-read, the conflict refusal, the board, submission and merge — none of which a canned

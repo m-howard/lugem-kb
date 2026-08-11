@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createAdminConfigRoutes } from './admin-config';
+import { createPublisherConfigRoutes } from './publisher-config';
 import { type AuthConfig } from '../config';
 
 const CLAIMS = { emailClaim: 'email', nameClaim: 'name' };
@@ -20,13 +20,13 @@ const ALB: AuthConfig = {
 };
 
 async function config(auth: AuthConfig): Promise<Record<string, unknown>> {
-  const response = await createAdminConfigRoutes({ auth }).request('/config');
+  const response = await createPublisherConfigRoutes({ auth }).request('/config');
 
   expect(response.status).toBe(200);
   return (await response.json()) as Record<string, unknown>;
 }
 
-describe('createAdminConfigRoutes', () => {
+describe('createPublisherConfigRoutes', () => {
   // Everything served here is an OIDC public-client parameter — it travels in the browser's own
   // redirect URL either way. The endpoint is unauthenticated because the page that needs it is by
   // definition the page with no token yet.
@@ -66,7 +66,7 @@ describe('createAdminConfigRoutes', () => {
   });
 
   it('answers nothing for a path it does not serve', async () => {
-    const response = await createAdminConfigRoutes({ auth: BEARER }).request('/secrets');
+    const response = await createPublisherConfigRoutes({ auth: BEARER }).request('/secrets');
 
     expect(response.status).toBe(404);
   });

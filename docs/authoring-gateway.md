@@ -80,12 +80,12 @@ workspaces, and this is the sharpest edge in the design
 
 Uploads are confined to PNG, JPEG, GIF and WebP, and the first bytes of every file are checked
 against its extension. SVG is excluded deliberately: it can carry a script, and the site shares an
-origin with `/admin`, where the author's token lives. Images are never synced to S3 or indexed, so
+origin with `/publisher`, where the author's token lives. Images are never synced to S3 or indexed, so
 none of this touches R21.
 
 ### The Decap adapter
 
-`/v1/cms/proxy` is what the editor at `/admin` talks to. Decap's `proxy` backend posts
+`/v1/cms/proxy` is what the editor at `/publisher` talks to. Decap's `proxy` backend posts
 `{action, params}` to one URL, so the adapter translates that into the same services the REST
 routes use — the protocol changes, the policies do not. It is mounted inside the editorial sub-app,
 so it is authenticated and credential-guarded like everything else here.
@@ -99,7 +99,7 @@ Two things follow from the gateway having two states where Decap's board has thr
 [ADR 0015](./adr/0015-decap-adapter-in-the-gateway.md) records the mapping in full, including the
 one allowlist row it needed. Authors get [their own page](./editing-in-the-cms.md).
 
-One anonymous route comes with it: `GET /v1/admin/config`, which tells the `/admin` page how to
+One anonymous route comes with it: `GET /v1/publisher/config`, which tells the `/publisher` page how to
 sign in. Every field it serves is an OIDC public-client parameter that travels in the browser's
 redirect URL anyway, and the page that needs it is by definition the page with no token yet. It is
 mounted beside `/v1/cms` rather than inside it, so "everything under `/v1/cms` needs a token" stays
@@ -122,23 +122,23 @@ pulumi config set cmsAuthAudience api://lugem-cms
 pulumi up
 ```
 
-| Key                               | Required     | Notes                                                                                                                                                        |
-| --------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cmsGitHubAppId`                  | yes          | Enables everything below. See [the corpus repository](./corpus-repository.md).                                                                               |
-| `cmsGitHubAppInstallationId`      | yes          | Must be set with the app id.                                                                                                                                 |
-| `cmsAuthMode`                     | yes          | `bearer` or `alb`. No default — the gateway will not guess how to identify an author.                                                                        |
-| `cmsAuthIssuerUrl`                | for `bearer` | OIDC issuer. Its discovery document names the key set.                                                                                                       |
-| `cmsAuthAudience`                 | for `bearer` | The audience tokens must carry.                                                                                                                              |
-| `cmsAuthClientId`                 | for `bearer` | The public client `/admin` signs in as. Register `https://<site>/admin/` as a redirect URI. No secret — it is a public client, and PKCE proves the callback. |
-| `cmsAuthEmailClaim`               | no           | Default `email`. See the warning below.                                                                                                                      |
-| `cmsAuthNameClaim`                | no           | Default `name`. Falls back to the email when absent.                                                                                                         |
-| `cmsOidcIssuer` and four siblings | for `alb`    | The endpoints the load balancer needs. All five, or none.                                                                                                    |
-| `cmsOidcClientSecret`             | for `alb`    | Set with `--secret`. Never written to a config file in plaintext.                                                                                            |
-| `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                                                                                         |
-| `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                                                                                            |
-| `cmsMediaFolder`                  | no           | Default `docs/assets/media/`. The only folder uploads may go to, and it must sit inside `cmsPathPrefixes`. See [images](#images).                            |
-| `cmsMaxUploadBytes`               | no           | Default `2097152` (2 MiB). Largest single image, from 1 byte to 25 MiB.                                                                                      |
-| `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                                                                                              |
+| Key                               | Required     | Notes                                                                                                                                                                |
+| --------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cmsGitHubAppId`                  | yes          | Enables everything below. See [the corpus repository](./corpus-repository.md).                                                                                       |
+| `cmsGitHubAppInstallationId`      | yes          | Must be set with the app id.                                                                                                                                         |
+| `cmsAuthMode`                     | yes          | `bearer` or `alb`. No default — the gateway will not guess how to identify an author.                                                                                |
+| `cmsAuthIssuerUrl`                | for `bearer` | OIDC issuer. Its discovery document names the key set.                                                                                                               |
+| `cmsAuthAudience`                 | for `bearer` | The audience tokens must carry.                                                                                                                                      |
+| `cmsAuthClientId`                 | for `bearer` | The public client `/publisher` signs in as. Register `https://<site>/publisher/` as a redirect URI. No secret — it is a public client, and PKCE proves the callback. |
+| `cmsAuthEmailClaim`               | no           | Default `email`. See the warning below.                                                                                                                              |
+| `cmsAuthNameClaim`                | no           | Default `name`. Falls back to the email when absent.                                                                                                                 |
+| `cmsOidcIssuer` and four siblings | for `alb`    | The endpoints the load balancer needs. All five, or none.                                                                                                            |
+| `cmsOidcClientSecret`             | for `alb`    | Set with `--secret`. Never written to a config file in plaintext.                                                                                                    |
+| `cmsBranchPrefix`                 | no           | Default `cms/`. The only branches the CMS may touch.                                                                                                                 |
+| `cmsPathPrefixes`                 | no           | Default `["docs/"]`. The only paths it may write.                                                                                                                    |
+| `cmsMediaFolder`                  | no           | Default `docs/assets/media/`. The only folder uploads may go to, and it must sit inside `cmsPathPrefixes`. See [images](#images).                                    |
+| `cmsMaxUploadBytes`               | no           | Default `2097152` (2 MiB). Largest single image, from 1 byte to 25 MiB.                                                                                              |
+| `cmsAllowMerge`                   | no           | Default `false`. See [merging](#merging), and requirements R16.                                                                                                      |
 
 Pull request previews need no configuration key of their own. `pulumi up` creates the bucket and
 the publishing role whenever the GitHub half of the stack is configured, hands the gateway
@@ -252,14 +252,14 @@ not a suggestion.
 Most of the time you want the sandbox, which needs no GitHub App and no identity provider:
 
 ```bash
-bun run dev:cms      # http://127.0.0.1:4300/admin/
+bun run dev:cms      # http://127.0.0.1:4300/publisher/
 ```
 
 It runs the real gateway — same routes, same policies, real token verification — against a git host
 that keeps what it is given and an identity provider on the same origin. Drafts persist between
 runs; `--reset` starts over. See
 [ADR 0022](./adr/0022-a-local-sandbox-for-the-editorial-surface.md) for what it does and does not
-model, and [Getting started](./getting-started.md#run-the-cms-at-admin) for the options.
+model, and [Getting started](./getting-started.md#run-the-cms-at-publisher) for the options.
 
 What the sandbox cannot show you is branch protection, a second person reviewing, or anything the
 real git host decides. For that, point the gateway at a real repository. Local development can read

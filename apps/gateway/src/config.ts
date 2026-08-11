@@ -105,12 +105,12 @@ export type AuthConfig = {
       readonly issuer: string;
       readonly audience: string;
       /**
-       * The public OIDC client the `/admin` page signs in as.
+       * The public OIDC client the `/publisher` page signs in as.
        *
        * Required in `bearer` mode because Decap's proxy backend sends no `Authorization` header of
-       * its own — the admin page has to obtain a token itself, and it cannot start an
+       * its own — the publisher page has to obtain a token itself, and it cannot start an
        * authorization-code flow without a client id. Public by nature: it travels in the browser's
-       * redirect URL either way, which is why `/v1/admin/config` may serve it anonymously.
+       * redirect URL either way, which is why `/v1/publisher/config` may serve it anonymously.
        */
       readonly clientId: string;
     }

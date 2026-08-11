@@ -44,7 +44,7 @@ rejected on testability. `vitest.config.mts` has no jsdom project, so adapter lo
 would be covered by nothing but Playwright, while the same logic in TypeScript on the server is
 covered by the existing unit and integration idiom and counts against the 80% gate.
 
-The `/admin` page still ships browser code, but only the parts that must be there: an OIDC sign-in,
+The `/publisher` page still ships browser code, but only the parts that must be there: an OIDC sign-in,
 and a `fetch` wrapper. Everything with a decision in it is pure and unit-tested.
 
 ### The status model

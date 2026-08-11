@@ -143,7 +143,7 @@ and a bucket the knowledge base has never been pointed at cannot be. See
 **The gateway serves previews sandboxed.** Every response under `/previews` carries
 `Content-Security-Policy: sandbox allow-scripts allow-popups`. A pull request's pages are unreviewed
 MDX — code, not just prose — and the sandbox is what keeps them from running on the origin that
-holds `/admin` and the reader's session. The visible cost is that a preview cannot call the
+holds `/publisher` and the reader's session. The visible cost is that a preview cannot call the
 gateway's API, so the **Ask** page does not answer inside one. ADR 0018 has the reasoning and the
 caveat for ALB authentication mode.
 
@@ -155,7 +155,7 @@ link and `#anchor` resolves. It runs as its own CI job on every pull request.
 
 The failure is written for the person who caused it. The check emits `::error` annotations pinned to
 the line in the diff, and posts a table as a comment on the pull request — which is where an author
-working in the CMS at `/admin` will actually see it, having never opened an Actions log.
+working in the CMS at `/publisher` will actually see it, having never opened an Actions log.
 [ADR 0019](./adr/0019-content-quality-gates.md) records why this exists alongside the Docusaurus
 build, which already throws on a broken link.
 

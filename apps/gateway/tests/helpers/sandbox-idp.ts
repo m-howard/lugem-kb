@@ -11,14 +11,14 @@ import {
 /**
  * A stub identity provider, on the same origin as the site.
  *
- * The `/admin` page signs in with an authorization-code flow, and the browser is what performs it:
+ * The `/publisher` page signs in with an authorization-code flow, and the browser is what performs it:
  * it fetches discovery, follows a redirect to the authorization endpoint, and posts to the token
  * endpoint. Serving all three from the site's own origin is what keeps that working without CORS —
  * and there is no CORS anywhere in this repository, deliberately, so a cross-origin provider would
  * mean adding a permanent production surface to solve a local problem.
  *
  * There is no password box. The thing worth exercising locally is the redirect dance and the code
- * exchange, not a login form nobody here wrote; anyone who reaches `/admin` is signed in as the
+ * exchange, not a login form nobody here wrote; anyone who reaches `/publisher` is signed in as the
  * configured author.
  *
  * The token is genuinely signed and the gateway genuinely verifies it against this key set. Only
@@ -97,7 +97,7 @@ export async function createSandboxIdp(options: SandboxIdpOptions): Promise<Sand
   routes.get('/jwks', (c) => c.json({ keys: [jwk] }));
 
   routes.get('/authorize', (c) => {
-    const target = new URL(c.req.query('redirect_uri') ?? `${options.origin}/admin/`);
+    const target = new URL(c.req.query('redirect_uri') ?? `${options.origin}/publisher/`);
     target.searchParams.set('code', 'sandbox-authorization-code');
     target.searchParams.set('state', c.req.query('state') ?? '');
 

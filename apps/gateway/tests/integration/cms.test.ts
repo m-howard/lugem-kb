@@ -110,7 +110,7 @@ describe('the editorial API', () => {
       });
     });
 
-    // The `/admin` page builds Decap's `media_folder` and `public_folder` from these rather than
+    // The `/publisher` page builds Decap's `media_folder` and `public_folder` from these rather than
     // hardcoding them, so the browser cannot hold a different answer from the gateway about where
     // images live or how big one may be (requirements.md R15).
     it('describes where images go, and how large one may be', async () => {

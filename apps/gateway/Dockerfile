@@ -23,9 +23,9 @@ WORKDIR /repo
 RUN apk add --no-cache nodejs
 COPY docs ./docs
 COPY apps/docs ./apps/docs
-# `@lugem/docs` runs `scripts/build/build-admin.ts` as its prebuild hook, so the bundler has to be
+# `@lugem/docs` runs `scripts/build/build-publisher.ts` as its prebuild hook, so the bundler has to be
 # in the context before the build runs. Without it the hook exits 1 — which fails the stage, and
-# would otherwise leave an image whose `/admin` page has no editor bundle to load.
+# would otherwise leave an image whose `/publisher` page has no editor bundle to load.
 COPY scripts/build ./scripts/build
 RUN bun run --filter '@lugem/docs' build
 
