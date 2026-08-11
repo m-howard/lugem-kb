@@ -8,6 +8,7 @@ import {
   createState,
   parseCallback,
 } from './pkce';
+import { PREVIEW_STYLE } from './preview-style';
 import { type PublisherSession, authorizingFetch, createPublisherSession } from './session';
 
 /**
@@ -47,10 +48,26 @@ interface GatewayCmsConfig {
 
 const BYTES_PER_MB = 1_000_000;
 
-function status(message: string): void {
-  const target = document.querySelector('#sign-in-status');
+/**
+ * Whether this message is a wait or a dead end.
+ *
+ * The distinction is the author's, not the code's: a sign-in still in flight resolves itself and a
+ * failed one never will, and as plain text the two are indistinguishable. `static/publisher/index.html`
+ * styles them apart off this attribute.
+ */
+type SignInState = 'pending' | 'failed';
+
+/**
+ * Writes the one message this page has, and says which kind it is.
+ *
+ * @param message - What to show. Empty clears it, which is what handing over to Decap looks like.
+ * @param state - Defaults to `pending`; every caller that has bad news passes `failed`.
+ */
+function status(message: string, state: SignInState = 'pending'): void {
+  const target = document.querySelector<HTMLElement>('#sign-in-status');
   if (target !== null) {
     target.textContent = message;
+    target.dataset.state = state;
   }
 }
 
@@ -210,13 +227,17 @@ async function startEditor(token: string | undefined): Promise<void> {
 
   const cms = (await response.json()) as GatewayCmsConfig;
   status('');
+  // Before `init`, which is when Decap reads the registry. Registering afterwards leaves the first
+  // preview an author opens unstyled.
+  CMS.registerPreviewStyle(PREVIEW_STYLE, { raw: true });
   CMS.init({ config: decapConfig(cms) });
 }
 
 async function main(): Promise<void> {
   const configResponse = await fetch(PUBLISHER_CONFIG_PATH);
   if (configResponse.status === NOT_FOUND) {
-    status('The authoring CMS is not configured on this deployment.');
+    // A dead end rather than a wait: `/v1/cms/*` is unmounted, and no amount of reloading mounts it.
+    status('The authoring CMS is not configured on this deployment.', 'failed');
     return;
   }
 
@@ -251,5 +272,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  status(error instanceof Error ? error.message : 'The documentation CMS could not start.');
+  status(
+    error instanceof Error ? error.message : 'The documentation CMS could not start.',
+    'failed',
+  );
 });
