@@ -35,9 +35,15 @@ function readString(source: Record<string, unknown>, key: string): string | unde
  * discovers the key set: the gateway is given an issuer, and everything else about a provider is
  * the provider's to state. Two settings that must agree are one setting too many.
  *
- * @param issuer - The OIDC issuer URL.
+ * What comes back is resolved against the document that named it, so a provider may publish its
+ * endpoints as paths. The local sandbox does exactly that — one document then works from every port
+ * a developer might have the site open on — and a real provider publishes absolute URLs, which
+ * resolve to themselves. The callers cannot tell the difference, and one of them must not have to:
+ * `buildAuthorizeUrl` navigates to the authorization endpoint and needs something navigable.
+ *
+ * @param issuer - The OIDC issuer URL. Absolute; `main.ts` resolves a configured path first.
  * @param fetchImpl - Injected so this is testable without a network.
- * @returns The authorization and token endpoints.
+ * @returns The authorization and token endpoints, absolute.
  * @throws {SignInError} When the document cannot be read or names neither endpoint.
  */
 export async function discover(
@@ -59,7 +65,10 @@ export async function discover(
     );
   }
 
-  return { authorizationEndpoint, tokenEndpoint };
+  return {
+    authorizationEndpoint: new URL(authorizationEndpoint, url).href,
+    tokenEndpoint: new URL(tokenEndpoint, url).href,
+  };
 }
 
 export interface CodeExchange {

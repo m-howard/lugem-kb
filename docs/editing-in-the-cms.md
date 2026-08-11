@@ -23,7 +23,8 @@ so rather than showing an empty editor — ask a platform engineer to work throu
 
 ## Sign in
 
-Open **`/publisher`** on the documentation site.
+Click **Publisher** in the documentation site's top bar. It opens the editor in a new tab, at
+**`/publisher`**, so the page you were reading stays where it was.
 
 You are sent to your organisation's login page and straight back. If you are already signed in to
 the intranet, you may not see it at all.

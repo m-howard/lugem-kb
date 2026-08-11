@@ -1,5 +1,6 @@
 import CMS from 'decap-cms-app';
 
+import { classifyConfigResponse, type ConfigOutcome } from './config-response';
 import { discover, exchangeCode, SignInError } from './oidc-client';
 import {
   buildAuthorizeUrl,
@@ -24,8 +25,24 @@ const PROXY_PATH = '/v1/cms/proxy';
 const PUBLISHER_CONFIG_PATH = '/v1/publisher/config';
 const CMS_CONFIG_PATH = '/v1/cms/config';
 const IDENTITY_PATH = '/v1/cms/identity';
-const NOT_FOUND = 404;
 const UNAUTHORIZED = 401;
+
+/**
+ * What to say when the sign-in configuration never arrives — one message per way of not arriving.
+ *
+ * Each names the thing the reader can act on. `not-the-gateway` is the one a developer reaches by
+ * running the site without a gateway behind it — `docusaurus start` proxies the API to one, but
+ * only if there is one to proxy to — so it names the command that starts both.
+ */
+const CONFIG_FAILURE_MESSAGE: Record<Exclude<ConfigOutcome, 'configured'>, string> = {
+  // No backticks or markdown: this is written with `textContent`, so it renders as typed.
+  'not-the-gateway':
+    'The documentation gateway is not answering at this address, so there is no editor to sign ' +
+    'in to. If you are running the site locally, start the gateway with it: bun run dev:all. ' +
+    'Otherwise, ask a platform engineer.',
+  unconfigured: 'The authoring CMS is not configured on this deployment.',
+  unreachable: 'The documentation gateway could not say how to sign you in. Try again shortly.',
+};
 
 interface PublisherConfig {
   readonly authMode: 'bearer' | 'alb';
@@ -145,9 +162,21 @@ function decapConfig(cms: GatewayCmsConfig): DecapConfig {
   };
 }
 
+/**
+ * The issuer as a URL this browser can fetch: a configured path resolves against this page.
+ *
+ * Which is the point of allowing a path at all. The sandbox publishes `/idp` rather than an origin
+ * because local development has several front doors — `:3001`, the gateway's own port, `localhost`
+ * or `127.0.0.1` — and an issuer naming one of them is cross-origin from the rest. A real provider
+ * is absolute and resolves to itself.
+ */
+function issuerUrl(config: PublisherConfig): string {
+  return new URL(config.issuer ?? '', globalThis.location.origin).href;
+}
+
 /** Starts an authorization-code flow, remembering the verifier this browser will need back. */
 async function beginSignIn(config: PublisherConfig, session: PublisherSession): Promise<void> {
-  const { authorizationEndpoint } = await discover(config.issuer ?? '');
+  const { authorizationEndpoint } = await discover(issuerUrl(config));
   const verifier = createCodeVerifier();
   const state = createState();
 
@@ -181,7 +210,7 @@ async function completeSignIn(config: PublisherConfig, session: PublisherSession
     throw new SignInError('This sign-in did not start in this browser. Try again.');
   }
 
-  const { tokenEndpoint } = await discover(config.issuer ?? '');
+  const { tokenEndpoint } = await discover(issuerUrl(config));
   session.writeToken(
     await exchangeCode({
       tokenEndpoint,
@@ -235,9 +264,11 @@ async function startEditor(token: string | undefined): Promise<void> {
 
 async function main(): Promise<void> {
   const configResponse = await fetch(PUBLISHER_CONFIG_PATH);
-  if (configResponse.status === NOT_FOUND) {
-    // A dead end rather than a wait: `/v1/cms/*` is unmounted, and no amount of reloading mounts it.
-    status('The authoring CMS is not configured on this deployment.', 'failed');
+  const outcome = classifyConfigResponse(configResponse);
+  if (outcome !== 'configured') {
+    // Dead ends rather than waits, all three: none of them resolves by being waited on, and only
+    // `unreachable` resolves by being reloaded.
+    status(CONFIG_FAILURE_MESSAGE[outcome], 'failed');
     return;
   }
 

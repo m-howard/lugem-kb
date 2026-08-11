@@ -82,7 +82,9 @@ export interface AuthorizeParams {
 /**
  * Builds the URL that starts a sign-in.
  *
- * @param endpoint - The provider's authorization endpoint, from its discovery document.
+ * @param endpoint - The provider's authorization endpoint. **Absolute** — this is a URL the browser
+ *   is about to be sent to, and `new URL` has no page to resolve a path against. `discover()` is
+ *   what guarantees it: a provider may publish a path, and that is where one becomes a URL.
  * @param params - Client id, redirect, scopes, state, challenge and optional audience.
  * @returns The URL to send the browser to.
  */

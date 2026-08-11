@@ -1,7 +1,11 @@
+import { gatewayProxyRules } from './src/dev/gateway-proxy';
 import { PRISM_THEME } from './src/prism/prism-theme';
 
 import type * as Preset from '@docusaurus/preset-classic';
-import type { Config } from '@docusaurus/types';
+import type { Config, Plugin } from '@docusaurus/types';
+
+/** Docusaurus exports the hook but not its return type, so it is taken from the hook. */
+type WebpackTweaks = ReturnType<NonNullable<Plugin['configureWebpack']>>;
 
 const ORGANIZATION = 'm-howard';
 const PROJECT = 'lugem-kb';
@@ -42,6 +46,45 @@ const BASE_URL = process.env.DOCUSAURUS_BASE_URL ?? '/';
  */
 const STATIC_DIRECTORIES = ['static', '../../docs/assets'];
 
+/**
+ * The editor, at the origin root — not `BASE_URL + publisher/`.
+ *
+ * `static/publisher/` is copied into every build, previews included, but there is only one editor
+ * per deployment and it lives at the site root: `src/publisher/main.ts` registers
+ * `origin + /publisher/` as its OIDC redirect URI, and that exact string is what the identity
+ * provider has on file. A preview's copy would sign an author in and land them on the root page
+ * anyway, one confusing hop later. `autoAddBaseUrl: false` on the navbar item keeps the link
+ * honest about where the editor actually is.
+ */
+const PUBLISHER_PATH = '/publisher/';
+
+/**
+ * Puts the gateway behind the dev server, so `docusaurus start` is one working origin.
+ *
+ * Docusaurus has no configuration field for this, but it merges a `devServer` block contributed by
+ * a plugin over its own — which is the documented extension point and all this plugin is.
+ *
+ * Development only, and guarded rather than assumed: `configureWebpack` also runs for `build`, and
+ * a `devServer` key in a production bundle is dead weight at best.
+ */
+function gatewayDevProxy(): Plugin {
+  return {
+    name: 'gateway-dev-proxy',
+    configureWebpack: (): WebpackTweaks => {
+      if (process.env.NODE_ENV === 'production') {
+        return {};
+      }
+      // Asserted, once. `devServer` is webpack-dev-server's augmentation of webpack's own
+      // `Configuration`, and that package is Docusaurus's dependency rather than this workspace's
+      // — so the key is read at runtime and invisible to `tsc` here. `gatewayProxyRules` is the
+      // typed half, and it is the half that can be wrong.
+      return {
+        devServer: { proxy: gatewayProxyRules(process.env.GATEWAY_ORIGIN) },
+      } as WebpackTweaks;
+    },
+  };
+}
+
 const config: Config = {
   title: 'Lugem Knowledge Base',
   tagline: 'Documentation that publishes itself and answers questions',
@@ -64,6 +107,7 @@ const config: Config = {
     hooks: { onBrokenMarkdownLinks: 'throw' },
   },
   themes: ['@docusaurus/theme-mermaid'],
+  plugins: [gatewayDevProxy],
 
   i18n: { defaultLocale: 'en', locales: ['en'] },
 
@@ -97,6 +141,21 @@ const config: Config = {
       items: [
         { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
         { to: '/ask', label: 'Ask', position: 'left' },
+        {
+          // `href` with a `target`, rather than `to`: the editor is a standalone page in
+          // `static/`, not a route this site's router knows about. A `to` would hand the click to
+          // react-router, which would answer it with the 404 page — and `onBrokenLinks: 'throw'`
+          // would fail the build first. A target other than `_self` is what makes Docusaurus's
+          // `Link` emit a plain anchor and do a real navigation; `_blank` is also the kinder of
+          // the two here, since the editor replaces the page with an application and a reader who
+          // wandered in still has their page to go back to.
+          href: PUBLISHER_PATH,
+          autoAddBaseUrl: false,
+          target: '_blank',
+          rel: 'noopener',
+          label: 'Publisher',
+          position: 'right',
+        },
         {
           href: `https://github.com/${ORGANIZATION}/${PROJECT}`,
           label: 'GitHub',

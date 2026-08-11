@@ -28,6 +28,9 @@ const KEY_ID = 'e2e-key-1';
 const TOKEN_LIFETIME_SECONDS = 3600;
 const MS_PER_SECOND = 1000;
 const FOUND = 302;
+/** Where `serve-e2e.ts` mounts these routes, and so also the issuer — see the discovery route. */
+const IDP_MOUNT_PATH = '/idp';
+const PUBLISHER_PATH = '/publisher/';
 
 const MEDIA_FOLDER = 'docs/assets/media/';
 
@@ -118,13 +121,12 @@ export interface E2eCms {
  * pass quietly. Only discovery is short-circuited, because the gateway fetching its own process
  * over HTTP to find a key it already has proves nothing.
  *
- * @param origin - Where this server is reachable, e.g. `http://127.0.0.1:4173`.
  * @returns The dependencies, the identity provider routes, and the recorded upstream calls.
  */
-export async function createE2eCms(origin: string): Promise<E2eCms> {
+export async function createE2eCms(): Promise<E2eCms> {
   const { publicKey, privateKey } = await generateKeyPair('RS256', { extractable: true });
   const jwk = { ...(await exportJWK(publicKey)), kid: KEY_ID, alg: 'RS256', use: 'sig' } as JWK;
-  const issuer = `${origin}/idp`;
+  const issuer = IDP_MOUNT_PATH;
   const audience = 'lugem-cms';
 
   const host = fakeGitHub(GIT_ROUTES);
@@ -145,6 +147,14 @@ export async function createE2eCms(origin: string): Promise<E2eCms> {
 
   const idp = new Hono();
 
+  /*
+    Paths rather than URLs, matching the local sandbox (`sandbox-idp.ts`).
+
+    This is the shape that broke once and nothing caught: relative endpoints are fine for the two
+    `fetch` calls around them and useless to `buildAuthorizeUrl`, which navigates. Driving it here
+    means a browser proves the resolution in `oidc-client.ts` every run. The absolute shape a real
+    provider publishes resolves to itself, and `oidc-client.test.ts` covers it.
+  */
   idp.get('/.well-known/openid-configuration', (c) =>
     c.json({
       issuer,
@@ -158,11 +168,11 @@ export async function createE2eCms(origin: string): Promise<E2eCms> {
   // No login form: the point of the spec is the redirect dance and the code exchange, not a
   // password box nobody here wrote.
   idp.get('/authorize', (c) => {
-    const redirectUri = c.req.query('redirect_uri') ?? `${origin}/publisher/`;
-    const state = c.req.query('state') ?? '';
-    const target = new URL(redirectUri);
+    // Resolved against this request, so the fallback lands on the origin the browser is on rather
+    // than on whatever address this process is listening at.
+    const target = new URL(c.req.query('redirect_uri') ?? PUBLISHER_PATH, c.req.url);
     target.searchParams.set('code', 'e2e-authorization-code');
-    target.searchParams.set('state', state);
+    target.searchParams.set('state', c.req.query('state') ?? '');
 
     return c.redirect(target.toString(), FOUND);
   });

@@ -40,8 +40,6 @@ const IDP_MOUNT_PATH = '/idp';
 const MAX_UPLOAD_BYTES = 2_097_152;
 
 export interface CmsSandboxOptions {
-  /** Where the sandbox is reachable, e.g. `http://127.0.0.1:4300`. */
-  readonly origin: string;
   /** The corpus to start from. Ignored when `state` is present. */
   readonly seed?: Readonly<Record<string, SeedFile>>;
   /** A repository saved by an earlier run, so drafts survive a restart. */
@@ -66,7 +64,7 @@ export interface CmsSandbox {
 /**
  * Builds the sandbox's editorial dependencies.
  *
- * @param options - Where it is served, the corpus or saved state, and who is signed in.
+ * @param options - The corpus or saved state, and who is signed in.
  * @returns The CMS dependencies, the identity provider, and the live repository.
  */
 export async function createCmsSandbox(options: CmsSandboxOptions): Promise<CmsSandbox> {
@@ -92,7 +90,6 @@ export async function createCmsSandbox(options: CmsSandboxOptions): Promise<CmsS
     name: options.author?.name ?? 'Local Author',
   };
   const idp = await createSandboxIdp({
-    origin: options.origin,
     mountPath: IDP_MOUNT_PATH,
     audience: SANDBOX_AUDIENCE,
     author,
