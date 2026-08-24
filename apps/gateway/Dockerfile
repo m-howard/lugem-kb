@@ -4,7 +4,7 @@
 
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.3-alpine AS deps
+FROM oven/bun:1.4-alpine AS deps
 WORKDIR /repo
 COPY package.json bun.lock ./
 COPY apps/docs/package.json ./apps/docs/
@@ -29,7 +29,7 @@ COPY apps/docs ./apps/docs
 COPY scripts/build ./scripts/build
 RUN bun run --filter '@lugem/docs' build
 
-FROM oven/bun:1.3-alpine AS runtime
+FROM oven/bun:1.4-alpine AS runtime
 WORKDIR /app
 
 # `bun` is the image's own unprivileged user; nothing here needs root.
