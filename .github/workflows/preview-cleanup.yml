@@ -53,7 +53,7 @@ jobs:
       # deleted is worse than no comment. Never created here — a pull request that never had one
       # does not need to be told that it still does not.
       - name: Say that the preview is gone
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- lugem-preview -->';

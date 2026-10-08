@@ -110,7 +110,7 @@ jobs:
       # R12's second criterion, half of it. The other half is the CMS workflow card, which the
       # gateway answers for directly — see `getDeployPreview` in apps/gateway/src/cms/decap/.
       - name: Comment with the preview link
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PREVIEW_URL: ${{ vars.PREVIEW_BASE_URL }}/pr-${{ github.event.number }}/
         with:
